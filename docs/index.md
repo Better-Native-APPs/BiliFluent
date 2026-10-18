@@ -15,7 +15,7 @@ hero:
       link: /about
     - theme: alt
       text: Github
-      link: https://github.com/Richasy/Bili.Copilot
+      link: https://github.com/Better-Native-APPs/BiliFluent
   image:
     src: /logo-big.png
     alt: 哔哩助理
