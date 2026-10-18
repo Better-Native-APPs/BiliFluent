@@ -624,12 +624,13 @@ public static class BiliApis
         /// <summary>
         /// 分段弹幕.
         /// </summary>
-        public const string WebSegmentDanmaku = _apiBase + "/x/v2/dm/web/seg.so";
+        public const string SegmentDanmaku = _apiBase + "/x/v2/dm/web/seg.so";
 
-        /// <summary>
-        /// 分段弹幕.
-        /// </summary>
-        public const string GrpcSegmentDanmaku = _grpcBase + "/bilibili.community.service.dm.v1.DM/DmSegMobile";
+        /// <summary>Published Web segment danmaku endpoint.</summary>
+        public const string WebSegmentDanmaku = SegmentDanmaku;
+
+        /// <summary>Published gRPC segment danmaku endpoint.</summary>
+        public const string GrpcSegmentDanmaku = "https://grpc.biliapi.net/bilibili.community.service.dm.v1.DM/DmSegMobile";
 
         /// <summary>
         /// 历史记录.

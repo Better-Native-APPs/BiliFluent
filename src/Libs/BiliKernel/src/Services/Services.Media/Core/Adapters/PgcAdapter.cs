@@ -74,6 +74,7 @@ internal static class PgcAdapter
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.SeasonId, seasonId);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.Aid, aid);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.Cid, cid);
+        info.AddExtensionIfNotNull(EpisodeExtensionDataId.BvId, episode.BvId);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.IsPreview, isPv);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.IsVip, isVip);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.SeasonType, seasonType);

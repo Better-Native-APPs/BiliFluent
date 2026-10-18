@@ -11,6 +11,10 @@ namespace Richasy.BiliKernel.Models.Comment;
 /// </summary>
 public sealed class CommentInformation
 {
+    /// <summary>Copied optional server evidence, excluded from legacy JSON.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Richasy.BiliKernel.Models.Content.ContentMetadata? ContentMetadata { get; set; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentInformation"/> class.
     /// </summary>

@@ -14,13 +14,14 @@
 
   <PropertyGroup>
     <!-- NuGet Package Settings -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Title>哔哩核心 - 动态</Title>
     <Description>获取用户动态，个人空间内容的哔哩核心子模块</Description>
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\..\BiliKernel.Abstractions\BiliKernel.Abstractions.csproj" />
-    <ProjectReference Include="..\..\BiliKernel.Core\BiliKernel.Core.csproj" />
+    <PackageReference Include="Richasy.BiliKernel.Abstractions" />
+    <PackageReference Include="Richasy.BiliKernel.Core" />
   </ItemGroup>
   
 </Project>

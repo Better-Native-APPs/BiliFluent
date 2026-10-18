@@ -3,6 +3,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="Richasy.BiliKernel.Abstractions" Version="[0.0.3-bilicopilot.1]" />
+    <PackageVersion Include="Richasy.BiliKernel.Core" Version="[0.0.2-preview2]" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Flurl.Http" Version="4.0.2" />

@@ -62,6 +62,9 @@ public sealed class EpisodeInformation : VideoBase
 /// </summary>
 public static class EpisodeExtensionDataId
 {
+    /// <summary>That episode's unmodified server BVID.</summary>
+    public const string BvId = "BvId";
+
     /// <summary>
     /// 副标题.
     /// </summary>

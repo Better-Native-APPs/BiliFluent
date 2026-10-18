@@ -5,6 +5,7 @@ using Bilibili.App.Dynamic.V2;
 using Richasy.BiliKernel.Adapters;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Appearance;
+using Richasy.BiliKernel.Models.Content;
 using Richasy.BiliKernel.Models.Moment;
 using Richasy.BiliKernel.Models.User;
 
@@ -78,7 +79,59 @@ internal static class MomentAdapter
             replyId,
             momentType,
             momentData,
-            description);
+            description)
+        {
+            ContentMetadata = CopyMetadata(item, momentData as MomentInformation),
+        };
+    }
+
+    private static ContentMetadata CopyMetadata(DynamicItem item, MomentInformation? original)
+    {
+        var goods = new List<ContentGoods>();
+        var links = new List<ContentLink>();
+        var origins = new List<ContentOrigin>();
+        foreach (var module in item.Modules)
+        {
+            var additional = module.ModuleAdditional;
+            if (additional?.Goods is { } card)
+            {
+                goods.Add(new ContentGoods("ModuleAdditional.Goods", null, card.RcmdDesc, card.Uri, null, card.SourceType, card.CardType, card.AdMarkIcon, (int)card.JumpType));
+                foreach (var entry in card.GoodsItems)
+                {
+                    goods.Add(new ContentGoods("ModuleAdditional.Goods.GoodsItems", entry.ItemId, entry.Title, entry.JumpUrl, entry.SchemaUrl, entry.SourceType, card.CardType, entry.AdMark, (int)entry.JumpType));
+                }
+            }
+
+            if (module.ModuleDesc is { } desc)
+            {
+                links.Add(new ContentLink("ModuleDesc", null, desc.Text, desc.JumpUri));
+                foreach (var entry in desc.Desc)
+                {
+                    links.Add(new ContentLink("ModuleDesc.Desc", entry.Rid, entry.Text, entry.Uri, (int)entry.Type, originalText: entry.OrigText));
+                    if (entry.Goods is { } detail)
+                    {
+                        goods.Add(new ContentGoods("ModuleDesc.Desc.Goods", detail.ItemId, entry.Text, detail.JumpUrl, detail.SchemaUrl, detail.SourceType, entry.GoodsType, detail.AdMark, (int)detail.JumpType));
+                    }
+                    else if (entry.Type == DescType.Goods)
+                    {
+                        goods.Add(new ContentGoods("ModuleDesc.Desc", null, entry.Text, entry.Uri, null, null, entry.GoodsType, null, null));
+                    }
+                }
+            }
+
+            if (module.ModuleAuthor is { } author)
+            {
+                origins.Add(new ContentOrigin((int)module.ModuleType, author.Author?.Mid, author.Author?.Name, author.Uri, null));
+            }
+
+            if (module.ModuleAuthorForward is { } forward)
+            {
+                var titles = forward.Title.Select(p => new ContentLink("ModuleAuthorForward.Title", null, p.Text, p.Url));
+                origins.Add(new ContentOrigin((int)module.ModuleType, forward.Uid, null, forward.Url, titles));
+            }
+        }
+
+        return new ContentMetadata(item.Modules.Select(p => (int)p.ModuleType), goods, links, origins, (int)item.CardType, original: original?.ContentMetadata);
     }
 
     /// <summary>

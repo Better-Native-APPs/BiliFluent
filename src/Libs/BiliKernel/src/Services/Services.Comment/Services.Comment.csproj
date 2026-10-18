@@ -14,13 +14,14 @@
   
   <PropertyGroup>
     <!-- NuGet Package Settings -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Title>哔哩核心 - 评论</Title>
     <Description>用于获取及发布评论的哔哩核心子模块</Description>
   </PropertyGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\..\BiliKernel.Abstractions\BiliKernel.Abstractions.csproj" />
-    <ProjectReference Include="..\..\BiliKernel.Core\BiliKernel.Core.csproj" />
+    <PackageReference Include="Richasy.BiliKernel.Abstractions" />
+    <PackageReference Include="Richasy.BiliKernel.Core" />
   </ItemGroup>
   
 </Project>
