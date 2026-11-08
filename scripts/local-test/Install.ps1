@@ -109,8 +109,8 @@ try {
     $id = Get-LTIdentity
     $expected = @{
         name = $id.Name; publisher = $id.Publisher; architecture = 'x64'; applicationId = 'App'
-        packageFamilyName = $id.Family; packageFullName = "BiliCopilot.LocalTest_$($p.version)_x64__p8tmrechhd89c"
-        toastActivatorClsid = $id.Toast; file = "BiliCopilot.LocalTest_$($p.version)_x64.msix"
+        packageFamilyName = $id.Family; packageFullName = "BiliFluent.LocalTest_$($p.version)_x64__7rrwb2e69v8er"
+        toastActivatorClsid = $id.Toast; file = "BiliFluent.LocalTest_$($p.version)_x64.msix"
         fileVersion = $p.version; productVersion = $p.version
     }
     foreach ($field in $expected.Keys) {

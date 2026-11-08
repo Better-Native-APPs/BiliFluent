@@ -37,7 +37,7 @@ public sealed class ClassicPlayerWindow : Window, ITipWindow
     {
         _unregister = unregister;
         _reportFailure = reportFailure;
-        Title = "哔哩助理";
+        Title = "BiliFluent";
         AppWindow.Resize(new SizeInt32(1100, 720));
         AppWindow.Closing += OnClosing;
         AppWindow.Changed += OnWindowChanged;

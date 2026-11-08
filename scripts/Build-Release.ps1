@@ -87,7 +87,7 @@ try {
         $packed = @(Get-ChildItem $layout -Recurse -File -Filter $name)
         if ($packed.Count -ne 1) { throw "Required x64 asset missing from layout: $name" }
     }
-    $msix = Join-Path $out ("BiliCopilot_$($identity.Version)_x64.msix")
+    $msix = Join-Path $out ("BiliFluent_$($identity.Version)_x64.msix")
     & (Join-Path $WindowsSdkBin 'makeappx.exe') pack /d $layout /p $msix /h SHA256 1> (Join-Path $out 'makeappx.log') 2>&1
     if ($LASTEXITCODE) { throw "MakeAppx failed ($LASTEXITCODE)." }
     if ($CertificateThumbprint) {

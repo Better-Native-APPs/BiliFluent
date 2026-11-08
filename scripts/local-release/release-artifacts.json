@@ -1,25 +1,25 @@
 ﻿{
     "schemaVersion":  1,
     "package":  {
-                    "relativePath":  "payload/BiliCopilot_2.2611.6.0_x64.msix",
-                    "sha256":  "3fb09ea5da59961486c1e1ad192b1b25e524e2e07dc5e241e99265728f5d9445",
-                    "name":  "BiliCopilot.LocalRelease",
-                    "publisher":  "CN=BiliCopilot Local Release",
-                    "version":  "2.2611.6.0",
+                    "relativePath":  "payload/BiliFluent_2.2611.7.0_x64.msix",
+                    "sha256":  "__PENDING_PACKAGE_SHA256__",
+                    "name":  "BiliFluent",
+                    "publisher":  "CN=BiliFluent",
+                    "version":  "2.2611.7.0",
                     "architecture":  "x64",
-                    "packageFamilyName":  "BiliCopilot.LocalRelease_p8tmrechhd89c",
-                    "packageFullName":  "BiliCopilot.LocalRelease_2.2611.6.0_x64__p8tmrechhd89c",
+                    "packageFamilyName":  "BiliFluent_7rrwb2e69v8er",
+                    "packageFullName":  "BiliFluent_2.2611.7.0_x64__7rrwb2e69v8er",
                     "applicationId":  "App",
                     "minOsVersion":  "10.0.19041.0"
                 },
     "certificate":  {
-                        "relativePath":  "payload/BiliCopilot.LocalRelease.cer",
-                        "sha256":  "8730c43babe7384650df2c282c72e9267e727ee95dd6cd54b9fed49a6040fce2",
-                        "derSha256":  "8730c43babe7384650df2c282c72e9267e727ee95dd6cd54b9fed49a6040fce2",
-                        "thumbprint":  "0460A4224C301235C30B6D89287AFA7F2ACE2A21",
-                        "subject":  "CN=BiliCopilot Local Release",
-                        "notBeforeUtc":  "2026-10-10T17:15:28Z",
-                        "notAfterUtc":  "2031-10-10T17:25:28Z",
+                        "relativePath":  "payload/BiliFluent.cer",
+                        "sha256":  "__PENDING_CERTIFICATE_SHA256__",
+                        "derSha256":  "__PENDING_CERTIFICATE_SHA256__",
+                        "thumbprint":  "6727300457DD924DAD363FDD27C5166E0E62CF32",
+                        "subject":  "CN=BiliFluent",
+                        "notBeforeUtc":  "2026-11-08T13:28:41Z",
+                        "notAfterUtc":  "2031-11-08T13:38:41Z",
                         "codeSigningEku":  "1.3.6.1.5.5.7.3.3",
                         "digitalSignature":  true,
                         "isCertificateAuthority":  false
@@ -28,7 +28,7 @@
 
                      ],
     "scripts":  {
-                    "installSha256":  "bafb0c6dc45b18f2ea8cb3c1561d792c60487c40891fbb259fce5eea647fadf6",
-                    "trustSha256":  "cec4940c19ee756a8318221a863c2c422da33ec3e18723c2e12c5acbfb14e421"
+                    "installSha256":  "__PENDING_INSTALL_SHA256__",
+                    "trustSha256":  "__PENDING_TRUST_SHA256__"
                 }
 }

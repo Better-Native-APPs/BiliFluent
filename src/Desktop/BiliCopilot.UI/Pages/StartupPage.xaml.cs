@@ -41,7 +41,7 @@ public sealed partial class StartupPage : StartupPageBase
     }
 
     private async void OnRepoButtonClickAsync(object sender, RoutedEventArgs e)
-        => await Launcher.LaunchUriAsync(new Uri("https://github.com/Richasy/Bili.Copilot"));
+        => await Launcher.LaunchUriAsync(new Uri("https://github.com/Better-Native-APPs/BiliFluent"));
 
     private async void OnBiliButtonClickAsync(object sender, RoutedEventArgs e)
         => await Launcher.LaunchUriAsync(new Uri("https://space.bilibili.com/5992670"));

@@ -337,7 +337,7 @@ public sealed partial class SponsorSettingsViewModel
                 return;
             }
 
-            var name = "BiliCopilot-SponsorBlock-" + DateTime.Now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture) + ".json";
+            var name = "BiliFluent-SponsorBlock-" + DateTime.Now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture) + ".json";
             var saved = await files.SaveBackupAsync(bytes, name);
             if (epoch == _epoch)
             {

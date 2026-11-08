@@ -16,7 +16,7 @@ $root = [IO.Path]::GetFullPath($DeliveryRoot)
 Assert-LTPlainPath $root
 $manifestPath = Join-Path $root 'test-artifacts.json'
 if (Test-Path -LiteralPath $manifestPath) { Stop-LT 'AlreadySealed' 'Never overwrite a sealed version; allocate a new output and increment the version for an upgrade.' }
-$packageName = "BiliCopilot.LocalTest_${Version}_x64.msix"
+$packageName = "BiliFluent.LocalTest_${Version}_x64.msix"
 $allowed = @('Install.ps1', 'LocalTest.psm1', 'channel.json', $packageName)
 $items = @(Get-ChildItem -LiteralPath $root -Force)
 if ($items.Count -ne $allowed.Count -or @($items | Where-Object { $_.PSIsContainer -or $allowed -cnotcontains $_.Name }).Count -ne 0) {
@@ -46,7 +46,7 @@ try {
         package = [ordered]@{
             file = $packageName; sha256 = $hashes[$packageName]; name = $id.Name; publisher = $id.Publisher
             version = $Version; architecture = $id.Architecture; applicationId = $id.AppId
-            packageFamilyName = $id.Family; packageFullName = "BiliCopilot.LocalTest_${Version}_x64__p8tmrechhd89c"
+            packageFamilyName = $id.Family; packageFullName = "BiliFluent.LocalTest_${Version}_x64__7rrwb2e69v8er"
             toastActivatorClsid = $id.Toast; exeSha256 = $ExpectedLooseExeSha256
             fileVersion = $Version; productVersion = $Version
         }

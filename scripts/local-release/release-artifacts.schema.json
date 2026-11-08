@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:bilicopilot:local-release:release-artifacts:1",
-  "title": "Bili.Copilot local Release MSIX artifacts manifest, schemaVersion 1",
+  "$id": "urn:bilifluent:local-release:release-artifacts:1",
+  "title": "BiliFluent local Release MSIX artifacts manifest, schemaVersion 1",
   "description": "Final values only. Install.ps1 / Trust-Certificate.ps1 additionally enforce: no '__PENDING' values, no '://', '*', '?', '%' anywhere; packageFamilyName/packageFullName must equal the values derived from the fixed Publisher; certificate.derSha256 == certificate.sha256; dependency version >= declaredMinVersion; unique relativePath values; payload/ holds exactly the listed files. The manifest's own SHA-256 is recorded externally (not in this file).",
   "type": "object",
   "additionalProperties": false,
@@ -21,12 +21,12 @@
       "properties": {
         "relativePath": { "$ref": "#/$defs/payloadPath" },
         "sha256": { "$ref": "#/$defs/sha256" },
-        "name": { "const": "BiliCopilot.LocalRelease" },
-        "publisher": { "const": "CN=BiliCopilot Local Release" },
-        "version": { "const": "2.2611.6.0" },
+        "name": { "const": "BiliFluent" },
+        "publisher": { "const": "CN=BiliFluent" },
+        "version": { "const": "2.2611.7.0" },
         "architecture": { "const": "x64" },
-        "packageFamilyName": { "type": "string", "pattern": "^BiliCopilot\\.LocalRelease_[0-9a-hjkmnp-tv-z]{13}$" },
-        "packageFullName": { "type": "string", "pattern": "^BiliCopilot\\.LocalRelease_2\\.2611\\.3\\.0_x64__[0-9a-hjkmnp-tv-z]{13}$" },
+        "packageFamilyName": { "type": "string", "pattern": "^BiliFluent_[0-9a-hjkmnp-tv-z]{13}$" },
+        "packageFullName": { "type": "string", "pattern": "^BiliFluent_2\\.2611\\.7\\.0_x64__[0-9a-hjkmnp-tv-z]{13}$" },
         "applicationId": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}(\\.[A-Za-z0-9]{1,63}){0,8}$" },
         "minOsVersion": { "$ref": "#/$defs/version" }
       }
@@ -40,7 +40,7 @@
         "sha256": { "$ref": "#/$defs/sha256" },
         "derSha256": { "$ref": "#/$defs/sha256" },
         "thumbprint": { "type": "string", "pattern": "^[0-9A-F]{40}$" },
-        "subject": { "const": "CN=BiliCopilot Local Release" },
+        "subject": { "const": "CN=BiliFluent" },
         "notBeforeUtc": { "$ref": "#/$defs/utc" },
         "notAfterUtc": { "$ref": "#/$defs/utc" },
         "codeSigningEku": { "const": "1.3.6.1.5.5.7.3.3" },

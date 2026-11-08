@@ -195,7 +195,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
 
     }
 
-    private unsafe IntPtr CreateRenderWindow(RectInt32 bounds, string windowTitle = "BiliCopilot.MpvRender")
+    private unsafe IntPtr CreateRenderWindow(RectInt32 bounds, string windowTitle = "BiliFluent.MpvRender")
     {
         // Standard Win32 class avoids a managed window-procedure lifetime in NativeAOT.
         fixed (char* className = "STATIC")

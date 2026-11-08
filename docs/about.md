@@ -1,31 +1,22 @@
-# 关于哔哩助理
+# 关于 BiliFluent
 
-## 这是什么？
+BiliFluent 是由 [Better Native APPs](https://github.com/Better-Native-APPs) 维护的第三方哔哩哔哩 Windows 桌面客户端。采用 Fluent UI 与 WinUI 3 原生控件，无广告，专注于低资源消耗与流畅播放。
 
-哔哩助理是一款基于 Windows App SDK 构建的 BiliBili 第三方应用。
+## 特性亮点
 
-主要用于学习和交流，并不是一款成熟的，商业级别的产品。
+- **Fluent UI 原生界面**：采用 WinUI 3 控件构建，支持高 DPI 缩放、深浅色主题与触控手势。
+- **mpv 内嵌省电弹幕**：默认启用内嵌渲染，大幅降低 CPU 与显存占用（保留 Win2D 备选）。
+- **播放资源及时释放**：关闭播放窗口时即时完全释放 mpv 实例、解码上下文与显存。
+- **播放进度合并刷新**：节流合并高频进度更新，操作更平稳。
+- **后台效率模式**：窗口最小化或后台空闲无播放任务时，自动调度 Windows 效率模式节省电量。
+- **低配硬件友好预设**：默认 1080P60 画质上限与 AVC/H.264 优先硬解，默认 64 MiB 缓存，提供一键「快速 (Fast)」profile 切换。
+- **WMP 风格全屏**：支持双击画面全屏，支持 `F` / `F11` / `Esc` 快捷切换。
+- **内置空降助手**：自动跳过合作广告与片头片尾片段。
 
-仅仅是出于个人兴趣做的一个小玩具。
+## 来源与许可
 
-![聊天界面截图](./assets/zh/home-page.png)
+项目基于 Richasy 开源的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 [GPL-3.0 许可证](https://github.com/Better-Native-APPs/BiliFluent/blob/main/LICENSE)。保留上游及开源依赖组件的原作者署名与许可协议。
 
-## 为什么选择哔哩助理？
-
-我其实并不建议你“说服”自己来使用哔哩助理，因为实际使用体验可能和你的预期有比较大的差距。
-
-一个人做的应用如果在体验上胜过一个公司数百人的通力合作……我只能说这是一个美好的幻想。
-
-但如果你只是想尝尝鲜，那么哔哩助理也提供了一些官方客户端不具备的功能，欢迎你将其作为一个辅助工具使用。
-
-## 愿景
-
-做一个满足个人使用的应用。
-
-做一个有足够挑战的个人技术试验田。
-
-从社区反馈中吸取经验，了解真正参与 UGC 社区构建的普通人的想法。
-
-## 免责声明
-
-出于个人兴趣爱好制作，bug 在所难免，随时可能因为不可抗力停更，请不要过度依赖哔哩助理。
+- [BiliFluent 源代码](https://github.com/Better-Native-APPs/BiliFluent)
+- [定制 BiliKernel SDK](https://github.com/Better-Native-APPs/BiliKernel)
+- [安装指南](./install.md) · [源码构建说明](https://github.com/Better-Native-APPs/BiliFluent/blob/main/scripts/README.md)

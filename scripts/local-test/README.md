@@ -1,98 +1,90 @@
-# LocalTest 本地测试通道说明
+# BiliFluent LocalTest 测试通道
 
-LocalTest 是为日常开发与调试提供的独立测试通道。它拥有与正式发布版（LocalRelease）完全隔离的应用身份，允许开发者在同一台机器上并存安装测试版与正式版，互不干扰配置与数据。
+BiliFluent 是由 [Better Native APPs](https://github.com/Better-Native-APPs) 维护的第三方哔哩哔哩 Windows 桌面客户端，采用 Fluent UI / WinUI 3 原生控件，无广告并为 Windows 与低配平板深度调优。
 
-## 通道标识信息
+正式发布与安装入口为 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases)；普通终端用户请直接使用[正式安装指南](../../docs/install.md)，请勿将本页的开发者本地测试工具当作常规安装方式。
 
-以下身份信息固定在 `channel.json` 中，不可随意更改：
+LocalTest 提供独立的包名、实例标识与通知激活标识，可与正式版 BiliFluent 及官方应用同时安装共存，互不干扰。
 
-| 属性 | 配置值 | 说明 |
-| --- | --- | --- |
-| 应用包名（Package Name） | `BiliCopilot.LocalTest` | 独立包名称，与正式版隔离 |
-| 发布者（Publisher） | `CN=BiliCopilot Local Release` | 统一发布者标识 |
-| 系列名称（PFN） | `BiliCopilot.LocalTest_p8tmrechhd89c` | 包系列名称 |
-| 显示名称（Display Label） | `哔哩助理（测试）` | 开始菜单与系统设置中的展示名称 |
-| 应用 ID（Application ID） | `App` | 主应用程序标识 |
-| 默认起始版本 | `2.2611.2.0` | 后续测试版本需严格递增 |
-| 运行架构 | `x64` | 目标系统架构 |
+## 固定通道身份
 
-## 脚本与文件组件
+| 属性 | 值 |
+| --- | --- |
+| 应用包名 | `BiliFluent.LocalTest` |
+| 发布者 | `CN=BiliFluent` |
+| 包系列名称 | `BiliFluent.LocalTest_7rrwb2e69v8er` |
+| 显示名称 | `BiliFluent（测试）` |
+| 实例键 | `BiliFluent.LocalTest` |
+| 应用 ID | `App` |
+| 默认起始版本 | `2.2611.2.0`，后续测试版本须递增 |
+| 架构 | `x64` |
+| 通知激活 CLSID | `CF0E1EDD-C7F4-56B5-BFD8-C6D8EFBCC0FE` |
 
-- `channel.json`：通道元数据配置文件，定义测试包身份、依赖版本及激活参数。
-- `LocalTest.psm1`：通道共享函数库，包含身份转换、安全路径校验与依赖核验逻辑。
-- `Prepare-Package.ps1`：将编译生成的原生输出布局（Layout）转换为 LocalTest 格式，并在指定 `-Pack` 时调用 MakeAppx 打包成未签名的测试 MSIX。
-- `Seal-Package.ps1`：封包脚本。校验已签名的测试 MSIX、外部二进制文件和证书的一致性，生成固化的制品清单 `test-artifacts.json`。
-- `Install.ps1`：测试包客户端安装脚本。提供只读预检与安全部署功能，支持同版本检测与防降级。
+CLSID 按 `channel.json` 中新仓库 URL 的 UUIDv5 规则生成；可执行文件仍为内部名称 `BiliCopilot.UI.exe`。发布者 ID `7rrwb2e69v8er` 由 `CN=BiliFluent` 的 UTF-16LE SHA-256 摘要前 8 字节进行 Crockford Base32 编码得到。
 
-## 打包与测试流程
+## 工具边界与输入
 
-测试包打包流程包含准备布局、打包、签名、封包及部署五个步骤：
+- 使用 Windows x64 与 Windows PowerShell 5.1，构建 SDK 仍按仓库 `global.json` 的 `10.0.403`。
+- `Prepare-Package.ps1` 要求已经生成的、文件清单及摘要获确认的原生布局；拒绝包含 CLR 头的托管 PE。正式 ReadyToRun Release 不是该工具要求的 NativeAOT / 原生测试布局。
+- 源清单可来自新 `BiliFluent` / `CN=BiliFluent` 身份；仍兼容工具原有的上游开发布局输入。转换后强制使用上表的测试身份。
+- 工具不自动寻找或导入私钥、不签名、不自动下载依赖、不修改全局策略。
+- 当前正式 CI 流程见[构建与发布说明](../README.md)，不要假定它同时生成 LocalTest 原生布局。
 
-### 1. 准备测试布局与打包
-
-首先通过外部编译生成就绪的原生 Layout 目录及对应的文件清单（JSON 格式）。
+## 1. 准备并打包测试布局
 
 ```powershell
-# 1.1 只读预检模式：验证文件清单与源布局一致性
+# 仅预检
 .\scripts\local-test\Prepare-Package.ps1 `
-  -SourceLayout <原生Layout目录> `
-  -OutputRoot <新的测试输出目录> `
-  -WorkspaceRoot <工作区目录> `
-  -ApprovedInventory <文件清单JSON路径> `
-  -ExpectedInventorySha256 <文件清单哈希> `
-  -Version '2.2611.2.0'
+  -SourceLayout <原生布局目录> -OutputRoot <新的测试输出目录> `
+  -WorkspaceRoot <工作区目录> -ApprovedInventory <文件清单JSON路径> `
+  -ExpectedInventorySha256 <文件清单哈希> -Version '2.2611.2.0'
 
-# 1.2 执行转换并打包生成未签名的测试 MSIX
+# 确认后转换并打包
 .\scripts\local-test\Prepare-Package.ps1 `
-  -SourceLayout <原生Layout目录> `
-  -OutputRoot <新的测试输出目录> `
-  -WorkspaceRoot <工作区目录> `
-  -ApprovedInventory <文件清单JSON路径> `
-  -ExpectedInventorySha256 <文件清单哈希> `
-  -Version '2.2611.2.0' `
-  -Prepare -Pack `
-  -MakeAppxPath <makeappx.exe路径> `
+  -SourceLayout <原生布局目录> -OutputRoot <新的测试输出目录> `
+  -WorkspaceRoot <工作区目录> -ApprovedInventory <文件清单JSON路径> `
+  -ExpectedInventorySha256 <文件清单哈希> -Version '2.2611.2.0' `
+  -Prepare -Pack -MakeAppxPath <makeappx.exe路径> `
   -ExpectedMakeAppxSha256 <makeappx.exe哈希>
 ```
 
-> **注意**：
-> - `-SourceLayout`、`-OutputRoot` 与 `-WorkspaceRoot` 必须为相互独立的本地绝对路径。
-> - `-OutputRoot` 必须是一个全新的目录，不可覆盖已有输出。
+输入、输出与工作区必须是互不包含的普通绝对路径；输出目录必须是全新目录。脚本核对布局、版本、x64 原生 PE 及通知注册后，生成 `delivery/BiliFluent.LocalTest_2.2611.2.0_x64.msix`。
 
-### 2. 签名测试包
+## 2. 签名并预先信任测试证书
 
-打包成功后，测试 MSIX 会生成在 `<OutputRoot>\delivery\` 目录下。使用 SignTool 对其进行代码签名（证书 Subject 须为 `CN=BiliCopilot Local Release`）：
+签名证书的主题须为 `CN=BiliFluent`。使用对应私钥的证书指纹签名：
 
 ```powershell
-$msix = "<OutputRoot>\delivery\BiliCopilot.LocalTest_2.2611.2.0_x64.msix"
+$msix = '<测试输出目录>\delivery\BiliFluent.LocalTest_2.2611.2.0_x64.msix'
 & signtool.exe sign /fd SHA256 /sha1 <证书指纹> /s My $msix
 ```
 
-### 3. 封包与固化清单
+LocalTest 安装器不会自动导入证书。由开发者在安装前核对并信任其公钥到 `TrustedPeople`，不得导入 `Root`。证书、公钥或私钥均不要额外放入下面要求精确文件清单的测试交付目录。
 
-签名完成后，运行 `Seal-Package.ps1` 校验交付目录文件及签名，并生成固化的 `test-artifacts.json` 清单：
+## 3. 封包与固化清单
 
 ```powershell
 .\scripts\local-test\Seal-Package.ps1 `
-  -DeliveryRoot "<OutputRoot>\delivery" `
-  -LooseExePath "<OutputRoot>\layout\BiliCopilot.UI.exe" `
+  -DeliveryRoot '<测试输出目录>\delivery' `
+  -LooseExePath '<测试输出目录>\layout\BiliCopilot.UI.exe' `
   -ExpectedLooseExeSha256 <EXE哈希> `
   -ExpectedSignerCertificateSha256 <证书DER哈希> `
   -Version '2.2611.2.0'
 ```
 
-### 4. 安装与验证
+封包前交付目录仅包含签名 MSIX、`Install.ps1`、`LocalTest.psm1` 和 `channel.json`。脚本核对签名、公钥摘要、包身份与原生 EXE 一致性，生成 `test-artifacts.json`；已封包的版本不覆盖，升级时分配新版本和新目录。外部记录并传递脚本输出的清单 SHA-256。
 
-交付目录 `<OutputRoot>\delivery` 包含了安装所需的文件。在交付目录下运行 `Install.ps1`：
+## 4. 只读预检与部署
+
+在测试交付目录运行：
 
 ```powershell
-# 4.1 只读预检：检查依赖包与证书状态
 .\Install.ps1 -ExpectedManifestSha256 <test-artifacts.json哈希>
-
-# 4.2 执行部署安装
 .\Install.ps1 -ExpectedManifestSha256 <test-artifacts.json哈希> -Install
 ```
 
-> **说明**：
-> - 安装脚本会检查已声明的依赖框架是否已安装，不会自动下载缺失依赖。
-> - 系统中若已安装相同或更高版本的测试包，脚本会拒绝重复写入或降级。
+缺失的框架依赖不会自动下载。同版本写入与降级被拒绝；封包检查通过也不等于已经完成真实 Windows 安装、启动或运行时验证。
+
+## 来源与反馈
+
+基于 Richasy 的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 [GPL-3.0](../../LICENSE)。问题请提交 [BiliFluent Issues](https://github.com/Better-Native-APPs/BiliFluent/issues)，分享日志前删除身份信息、凭据与本地路径。

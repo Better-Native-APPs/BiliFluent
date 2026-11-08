@@ -3,31 +3,43 @@
 layout: home
 
 hero:
-  name: 哔哩助理
-  text: 基于 Windows App SDK 构建的 BiliBili 第三方应用
-  tagline: 提供 Windows 原生体验
+  name: BiliFluent
+  text: 为 Windows 优化的哔哩哔哩第三方桌面客户端
+  tagline: Fluent UI 原生体验 · 无广告 · 专注低资源占用与流畅播放
   actions:
     - theme: brand
-      text: 安装应用
+      text: 快速安装
       link: /install
     - theme: alt
-      text: 关于此应用
+      text: 播放体验
+      link: /player
+    - theme: alt
+      text: 关于项目
       link: /about
     - theme: alt
-      text: Github
+      text: GitHub
       link: https://github.com/Better-Native-APPs/BiliFluent
   image:
     src: /logo-big.png
-    alt: 哔哩助理
+    alt: BiliFluent
 
 features:
+  - icon: 🚀
+    title: Windows 原生体验
+    details: 采用 Fluent UI 与 WinUI 3 原生控件，支持键盘快捷键与触控手势。
+  - icon: 🍃
+    title: 省电与低资源占用
+    details: 默认 mpv 内嵌省电弹幕，合并刷新播放进度，最小化时自动调度效率模式。
   - icon: 📺
-    title: 本机播放
-    details: 使用本机硬件的解码能力播放视频。
-  - icon: 🍻
-    title: 功能丰富
-    details: 涵盖绝大部分常用功能，满足大多数人的浏览需求。
+    title: 低配硬件预设
+    details: 默认 1080P60 画质上限与 AVC/H.264 优先，默认 64 MiB 缓存，支持「快速」配置切换。
+  - icon: 🛡️
+    title: 无广告与独立共存
+    details: 开源无广告，独立包身份不覆盖官方客户端或上游应用，内置空降助手。
 ---
+
+BiliFluent 基于 Richasy 的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 GPL-3.0 许可协议。
+
 <style>
 :root {
   --vp-home-hero-name-color: transparent;

@@ -103,7 +103,7 @@ try {
     $n.Identity.SetAttribute('Publisher', $id.Publisher)
     $n.Identity.SetAttribute('Version', $Version)
     $n.Display.InnerText = $id.Label
-    $n.PublisherDisplay.InnerText = 'BiliCopilot Local Release'
+    $n.PublisherDisplay.InnerText = 'BiliFluent'
     $n.Visual.SetAttribute('DisplayName', $id.Label)
     $n.Visual.SetAttribute('Description', $id.Label)
     $n.Tile.SetAttribute('ShortName', $id.Label)
@@ -121,7 +121,7 @@ try {
     foreach ($name in @('Install.ps1', 'LocalTest.psm1', 'channel.json')) {
         [IO.File]::Copy((Join-Path $PSScriptRoot $name), (Join-Path $delivery $name), $false)
     }
-    $package = Join-Path $delivery ("BiliCopilot.LocalTest_${Version}_x64.msix")
+    $package = Join-Path $delivery ("BiliFluent.LocalTest_${Version}_x64.msix")
     if ($Pack) {
         & $MakeAppxPath pack /d $layout /p $package
         if ($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists($package)) { Stop-LT 'MakeAppxFailed' 'Packing failed; retain this new output for parent diagnosis, do not overwrite/retry in place.' }

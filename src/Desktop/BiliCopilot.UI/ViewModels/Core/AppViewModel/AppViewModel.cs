@@ -178,7 +178,7 @@ public sealed partial class AppViewModel : ViewModelBase
     private async Task ShowUpdateAsync()
     {
         var packVersion = this.Get<IAppToolkit>().GetPackageVersion();
-        var url = $"https://github.com/Richasy/Bili.Copilot/releases/tag/v{packVersion}";
+        var url = $"https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v{packVersion}";
         await Launcher.LaunchUriAsync(new Uri(url));
         HideUpdate();
     }

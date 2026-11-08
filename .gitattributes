@@ -66,3 +66,6 @@ scripts/local-release/Trust-Certificate.ps1 text eol=lf
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -3,7 +3,6 @@ description: 给项目提供建议或点子
 title: "[Feature] 我的标题"
 labels:
   - "功能 💡"
-assignees: Richasy
 body:
 - type: markdown
   attributes: 
@@ -51,7 +50,7 @@ body:
   id: contribution
   attributes:
      label: 人人为我，我为人人
-     description: 哔哩助理变得更好，我们所有参与者都将受益，如果可以的话，你是否愿意帮忙解决这个问题？
+     description: BiliFluent 变得更好，我们所有参与者都将受益。如果可以的话，你是否愿意帮忙实现这个功能？
      options:
-       - 是的，我希望我的代码出现在哔哩中
-       - 提出问题就是我对哔哩的期许
+       - 是的，我希望我的代码出现在 BiliFluent 中
+       - 提出问题就是我对 BiliFluent 的支持与期许

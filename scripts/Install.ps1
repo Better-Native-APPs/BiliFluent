@@ -14,7 +14,7 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $scriptDir
 
-Write-Host "=== Bili Copilot Installer ===" -ForegroundColor Cyan
+Write-Host "=== BiliFluent Installer ===" -ForegroundColor Cyan
 
 # 2. Install Certificate
 $certFile = Get-ChildItem -Path $scriptDir -Filter "*.cer" | Select-Object -First 1
@@ -73,7 +73,7 @@ if ($appFile) {
     try {
         Add-AppxPackage -Path $appFile.FullName -ForceApplicationShutdown -ErrorAction Stop
         Write-Host "Installation Complete!" -ForegroundColor Green
-        Write-Host "You can now find 'Bili Copilot' in your Start Menu."
+        Write-Host "You can now find 'BiliFluent' in your Start Menu."
     }
     catch {
         Write-Error "Failed to install application. Error: $_"

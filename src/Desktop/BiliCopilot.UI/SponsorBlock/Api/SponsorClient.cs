@@ -10,7 +10,7 @@ namespace BiliCopilot.UI.SponsorBlock.Api;
 /// <summary>Typed opt-in protocol only. No cookies, arbitrary endpoints, retries, UI, or player ownership.</summary>
 public sealed partial class SponsorClient : IDisposable
 {
-    public const string UserAgent = "BiliCopilot/2.2611.6.0";
+    public const string UserAgent = "BiliFluent/2.2611.7.0";
     private static readonly string[] FullActions = ["full"];
     private static readonly string[] UserInfoFields = ["userName", "viewCount", "minutesSaved", "vip", "permissions", "segmentCount"];
     public static Uri Service { get; } = new("https://www.bsbsb.top/");

@@ -2,10 +2,10 @@ import { defineConfig, type DefaultTheme } from 'vitepress'
 
 export const zh = defineConfig({
     lang: 'zh-Hans',
-    title: '哔哩助理',
+    title: 'BiliFluent',
     themeConfig: {
         nav: [
-          { text: '下载应用', link: 'https://www.microsoft.com/store/productId/9MVFJLPH517M' },
+          { text: '下载应用', link: 'https://github.com/Better-Native-APPs/BiliFluent/releases' },
           { text: '播放体验', link: '/player' },
           { text: '常见问题', link: '/faq' },
         ],
@@ -18,29 +18,28 @@ export const zh = defineConfig({
               { text: '安装应用', link: '/install' },
               { text: '账户登录', link: '/sign-in' },
               { text: '模块分类', link: '/partition' },
-              { text: '常见问题', link: './faq' },
+              { text: '常见问题', link: '/faq' },
               { text: '隐私策略', link: '/privacy' }
             ]
           },
           {
             text: '播放',
             items: [
-              { text: '播放器类型', link: '/player' },
-              { text: '自定义操作', link: '/player-custom' },
+              { text: '播放体验', link: '/player' },
+              { text: '播放器自定义', link: '/player-custom' },
               { text: '弹幕体验', link: '/danmaku' },
-              { text: 'WebDAV', link: '/webdav' },
             ]
           },
         ],
 
         editLink: {
-            pattern: 'https://github.com/Richasy/Bili.Copilot/edit/main/docs/:path',
+            pattern: 'https://github.com/Better-Native-APPs/BiliFluent/edit/main/docs/:path',
             text: '在 GitHub 上编辑此页面'
           },
       
           footer: {
-            message: '基于 GPLv3 许可发布',
-            copyright: `版权所有 © 2024-${new Date().getFullYear()} 云之幻`
+            message: 'BiliFluent 基于 Richasy「哔哩助理」二次开发，遵循 GPL-3.0 协议',
+            copyright: `BiliFluent 贡献者；上游 © 2024-${new Date().getFullYear()} 云之幻（Richasy）`
           },
       
           docFooter: {

@@ -7,15 +7,15 @@ param(
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 
-# Bili.Copilot 本地 Release MSIX 一次性安装脚本。
+# BiliFluent 本地 Release MSIX 一次性安装脚本。
 # 默认只做只读预检；只有显式 -Install 才会请求证书信任（如需要）并为当前用户部署。
 # 用法: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install
 
 #region SharedValidation
 $script:ReleaseFixed = @{
-    Name                 = 'BiliCopilot.LocalRelease'
-    Publisher            = 'CN=BiliCopilot Local Release'
-    Version              = '2.2611.6.0'
+    Name                 = 'BiliFluent'
+    Publisher            = 'CN=BiliFluent'
+    Version              = '2.2611.7.0'
     Architecture         = 'x64'
     CodeSigningEku       = '1.3.6.1.5.5.7.3.3'
     ManifestFileName     = 'release-artifacts.json'
@@ -146,7 +146,7 @@ function Assert-ManifestData($Data) {
     Assert-ExactKeys $Data @('schemaVersion', 'package', 'certificate', 'dependencies', 'scripts') '清单根对象'
     $leaves = @(Get-ManifestLeaves $Data '')
     $pending = @($leaves | Where-Object { $_.Value -is [string] -and $_.Value -cmatch '__PENDING' } | ForEach-Object { $_.Path })
-    if ($pending.Count -gt 0) { Stop-Release ('清单仍含出包后待父代理填写的占位字段: ' + ($pending -join ', ')) }
+    if ($pending.Count -gt 0) { Stop-Release ('清单仍含出包后待填写的占位字段: ' + ($pending -join ', ')) }
     $unsafe = @($leaves | Where-Object { $_.Value -is [string] -and ($_.Value.Contains('://') -or $_.Value.IndexOfAny([char[]]'*?%') -ge 0) } | ForEach-Object { $_.Path })
     if ($unsafe.Count -gt 0) { Stop-Release ('清单不得包含 URL、通配符或环境变量: ' + ($unsafe -join ', ')) }
     if ($Data.schemaVersion -isnot [int] -or $Data.schemaVersion -ne 1) { Stop-Release 'schemaVersion 必须为整数 1' }
@@ -725,7 +725,7 @@ function New-InstallResult([bool]$InstallRequested) {
     $mode = 'Preflight'
     if ($InstallRequested) { $mode = 'Install' }
     return [ordered]@{
-        resultSchema      = 'BiliCopilot.LocalRelease.InstallResult/1'
+        resultSchema      = 'BiliFluent.InstallResult/1'
         mode              = $mode
         outcome           = 'Blocked'
         originalCallerSid = $null
@@ -853,7 +853,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $exitCode = 1
     try {
         $result = Invoke-ReleaseInstaller -DeliveryRoot $PSScriptRoot -InstallRequested ([bool]$Install) -ExpectedManifestSha256 $ExpectedManifestSha256 -InstallScriptPath $PSCommandPath
-        Write-Host ('结果: {0}' -f $result.outcome)
+        Write-Host ('BiliFluent 安装结果: {0}' -f $result.outcome)
         if ($result.failure) { Write-Host ('原因: ' + $result.failure) }
         if ($result.outcome -ceq 'PreflightPassed') { Write-Host '预检通过，未做任何更改。确认后执行: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install' }
         $exitCode = Get-InstallerExitCode $result

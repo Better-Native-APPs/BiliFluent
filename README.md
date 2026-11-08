@@ -1,87 +1,65 @@
-<p align="center">
-<img src="assets/StoreLogo.png" width="48px"/>
-</p>
+# BiliFluent
 
-<div align="center">
+BiliFluent 是采用 Fluent UI 与 WinUI 3 原生控件、专为 Windows 优化的哔哩哔哩第三方桌面客户端。无广告，注重流畅播放、低资源占用与低配置设备体验。
 
-# 哔哩助理 (Bili.Copilot)
+项目基于 Richasy 的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 [GPL-3.0](LICENSE) 许可协议。
 
-`哔哩助理` 是基于 Windows App SDK (WinUI 3) 构建的哔哩哔哩第三方 Windows 桌面客户端。
+## 特性
 
-本项目是 [Richasy/Bili.Copilot](https://github.com/Richasy/Bili.Copilot) 的二次开发 Fork 分支（维护者：[Better-Native-APPs](https://github.com/Better-Native-APPs)）。
+- **Fluent UI 原生体验**：采用 WinUI 3 控件与现代设计，支持触控手势，可与官方客户端并存。
+- **mpv 内嵌省电弹幕**：默认启用基于 libass 的内嵌弹幕渲染，降低 CPU 与显存占用（保留 Win2D 备选）。
+- **播放进度合并刷新**：节流合并高频进度更新，进度拖拽与状态同步更平稳。
+- **播放器资源彻底释放**：关闭播放窗口时即时完全释放 mpv 实例、解码句柄与显存。
+- **WMP 风格全屏**：双击画面切换全屏，支持 `F` / `F11` 进入或退出全屏、`Esc` 退出全屏。
+- **内置空降助手**：支持自动或手动跳过合作广告、片头片尾与闲聊片段。
+- **后台效率模式**：窗口最小化或后台空闲无播放任务时，自动调度 Windows 效率模式节省电量。
+- **低配硬件预设**：默认 1080P60 画质上限与 AVC/H.264 优先硬解，默认 64 MiB 缓存，提供「快速 (Fast)」profile 切换。
 
-</div>
+## 安装
 
-<p align="center">
-<a href="#本-fork-的改动">改动说明</a> &nbsp;&bull;&nbsp;
-<a href="#安装方式">安装方式</a> &nbsp;&bull;&nbsp;
-<a href="#从源码构建">从源码构建</a> &nbsp;&bull;&nbsp;
-<a href="#文档与链接">文档与链接</a> &nbsp;&bull;&nbsp;
-<a href="#鸣谢">鸣谢</a>
-</p>
+当前版本：`2.2611.7.0`。支持 Windows 10（Build 19041 及以上）与 Windows 11（x64）。
 
-## 本 Fork 的改动
+1. 从 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases) 下载 `BiliFluent-2.2611.7.0.zip` 并完整解压。
+2. 双击解压目录中的 `安装 BiliFluent.cmd`。
+3. 在 UAC 提示窗口中确认允许。脚本会自动将公钥证书导入 `LocalMachine\TrustedPeople` 并安装应用。
 
-- **BiliKernel SDK 定制与维护**：以 Git Submodule 形式引入了 fork 后的 [Better-Native-APPs/BiliKernel](https://github.com/Better-Native-APPs/BiliKernel)（位于 `src/Libs/BiliKernel`），修改并适配了 `Abstractions`、`Services.Comment`、`Services.Media` 和 `Services.Moment` 四个核心模块（版本号 `0.0.3-bilicopilot.1`）。通过本地包源与 `nuget.config` 源映射，确保优先使用本地定制包，未修改模块继续使用公开源。
-- **本地发布与测试通道支持**：
-  - **LocalRelease 通道**：正式发布版本（当前版本为 `2.2611.6.0`），启用 ReadyToRun 编译优化，提供配套的本地证书信任与侧加载安装脚本。
-  - **LocalTest 通道**：日常开发测试通道，使用独立包身份（`BiliCopilot.LocalTest`，显示为“哔哩助理（测试）”），与正式版本完全隔离，支持并存安装与升级验证。
-- **原生依赖解耦**：将 `libmpv`、`ffmpeg` 和 `BiliCopilot.Visor` 原生可执行文件解耦为构建前按需放入的独立资产，并提供明确的版本说明。
+### 手动安装（PowerShell）
 
-## 安装方式
+在解压目录下打开 Windows PowerShell 执行：
 
-### 侧加载安装（推荐）
+```powershell
+# 只读预检
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 
-1. 从 Release 页面下载发布包 ZIP 并完整解压到本地文件夹（请勿在压缩包内直接运行）。
-2. 打开 Windows PowerShell（普通用户权限即可），进入解压目录后运行：
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install
-   ```
-3. 脚本会自动进行环境预检。如果当前设备尚未信任发布证书，脚本会通过 UAC 弹窗提示，自动调用 `Trust-Certificate.ps1` 将证书公钥安装至“受信任的人”（`TrustedPeople`）存储区，随后调用系统部署服务完成安装。
+# 安装
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install
+```
 
-> **说明**：如果不加 `-Install` 参数直接运行 `.\Install.ps1`，脚本仅执行只读预检并显示依赖与签名状态，不会对系统做任何修改。
+更多安装选项见[安装指南](docs/install.md)。
 
 ## 从源码构建
 
-详细的前置依赖、参数说明与自签名步骤请参考 [scripts/README.md](scripts/README.md)。
+需要 `global.json` 固定的 **.NET SDK 10.0.403** 与 Windows SDK 工具。
 
-### 快速构建步骤
+```powershell
+git clone --recurse-submodules https://github.com/Better-Native-APPs/BiliFluent.git
+cd BiliFluent
+.\scripts\Build-BiliKernel.ps1
+# 按 scripts/README.md 放置 libmpv、FFmpeg 并编译 Visor 后执行：
+.\scripts\Build-Release.ps1 -CertificateThumbprint <证书指纹>
+.\scripts\local-release\Make-Delivery.ps1 -CertificateThumbprint <证书指纹>
+```
 
-1. **克隆仓库及子模块**：
-   ```powershell
-   git clone --recurse-submodules https://github.com/Better-Native-APPs/BiliFluent.git
-   cd Bili.Copilot
-   ```
-   *若已有克隆未拉取子模块，可执行 `git submodule update --init --recursive`。*
+详细环境配置与原生依赖校验值见[构建说明](scripts/README.md)。
 
-2. **编译 BiliKernel 本地包**：
-   ```powershell
-   .\scripts\Build-BiliKernel.ps1
-   ```
-   脚本将编译定制的 4 个 SDK 项目，打包并输出至 `artifacts/bilikernel-feed` 本地包源。
+## CI 与自动发布
 
-3. **放置原生运行时文件**：
-   将下列二进制文件手动放入 `src/Desktop/BiliCopilot.UI/Assets/` 下对应的目录：
-   - `libmpv/x64/libmpv-2.dll`（版本 `v0.41.0-1102-g6c092d978`，来自 [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake/releases)）
-   - `ffmpeg/x64/ffmpeg.exe`（版本 `N-127218-g47313ad3f`，来自 shinchiro 构建）
-   - `visor/x64/BiliCopilot.Visor.exe`（由仓库中的 `src/Desktop/BiliCopilot.Visor` 项目通过 NativeAOT 发布生成）
+- **分支策略**：日常开发在 `dev` 分支，经 PR 合并到受保护的 `main` 分支。
+- **预发布构建**：向 `main` 分支推送提交时自动构建已签名的 Pre-Release。
+- **正式发布**：推送 `v*` 标签时构建并发布 GitHub Release。
+- **代码签名**：由仓库 Secrets（`SIGNING_PFX_BASE64`、`SIGNING_PFX_PASSWORD`、`SIGNING_CERT_THUMBPRINT`）提供。
 
-4. **构建 Release MSIX 包**：
-   ```powershell
-   .\scripts\Build-Release.ps1
-   ```
-   产物输出于 `artifacts/release/BiliCopilot_2.2611.6.0_x64.msix`。如需签名，可传入 `-CertificateThumbprint <证书指纹>`。
+## 致谢
 
-## 文档与链接
-
-- [从源码构建 Release 说明](scripts/README.md)
-- [LocalTest 测试通道说明](scripts/local-test/README.md)
-- [应用使用与功能文档](docs/index.md)
-
-## 鸣谢
-
-- 上游原项目：[Richasy/Bili.Copilot](https://github.com/Richasy/Bili.Copilot)
-- [Windows App SDK](https://github.com/microsoft/windowsappsdk) & [WinUI 3](https://github.com/microsoft/microsoft-ui-xaml)
-- [mpv](https://mpv.io/) & [mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)
-- [FFmpeg](https://ffmpeg.org/)
-- 以及其他为本项目提供支持的开源组件与社区贡献者。
+- 上游项目：Richasy 的「哔哩助理」([Richasy/Bili.Copilot](https://github.com/Richasy/Bili.Copilot))
+- 组件与框架：[Windows App SDK](https://github.com/microsoft/windowsappsdk) / [WinUI 3](https://github.com/microsoft/microsoft-ui-xaml) · [mpv](https://mpv.io/) · [FFmpeg](https://ffmpeg.org/) · [Danmaku.Legacy](src/Libs/Danmaku.Legacy/README.md)

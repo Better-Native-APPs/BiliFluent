@@ -9,11 +9,11 @@ function Stop-LT([string]$Code, [string]$Message) {
 
 function Get-LTIdentity {
     [pscustomobject]@{
-        Name = 'BiliCopilot.LocalTest'; Publisher = 'CN=BiliCopilot Local Release'
-        Family = 'BiliCopilot.LocalTest_p8tmrechhd89c'; AppId = 'App'; Architecture = 'x64'
-        Toast = 'E0BD9275-CB75-5DAE-AD37-B9C8464F9DAF'; Exe = 'BiliCopilot.UI.exe'
+        Name = 'BiliFluent.LocalTest'; Publisher = 'CN=BiliFluent'
+        Family = 'BiliFluent.LocalTest_7rrwb2e69v8er'; AppId = 'App'; Architecture = 'x64'
+        Toast = 'CF0E1EDD-C7F4-56B5-BFD8-C6D8EFBCC0FE'; Exe = 'BiliCopilot.UI.exe'
         Arguments = '----AppNotificationActivated:'
-        Label = (-join ([char[]](0x54d4, 0x54e9, 0x52a9, 0x7406, 0xff08, 0x6d4b, 0x8bd5, 0xff09)))
+        Label = 'BiliFluent' + (-join ([char[]](0xff08, 0x6d4b, 0x8bd5, 0xff09)))
     }
 }
 
@@ -128,16 +128,16 @@ function Assert-LTManifest([xml]$Document, [string]$Version, [switch]$Source) {
         $name = $n.Identity.GetAttribute('Name'); $publisher = $n.Identity.GetAttribute('Publisher')
         if ($name -ceq 'Richasy.BiliCopilot.Dev' -and $publisher -ceq 'CN=Richasy') {
             $toast = 'E3D99E22-57A2-41B9-BB2D-E1547E68DEBA'
-        } elseif ($name -ceq 'BiliCopilot.LocalRelease' -and $publisher -ceq $id.Publisher) {
+        } elseif ($name -ceq 'BiliFluent' -and $publisher -ceq $id.Publisher) {
             $toast = '64DB9FDB-EF36-44D3-8DA6-04658D814915'
-        } else { Stop-LT 'SourceIdentity' 'Only the parent-final Dev/LocalRelease generated native layout is admitted.' }
+        } else { Stop-LT 'SourceIdentity' 'Only the upstream Dev or BiliFluent generated native layout is admitted.' }
     } else {
         if ($n.Identity.GetAttribute('Name') -cne $id.Name -or $n.Identity.GetAttribute('Publisher') -cne $id.Publisher) {
             Stop-LT 'Identity' 'Only the fixed LocalTest identity is admitted; formal/dev packages are refused.'
         }
         if ($n.Display.InnerText -cne $id.Label -or $n.Visual.GetAttribute('DisplayName') -cne $id.Label -or
             $n.Visual.GetAttribute('Description') -cne $id.Label -or $n.Tile.GetAttribute('ShortName') -cne $id.Label -or
-            $n.Server.GetAttribute('DisplayName') -cne $id.Label -or $n.PublisherDisplay.InnerText -cne 'BiliCopilot Local Release') {
+            $n.Server.GetAttribute('DisplayName') -cne $id.Label -or $n.PublisherDisplay.InnerText -cne 'BiliFluent') {
             Stop-LT 'Label' 'LocalTest manifest labels do not match.'
         }
     }

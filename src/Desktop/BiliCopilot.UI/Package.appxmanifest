@@ -10,15 +10,15 @@
   IgnorableNamespaces="uap rescap desktop com">
 
   <Identity
-    Name="BiliCopilot.LocalRelease"
-    Publisher="CN=BiliCopilot Local Release"
-    Version="2.2611.6.0" />
+    Name="BiliFluent"
+    Publisher="CN=BiliFluent"
+    Version="2.2611.7.0" />
 
   <mp:PhoneIdentity PhoneProductId="db73c7b4-f2cf-4fdc-96e5-a386308a42e9" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>ms-resource:AppName</DisplayName>
-    <PublisherDisplayName>BiliCopilot Local Release</PublisherDisplayName>
+    <PublisherDisplayName>BiliFluent</PublisherDisplayName>
     <Logo>Assets\Logo\StoreLogo.png</Logo>
   </Properties>
 
@@ -59,7 +59,7 @@
         <!--Register COM CLSID-->
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:ExeServer Executable="BiliCopilot.UI.exe" DisplayName="哔哩助理" Arguments="----AppNotificationActivated:">
+            <com:ExeServer Executable="BiliCopilot.UI.exe" DisplayName="BiliFluent" Arguments="----AppNotificationActivated:">
               <com:Class Id="64DB9FDB-EF36-44D3-8DA6-04658D814915" />
             </com:ExeServer>
           </com:ComServer>

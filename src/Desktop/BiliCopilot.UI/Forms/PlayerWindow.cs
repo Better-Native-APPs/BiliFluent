@@ -35,7 +35,7 @@ public sealed partial class PlayerWindow : IPlayerHost
     private async Task CreateNativeAsync(CancellationToken cancellationToken)
     {
         _rootWindow = AppWindow.Create();
-        _rootWindow.Title = "哔哩助理";
+        _rootWindow.Title = "BiliFluent";
         _rootWindow.AssociateWithDispatcherQueue(DispatcherQueue.GetForCurrentThread());
         _rootWindow.Destroying += OnWindowDestroying;
         _rootWindow.Closing += OnWindowClosing;

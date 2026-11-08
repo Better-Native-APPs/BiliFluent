@@ -11,16 +11,32 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!--  关于：仅显示应用名称与版本号  -->
-    <base:SettingsCard x:Name="AboutCard" Header="{ext:Locale Name=AppName}">
-        <base:SettingsCard.HeaderIcon>
-            <BitmapIcon ShowAsMonochrome="False" UriSource="ms-appx:///Assets/StoreLogo.png" />
-        </base:SettingsCard.HeaderIcon>
+    <StackPanel Spacing="8">
+        <base:SettingsCard x:Name="AboutCard" Header="{ext:Locale Name=AppName}">
+            <base:SettingsCard.HeaderIcon>
+                <BitmapIcon ShowAsMonochrome="False" UriSource="ms-appx:///Assets/StoreLogo.png" />
+            </base:SettingsCard.HeaderIcon>
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsTextSelectionEnabled="True">
+                <Run Text="{ext:Locale Name=Version}" />
+                <Run Text="{x:Bind ViewModel.PackageVersion, Mode=OneWay}" />
+            </TextBlock>
+        </base:SettingsCard>
         <TextBlock
+            Margin="16,0"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            IsTextSelectionEnabled="True">
-            <Run Text="{ext:Locale Name=Version}" />
-            <Run Text="{x:Bind ViewModel.PackageVersion, Mode=OneWay}" />
+            IsTextSelectionEnabled="True"
+            TextWrapping="Wrap">
+            <Run Text="{ext:Locale Name=AboutDerivativeNotice}" />
+            <LineBreak />
+            <Hyperlink NavigateUri="https://github.com/Richasy/Bili.Copilot">
+                <Run Text="{ext:Locale Name=AboutUpstreamRepository}" />
+            </Hyperlink>
+            <Run Text=" · " />
+            <Hyperlink NavigateUri="https://github.com/Better-Native-APPs/BiliFluent">
+                <Run Text="{ext:Locale Name=AboutSourceRepository}" />
+            </Hyperlink>
         </TextBlock>
-    </base:SettingsCard>
+    </StackPanel>
 </local:SettingsPageControlBase>

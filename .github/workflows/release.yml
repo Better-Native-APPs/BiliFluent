@@ -1,0 +1,121 @@
+name: Build & Release
+
+# dev  -> daily pushes (no workflow run)          PR dev -> main : build + package only (required check "build")
+# main -> signed pre-release v<version>-pre.<run>  tag v<version>  : signed full release
+on:
+  push:
+    branches: [main]
+    tags: ['v*', '!v*-pre*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  NUGET_PACKAGES: ${{ github.workspace }}\.nuget-clean
+
+jobs:
+  build:
+    name: build
+    runs-on: windows-2025
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup .NET (global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Resolve release info
+        id: info
+        run: ./scripts/ci/Get-ReleaseInfo.ps1
+
+      - name: Build BiliKernel SDK feed
+        run: ./scripts/Build-BiliKernel.ps1
+
+      - name: Provision native assets (libmpv, ffmpeg, Visor)
+        run: ./scripts/ci/Provision-NativeAssets.ps1
+
+      - name: Import signing certificate
+        id: cert
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+          SIGNING_CERT_THUMBPRINT: ${{ secrets.SIGNING_CERT_THUMBPRINT }}
+        run: |
+          if ('${{ steps.info.outputs.publish }}' -eq 'true') {
+            ./scripts/ci/Import-SigningCertificate.ps1
+          } else {
+            ./scripts/ci/Import-SigningCertificate.ps1 -AllowEphemeral
+          }
+
+      - name: Build signed MSIX
+        run: ./scripts/Build-Release.ps1 -CertificateThumbprint '${{ steps.cert.outputs.thumbprint }}'
+
+      - name: Package delivery ZIP (with one-click installer)
+        id: delivery
+        run: |
+          ./scripts/local-release/Make-Delivery.ps1 -CertificateThumbprint '${{ steps.cert.outputs.thumbprint }}'
+          $zip = @(Get-ChildItem artifacts/release -Filter 'BiliFluent-*.zip' -File)
+          if ($zip.Count -ne 1) { throw "Expected exactly one delivery ZIP, found $($zip.Count)" }
+          $dir = $zip[0].FullName -replace '\.zip$', ''
+          $cer = Join-Path $dir 'payload/BiliFluent.cer'
+          if (-not (Test-Path -LiteralPath $cer)) { throw "Certificate not found in delivery: $cer" }
+          $sha = (Get-FileHash -LiteralPath (Join-Path $dir 'release-artifacts.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+          "zip=$($zip[0].FullName)" >> $env:GITHUB_OUTPUT
+          "zipname=$($zip[0].BaseName)" >> $env:GITHUB_OUTPUT
+          "cer=$cer" >> $env:GITHUB_OUTPUT
+          "manifest_sha256=$sha" >> $env:GITHUB_OUTPUT
+          Write-Host "Delivery ZIP: $($zip[0].FullName) (manifest SHA-256 $sha)"
+
+      - name: Upload delivery ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.delivery.outputs.zipname }}-${{ steps.info.outputs.tag }}
+          path: ${{ steps.delivery.outputs.zip }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub release
+        if: steps.info.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $publishArgs = @{
+            Tag            = '${{ steps.info.outputs.tag }}'
+            Title          = '${{ steps.info.outputs.title }}'
+            Version        = '${{ steps.info.outputs.version }}'
+            Assets         = @('${{ steps.delivery.outputs.zip }}', '${{ steps.delivery.outputs.cer }}')
+            ManifestSha256 = '${{ steps.delivery.outputs.manifest_sha256 }}'
+            Prerelease     = ('${{ steps.info.outputs.prerelease }}' -eq 'true')
+          }
+          ./scripts/ci/Publish-GitHubRelease.ps1 @publishArgs
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_number }}
+          path: |
+            artifacts/release/*.log
+            artifacts/release/*.binlog
+            artifacts/release/*.command.json
+            artifacts/bilikernel-logs/
+          if-no-files-found: ignore
+          retention-days: 14

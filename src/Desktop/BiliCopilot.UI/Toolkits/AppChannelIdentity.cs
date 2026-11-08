@@ -8,8 +8,8 @@ namespace BiliCopilot.UI.Toolkits;
 /// </summary>
 internal static class AppChannelIdentity
 {
-    private const string TestPackageName = "BiliCopilot.LocalTest";
-    private const string ExistingInstanceKey = "Richasy.BiliCopilot";
+    private const string TestPackageName = "BiliFluent.LocalTest";
+    private const string ExistingInstanceKey = "BiliFluent";
 
     public static string InstanceKey { get; } = GetInstanceKey();
 

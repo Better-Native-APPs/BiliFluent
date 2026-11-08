@@ -3,7 +3,6 @@ description: 关于文档的建议或问题
 title: "[Doc] 我的标题"
 labels:
   - "文档 📃"
-assignees: Richasy
 body:
 - type: markdown
   attributes: 
@@ -37,7 +36,7 @@ body:
     label: 对应文档
     description: 如果文档已存在，请添加文档链接
     placeholder: |
-      ![文档名称](文档链接)
+      [文档名称](文档链接)
 
 - type: textarea
   id: additional-info
@@ -49,7 +48,7 @@ body:
   id: contribution
   attributes:
      label: 人人为我，我为人人
-     description: 哔哩助理变得更好，我们所有参与者都将受益，你是否愿意帮助完善文档？
+     description: BiliFluent 变得更好，我们所有参与者都将受益，你是否愿意帮助完善文档？
      options:
        - 是的，我希望其他人看到我写的文档
        - 我还没想好

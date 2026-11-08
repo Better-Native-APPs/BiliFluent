@@ -12,6 +12,18 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>BiliFluent</value>
+  </data>
+  <data name="AboutDerivativeNotice" xml:space="preserve">
+    <value>BiliFluent is derived from Richasy's 哔哩助理 (Bili Copilot) and licensed under GPL-3.0.</value>
+  </data>
+  <data name="AboutUpstreamRepository" xml:space="preserve">
+    <value>Upstream project</value>
+  </data>
+  <data name="AboutSourceRepository" xml:space="preserve">
+    <value>BiliFluent source code</value>
+  </data>
   <data name="MpvDanmakuRenderer" xml:space="preserve">
     <value>mpv (power saving)</value>
   </data>
