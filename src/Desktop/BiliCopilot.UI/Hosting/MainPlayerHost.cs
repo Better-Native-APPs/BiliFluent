@@ -47,12 +47,18 @@ public sealed partial class MainPlayerHost : IPlayerHost
     private PlayerPresentationMode _fullScreenReturn = PlayerPresentationMode.Normal;
     private long _presentationRequestVersion;
     private int _presentationDepth;
+    private long _pendingPresentationRequest;
+    private bool _presentationBoundsQueued;
+    private DispatcherQueueTimer? _presentationTimer;
+    private SizeInt32? _presentationClientSize;
     private bool _immediateBoundsApplying;
     private PlayerPresentationMode _layout = PlayerPresentationMode.Normal;
     private PlayerPresentationMode? _publishedPresentation;
     private PlayerPresentationMode? _publishingPresentation;
     private long _publishingPresentationVersion;
     private long _presentationPublicationVersion;
+    private Task? _closeFrameTask;
+    private Task? _disposeTask;
 
     public MainPlayerHost(MainWindow owner, FrameworkElement slot)
     {
@@ -66,7 +72,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
     public bool IsEmbedded => true;
     public bool IsDisposed { get; private set; }
     public bool IsClosed => _closing || IsDisposed;
-    public bool IsPresenterChanging => _presentationDepth != 0;
+    public bool IsPresenterChanging => _presentationDepth != 0 || _pendingPresentationRequest != 0;
     public IntPtr OwnerHwnd => _owner.GetWindowHandle();
     public IntPtr RenderHwnd => _renderHwnd;
     public IntPtr Handle => OwnerHwnd;
@@ -211,6 +217,12 @@ public sealed partial class MainPlayerHost : IPlayerHost
             !_owner.AppWindow.IsVisible || (bool)PInvoke.IsIconic(new(OwnerHwnd))) return false;
         var scale = _slot.XamlRoot.RasterizationScale;
         if (!double.IsFinite(scale) || scale <= 0) return false;
+        if (Presentation is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay)
+        {
+            if (!PInvoke.GetClientRect(new(OwnerHwnd), out var client) || client.Width <= 0 || client.Height <= 0) return false;
+            bounds = new RectInt32(0, 0, client.Width, client.Height);
+            return true;
+        }
         var origin = _slot.TransformToVisual(_owner.Content).TransformPoint(new Point(0, 0));
         var width = _slot.ActualWidth * scale;
         var height = _slot.ActualHeight * scale;
@@ -233,19 +245,24 @@ public sealed partial class MainPlayerHost : IPlayerHost
         if (IsIslandUnavailable || _slot.XamlRoot is not { } root) return false;
         var scale = root.RasterizationScale;
         var visible = new Rect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        var fullWindow = Presentation is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay;
         DependencyObject? node = _slot;
         while (node is FrameworkElement element)
         {
             if (element.Visibility != Visibility.Visible || element.Opacity <= 0) return false;
-            var transform = element.TransformToVisual(_owner.Content);
-            var limits = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
-            visible.Intersect(new Rect(limits.X * scale, limits.Y * scale, limits.Width * scale, limits.Height * scale));
-            if (element.Clip is RectangleGeometry rectangle)
+            // A promoted layer owns the whole client rectangle, not a stale normal-slot/ancestor extent during WM_SIZE.
+            if (!fullWindow)
             {
-                var localClip = transform.TransformBounds(rectangle.Rect);
-                visible.Intersect(new Rect(localClip.X * scale, localClip.Y * scale, localClip.Width * scale, localClip.Height * scale));
+                var transform = element.TransformToVisual(_owner.Content);
+                var limits = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+                visible.Intersect(new Rect(limits.X * scale, limits.Y * scale, limits.Width * scale, limits.Height * scale));
+                if (element.Clip is RectangleGeometry rectangle)
+                {
+                    var localClip = transform.TransformBounds(rectangle.Rect);
+                    visible.Intersect(new Rect(localClip.X * scale, localClip.Y * scale, localClip.Width * scale, localClip.Height * scale));
+                }
+                else if (element.Clip is not null) return false;
             }
-            else if (element.Clip is not null) return false;
             if (ReferenceEquals(element, _owner.Content)) break;
             node = VisualTreeHelper.GetParent(element);
         }
@@ -272,6 +289,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
         => _activeChanged?.Invoke(args.WindowActivationState != WindowActivationState.Deactivated);
     private void OnOwnerChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
+        if (IsClosed) return;
         if (args.DidPresenterChange)
         {
             if (!IsPresenterChanging)
@@ -285,22 +303,41 @@ public sealed partial class MainPlayerHost : IPlayerHost
                 PublishPresentation();
             }
         }
+        if (args.DidSizeChange && _pendingPresentationRequest != 0 && _presentationDepth == 0)
+        {
+            try { ApplyImmediateBounds(_pendingPresentationRequest, _presentationPublicationVersion); }
+            catch (Exception ex) { PublishBoundsFailure(ex); }
+        }
         QueueBounds();
     }
 
     private void QueueBounds()
     {
-        if (IsClosed || _layoutQueued) return;
-        _layoutQueued = true;
-        if (!_queue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        // A forced layout must not queue itself while it is waiting for the final WM_SIZE.
+        if (IsClosed || (_pendingPresentationRequest != 0 && _immediateBoundsApplying)) return;
+        var transition = _pendingPresentationRequest != 0;
+        if (transition ? _presentationBoundsQueued : _layoutQueued) return;
+        if (transition) _presentationBoundsQueued = true;
+        else _layoutQueued = true;
+        if (!_queue.TryEnqueue(transition ? DispatcherQueuePriority.Normal : DispatcherQueuePriority.Low, () =>
         {
-            _layoutQueued = false;
+            if (transition) _presentationBoundsQueued = false;
+            else _layoutQueued = false;
             if (!IsClosed)
             {
-                try { UpdateBounds(); }
+                try
+                {
+                    if (_pendingPresentationRequest != 0)
+                        ApplyImmediateBounds(_pendingPresentationRequest, _presentationPublicationVersion);
+                    else UpdateBounds();
+                }
                 catch (Exception ex) { PublishBoundsFailure(ex); }
             }
-        })) _layoutQueued = false;
+        }))
+        {
+            if (transition) _presentationBoundsQueued = false;
+            else _layoutQueued = false;
+        }
     }
 
     private RectInt32? _lastBounds;
@@ -309,7 +346,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
 
     private void UpdateBounds()
     {
-        if (IsIslandUnavailable) return;
+        if (IsIslandUnavailable || IsPresenterChanging) return;
         if (_boundsUpdating) { _boundsFollowup = true; return; }
         _boundsUpdating = true;
         var stage = BoundsFailureStage.Capture;
@@ -342,6 +379,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
             bool CanPresent()
             {
                 if (!Current()) return false;
+                if (IsPresenterChanging) return false; // Retain the current frame/rectangle until the one final commit.
                 var suspended = _owner.IsEmbeddedPlayerRenderingSuspended;
                 var hidden = suspended || !_slot.IsLoaded;
                 if (!Current()) return false;
@@ -368,9 +406,21 @@ public sealed partial class MainPlayerHost : IPlayerHost
                 return;
             }
 
-            // Match LiveIslandSurface: resize/reorder the island while its STATIC parent is
-            // hidden, then position/show that parent. Island geometry is parent-local pixels.
-            PInvoke.ShowWindow(new(renderHwnd), SHOW_WINDOW_CMD.SW_HIDE);
+            var sizeChanged = _lastBounds is not { } previous || previous.Width != bounds.Width || previous.Height != bounds.Height;
+            bool PositionRenderWindow()
+            {
+                stage = BoundsFailureStage.Position;
+                bool positioned = PInvoke.SetWindowPos(new(renderHwnd), new(0), bounds.X, bounds.Y, bounds.Width, bounds.Height,
+                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                var positionError = positioned ? 0 : Marshal.GetLastWin32Error();
+                if (!Current()) return false;
+                if (!positioned) throw new Win32Exception(positionError, "Positioning embedded mpv render window failed.");
+                return CanPresent();
+            }
+            // Keep a visible video's last frame. Position its parent FIRST so the old fullscreen HWND can never
+            // cover the restored pane while the island/swapchain resize completes. Hidden/initial hosts are prepared before showing.
+            var wasVisible = NativeSnapshot.IsWindowVisible(renderHwnd);
+            if (wasVisible && !PositionRenderWindow()) return;
             if (!CanPresent()) return;
             if (_lastClip?.Equals(clip) != true)
             {
@@ -386,24 +436,18 @@ public sealed partial class MainPlayerHost : IPlayerHost
             }
             stage = BoundsFailureStage.ResizeIsland;
             var islandBounds = new RectInt32(0, 0, bounds.Width, bounds.Height);
-            bridge.MoveAndResize(islandBounds);
+            if (sizeChanged) bridge.MoveAndResize(islandBounds);
             if (!CanPresent()) return;
             stage = BoundsFailureStage.ReorderIsland;
             bridge.MoveInZOrderAtTop();
             if (!CanPresent()) return;
-            stage = BoundsFailureStage.Position;
-            bool positioned = PInvoke.SetWindowPos(new(renderHwnd), new(0), bounds.X, bounds.Y, bounds.Width, bounds.Height,
-                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
-            // Preserve last-error before any further native/property call can overwrite it.
-            var positionError = positioned ? 0 : Marshal.GetLastWin32Error();
-            if (!Current()) return;
-            if (!positioned) throw new Win32Exception(positionError, "Positioning embedded mpv render window failed.");
+            if (!wasVisible && !PositionRenderWindow()) return;
             if (!CanPresent()) return;
             if (!NativeSnapshot.IsWindowVisible(renderHwnd) || !NativeSnapshot.IsWindowVisible(_islandHwnd))
                 throw new InvalidOperationException("Embedded native windows did not become visible.");
             stage = BoundsFailureStage.PublishSize;
             _lastBounds = bounds;
-            SizeChanged?.Invoke(this, new Size(bounds.Width, bounds.Height));
+            if (sizeChanged) SizeChanged?.Invoke(this, new Size(bounds.Width, bounds.Height));
             if (!CanPresent()) return;
             stage = BoundsFailureStage.Chrome;
             RequestChromeRegionUpdate();
@@ -507,8 +551,14 @@ public sealed partial class MainPlayerHost : IPlayerHost
         if (!_owner.IsCurrentEmbeddedHost(this)) return;
         var requestVersion = ++_presentationRequestVersion;
         ++_presentationDepth;
+        _pendingPresentationRequest = requestVersion;
+        var applied = false;
         try
         {
+            // Keep the last rendered frame visible; the black top-level layer covers the shell underneath it.
+            CancelCompactHeaderDrag();
+            if (!IsCurrentPresentationRequest(requestVersion)) return;
+            StartPresentationTimer();
             RequestChromeRegionUpdate();
             _owner.UpdatePlayerBoundsSuppression(this, true);
             var transient = mode is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay;
@@ -520,6 +570,13 @@ public sealed partial class MainPlayerHost : IPlayerHost
                 ReferenceEquals(_owner.AppWindow.Presenter, _compactPresenter)) CaptureCompactState();
             if (mode == PlayerPresentationMode.FullScreen && _presentation != PlayerPresentationMode.FullScreen)
                 _fullScreenReturn = PlayerPresentationModes.Normalize(_presentation);
+            if (transient)
+            {
+                // Promote the existing layer before changing the presenter, without changing the shell.
+                _presentation = mode;
+                PublishPresentation();
+                if (!IsCurrentPresentationRequest(requestVersion) || _publishedPresentation != mode) return;
+            }
             if (mode == PlayerPresentationMode.CompactOverlay)
             {
                 ApplyCompactPresenter(requestVersion);
@@ -533,29 +590,68 @@ public sealed partial class MainPlayerHost : IPlayerHost
                 RestorePresenter(requestVersion);
             }
             if (!IsCurrentPresentationRequest(requestVersion)) return;
-            if (!transient) _layout = mode;
-            _presentation = mode;
-            PublishPresentation();
+            if (!transient)
+            {
+                // Publish the target; RootLayout retains a fullscreen layer until the final bounds commit below.
+                _layout = mode;
+                _presentation = mode;
+                PublishPresentation();
+            }
             if (!IsCurrentPresentationRequest(requestVersion) || _publishedPresentation != mode) return;
-            // Retain the snapshot through native restoration AND fallible root/subscriber publication.
-            ApplyImmediateBounds(requestVersion, _presentationPublicationVersion);
-            if (!IsCurrentPresentationRequest(requestVersion)) return;
-            if (!transient) _normalRestore = null;
-            QueueBounds();
+            if (mode == PlayerPresentationMode.FullScreen)
+            {
+                var area = DisplayArea.GetFromWindowId(_owner.AppWindow.Id, DisplayAreaFallback.Nearest) ?? DisplayArea.Primary;
+                _presentationClientSize = new SizeInt32(area.OuterBounds.Width, area.OuterBounds.Height);
+            }
+            else if (PInvoke.GetClientRect(new(OwnerHwnd), out var client))
+                _presentationClientSize = new SizeInt32(client.Width, client.Height);
+            // Retain the snapshot until the final XAML/native layout has also succeeded.
+            applied = true;
         }
         finally
         {
             --_presentationDepth;
             RequestChromeRegionUpdate();
-            // Release on a subsequent dispatcher turn, after restoration size/position notifications.
             if (requestVersion == _presentationRequestVersion)
-                _queue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            {
+                if (!applied)
                 {
-                    if (requestVersion == _presentationRequestVersion)
-                        _owner.UpdatePlayerBoundsSuppression(this, _normalRestore is not null || IsPresenterChanging ||
-                            _presentation is PlayerPresentationMode.CompactOverlay or PlayerPresentationMode.FullScreen);
-                });
+                    StopPresentationTransition();
+                    _owner.UpdatePlayerBoundsSuppression(this, _normalRestore is not null || IsPresenterChanging ||
+                        Presentation is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay);
+                }
+                // A normal-priority commit follows WM_SIZE; intermediate layouts never resize mpv.
+                QueueBounds();
+            }
         }
+    }
+
+    private void StartPresentationTimer()
+    {
+        if (_presentationTimer is null)
+        {
+            _presentationTimer = _queue.CreateTimer();
+            _presentationTimer.Interval = TimeSpan.FromMilliseconds(300);
+            _presentationTimer.IsRepeating = false;
+            _presentationTimer.Tick += OnPresentationTimerTick;
+        }
+        _presentationTimer.Stop();
+        _presentationTimer.Start();
+    }
+
+    private void StopPresentationTransition()
+    {
+        _pendingPresentationRequest = 0;
+        _presentationClientSize = null;
+        _presentationTimer?.Stop();
+    }
+
+    private void OnPresentationTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        if (_pendingPresentationRequest == 0) return;
+        try { ApplyImmediateBounds(_pendingPresentationRequest, _presentationPublicationVersion, force: true); }
+        catch (Exception ex) { PublishBoundsFailure(ex); }
     }
 
     private bool IsCurrentPresentationRequest(long version)
@@ -618,19 +714,51 @@ public sealed partial class MainPlayerHost : IPlayerHost
         if (IsCurrentPresentationRequest(version)) CaptureCompactState();
     }
 
-    private void ApplyImmediateBounds(long requestVersion, long publicationVersion)
+    private void ApplyImmediateBounds(long requestVersion, long publicationVersion, bool force = false)
     {
-        bool Current() => _queue.HasThreadAccess && _ready && !IsIslandUnavailable &&
+        bool Current() => _queue.HasThreadAccess && !IsIslandUnavailable &&
             _owner.IsCurrentEmbeddedHost(this) && requestVersion == _presentationRequestVersion &&
             publicationVersion == _presentationPublicationVersion && _publishedPresentation == Presentation;
-        if (_immediateBoundsApplying || !Current()) return;
+        if (_immediateBoundsApplying || _presentationDepth != 0 || _boundsUpdating ||
+            _pendingPresentationRequest != requestVersion || !Current()) return;
         _immediateBoundsApplying = true;
         try
         {
+            // The timeout may force XAML layout, never an intermediate native client size.
+            if (_presentationClientSize is { } expected && (!PInvoke.GetClientRect(new(OwnerHwnd), out var client)
+                || client.Width != expected.Width || client.Height != expected.Height)) return;
+            if (!Current() || (!force && !IsWindowLayoutCurrent())) return;
+            StopPresentationTransition();
+            // This second, idempotent publication releases RootLayout's exit hold at the final client size.
+            _owner.ApplyPlayerPresentation(Presentation);
             _slot.UpdateLayout();
-            if (Current()) UpdateBounds();
+            if (!Current()) return;
+            UpdateBounds();
+            if (!Current()) return;
+            if (Presentation is not (PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay))
+                _normalRestore = null;
+            _owner.UpdatePlayerBoundsSuppression(this, _normalRestore is not null || IsPresenterChanging ||
+                Presentation is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay);
         }
-        finally { _immediateBoundsApplying = false; }
+        finally
+        {
+            _immediateBoundsApplying = false;
+            if (_pendingPresentationRequest != 0 && _pendingPresentationRequest != requestVersion) QueueBounds();
+        }
+    }
+
+    private bool IsWindowLayoutCurrent()
+    {
+        if (_slot.XamlRoot is not { } root || !PInvoke.GetClientRect(new(OwnerHwnd), out var client)) return false;
+        var scale = root.RasterizationScale;
+        if (!double.IsFinite(scale) || scale <= 0) return false;
+        if (_presentationClientSize is { } expected && (client.Width != expected.Width || client.Height != expected.Height)) return false;
+        if (Presentation == PlayerPresentationMode.FullScreen)
+        {
+            var area = DisplayArea.GetFromWindowId(_owner.AppWindow.Id, DisplayAreaFallback.Nearest) ?? DisplayArea.Primary;
+            if (client.Width != area.OuterBounds.Width || client.Height != area.OuterBounds.Height) return false;
+        }
+        return Pixel(root.Size.Width * scale) == client.Width && Pixel(root.Size.Height * scale) == client.Height;
     }
 
     private void RestorePresenter(long? requestVersion = null)
@@ -655,15 +783,76 @@ public sealed partial class MainPlayerHost : IPlayerHost
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Restoring main window placement failed.");
     }
 
+    /// <summary>Return the shell before mpv or the XAML/native host is torn down; retain all native ownership.</summary>
+    internal Task PrepareForCloseAsync()
+    {
+        if (IsDisposed) return Task.CompletedTask;
+        if (!_queue.HasThreadAccess)
+            throw new InvalidOperationException("Embedded surface requires its owning UI dispatcher.");
+        if (_closeFrameTask is not null) return _closeFrameTask;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _closeFrameTask = completion.Task;
+        try
+        {
+            CancelCompactHeaderDrag();
+            _closing = true;
+            StopPresentationTransition();
+            _firstPresentation?.TrySetException(new ObjectDisposedException(nameof(MainPlayerHost)));
+            HideNative();
+            _owner.UpdatePlayerBoundsSuppression(this, true);
+            RestorePresenter();
+            if (_owner.Get<AppViewModel>().EmbeddedPlayer is { } player && ReferenceEquals(player.Window, this))
+                _owner.HideEmbeddedPlayer(player);
+            _presentation = PlayerPresentationMode.Normal;
+            _normalRestore = null;
+            // Let the restored shell render before synchronous mpv/WinRT/Win32 destruction.
+            if (!_queue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            {
+                try
+                {
+                    _owner.UpdatePlayerBoundsSuppression(this, false);
+                    completion.TrySetResult();
+                }
+                catch (Exception ex) { completion.TrySetException(ex); }
+            })) throw new InvalidOperationException("Owning UI dispatcher rejected embedded host teardown.");
+        }
+        catch (Exception ex) { completion.TrySetException(ex); }
+        return completion.Task;
+    }
+
     public ValueTask DisposeAsync()
     {
         if (IsDisposed) return ValueTask.CompletedTask;
         if (!_queue.HasThreadAccess)
             throw new InvalidOperationException("Embedded surface requires its owning UI dispatcher.");
-        CancelCompactHeaderDrag();
-        _closing = true;
-        _firstPresentation?.TrySetException(new ObjectDisposedException(nameof(MainPlayerHost)));
-        HideNative();
+        if (_disposeTask is not null) return new(_disposeTask);
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _disposeTask = completion.Task;
+        _ = DisposeCoreAsync(completion);
+        return new(completion.Task);
+    }
+
+    private async Task DisposeCoreAsync(TaskCompletionSource completion)
+    {
+        try
+        {
+            await PrepareForCloseAsync();
+            DisposeNativeHost();
+            IsDisposed = true;
+            completion.TrySetResult();
+        }
+        catch (Exception ex) { completion.TrySetException(ex); }
+    }
+
+    private void DisposeNativeHost()
+    {
+        if (!_queue.HasThreadAccess)
+            throw new InvalidOperationException("Embedded surface requires its owning UI dispatcher.");
+        if (_presentationTimer is { } timer)
+        {
+            timer.Tick -= OnPresentationTimerTick;
+            _presentationTimer = null;
+        }
         _slot.LayoutUpdated -= OnLayoutUpdated;
         _slot.Unloaded -= OnSlotUnloaded;
         if (_slot.XamlRoot is { } root) root.Changed -= OnRootChanged;
@@ -685,14 +874,6 @@ public sealed partial class MainPlayerHost : IPlayerHost
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Destroying embedded mpv render window failed.");
             _renderHwnd = IntPtr.Zero;
         }
-        _owner.UpdatePlayerBoundsSuppression(this, true);
-        RestorePresenter();
-        _owner.ApplyPlayerPresentation(PlayerPresentationMode.Normal);
-        _presentation = PlayerPresentationMode.Normal;
-        _normalRestore = null;
-        _queue.TryEnqueue(DispatcherQueuePriority.Low, () => _owner.UpdatePlayerBoundsSuppression(this, false));
-        IsDisposed = true;
-        return ValueTask.CompletedTask;
     }
 
     public AppWindow GetWindow() => _owner.AppWindow;

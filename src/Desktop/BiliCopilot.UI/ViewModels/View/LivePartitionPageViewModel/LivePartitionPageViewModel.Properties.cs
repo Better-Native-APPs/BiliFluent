@@ -17,6 +17,7 @@ public sealed partial class LivePartitionPageViewModel
     private readonly ILiveDiscoveryService _service;
     private readonly ILogger<LivePartitionPageViewModel> _logger;
     private readonly Dictionary<PartitionViewModel, LivePartitionDetailViewModel> _partitionCache = new();
+    private readonly LinkedList<PartitionViewModel> _recentPartitions = new();
     private readonly Dictionary<string, string> _partitionSelectedCache = new();
 
     private int _recommendOffset;

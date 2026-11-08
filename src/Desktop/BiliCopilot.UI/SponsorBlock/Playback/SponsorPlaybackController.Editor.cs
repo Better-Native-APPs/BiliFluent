@@ -70,7 +70,7 @@ internal sealed partial class SponsorPlaybackController
         VerifyAccess();
         if (!CanUseBinding || !_sponsorOpen || _owner is null)
             throw new EditorAdmissionException(SponsorEditorOutcome.Unavailable, "Editor native binding is unavailable.");
-        if (expected != CurrentStamp)
+        if (!expected.HasSameContext(CurrentStamp))
             throw new EditorAdmissionException(SponsorEditorOutcome.Stale, "Editor stamp is no longer current.");
         if (isolated && !EditorIsolated)
             throw new EditorAdmissionException(SponsorEditorOutcome.Unavailable, "Current editor isolation is required.");
@@ -191,13 +191,10 @@ internal sealed partial class SponsorPlaybackController
                 if (_operation is { Kind: NativeOperationKind.StepFrame } operation && operation.Id > beforeCommand)
                     command = operation; // Capture MUTATION before the subsequent read replaces Operation.
             }
-            if (reservation.Ticket.NativeGeneration == _generation)
-            {
-                // The actual frame task succeeded: retire the old visit exactly once even if
-                // subsequent readback fails or a newer transport intent makes the reply stale.
-                AdvanceVisit();
-                _visitRebasePending = true; // Not a displayed-frame/position receipt.
-            }
+            // The actual frame task succeeded: retire the old visit exactly once even if
+            // subsequent readback fails or a newer transport intent makes the reply stale.
+            AdvanceVisit();
+            _visitRebasePending = true; // Not a displayed-frame/position receipt.
             await ReadAsync(NativeAdmissionPurpose.Cleanup);
             CheckEditorFrame(reservation);
         }

@@ -1,8 +1,10 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Classic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
+using Richasy.MpvKernel.Core.Enums;
 using Richasy.WinUIKernel.Share.ViewModels;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -25,6 +27,20 @@ public sealed partial class AppViewModel : ViewModelBase
     private bool _isUpdateShown;
 
     public List<PlayerViewModel> Players { get; } = [];
+
+    internal event EventHandler? PlaybackActivityChanged;
+
+    // Buffering/seeking/opening and unfinished close remain unthrottled to protect video/audio.
+    // Web/External do not expose transport state; retain normal QoS until their owner releases.
+    internal bool HasActivePlayback
+        => Players.Any(player => player.Player?.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Buffering or MpvPlayerState.Seeking)
+            || _liveApplication?.HasActivePlayback == true
+            || ClassicPlayers.Any(window => window.Session is { } session
+                && (session.State is ClassicPlaybackState.Playing or ClassicPlaybackState.Loading or ClassicPlaybackState.Closing
+                    || (session.Backend is ClassicBackendKind.Web or ClassicBackendKind.External && !session.BackendReleaseConfirmed)));
+
+    internal void NotifyPlaybackActivityChanged()
+        => PlaybackActivityChanged?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// 已创建的窗口列表.

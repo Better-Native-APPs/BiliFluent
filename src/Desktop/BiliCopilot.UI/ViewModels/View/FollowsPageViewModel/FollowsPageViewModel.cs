@@ -56,33 +56,45 @@ public sealed partial class FollowsPageViewModel : LayoutPageViewModelBase
             return;
         }
 
-        if (Users.Count > 0)
-        {
-            _userCache[SelectedGroup] = Users.ToList();
-        }
-
         SelectedGroup = group;
         SettingsToolkit.WriteLocalSetting(SettingNames.FollowsPageLastSelectedGroupId, group.Id);
 
-        this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, async () =>
+        if (!_userCache.TryGetValue(group, out var list))
         {
-            Users.Clear();
-            if (_userCache.TryGetValue(group, out var list))
+            list = [];
+            _userCache.Add(group, list);
+        }
+
+        _recentGroups.Remove(group);
+        _recentGroups.AddFirst(group);
+        if (_recentGroups.Count > 4)
+        {
+            var evictedGroup = _recentGroups.Last!.Value;
+            _recentGroups.RemoveLast();
+            _userCache.Remove(evictedGroup);
+            _offsetCache.Remove(evictedGroup);
+        }
+
+        Users.Clear();
+        foreach (var user in list)
+        {
+            Users.Add(user);
+        }
+
+        IsEmpty = Users.Count == 0;
+        UserListUpdated?.Invoke(this, EventArgs.Empty);
+        if (list.Count == 0)
+        {
+            this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, async () =>
             {
-                foreach (var user in list)
+                if (group == SelectedGroup)
                 {
-                    Users.Add(user);
+                    await LoadUsersAsync();
                 }
 
-                UserListUpdated?.Invoke(this, EventArgs.Empty);
-            }
-            else
-            {
-                await LoadUsersAsync();
-            }
-
-            IsEmpty = Users.Count == 0;
-        });
+                IsEmpty = Users.Count == 0;
+            });
+        }
     }
 
     [RelayCommand]
@@ -98,22 +110,34 @@ public sealed partial class FollowsPageViewModel : LayoutPageViewModelBase
             return;
         }
 
+        var group = SelectedGroup;
+        var list = _userCache[group];
         IsUserLoading = true;
         try
         {
             var pn = 0;
-            if (_offsetCache.TryGetValue(SelectedGroup, out var value))
+            if (_offsetCache.TryGetValue(group, out var value))
             {
                 pn = value;
             }
 
-            var (users, nextOffset) = await _service.GetMyFollowUserGroupDetailAsync(SelectedGroup.Id, pn);
-            _offsetCache[SelectedGroup] = nextOffset;
+            var (users, nextOffset) = await _service.GetMyFollowUserGroupDetailAsync(group.Id, pn);
+            if (!_userCache.TryGetValue(group, out var cachedUsers) || !ReferenceEquals(list, cachedUsers))
+            {
+                return;
+            }
+
+            _offsetCache[group] = nextOffset;
             if (users != null)
             {
                 foreach (var item in users)
                 {
-                    Users.Add(new UserItemViewModel(item));
+                    var user = new UserItemViewModel(item);
+                    list.Add(user);
+                    if (group == SelectedGroup)
+                    {
+                        Users.Add(user);
+                    }
                 }
             }
         }
@@ -124,6 +148,14 @@ public sealed partial class FollowsPageViewModel : LayoutPageViewModelBase
         finally
         {
             IsUserLoading = false;
+            IsEmpty = Users.Count == 0;
+            if (SelectedGroup is not null
+                && _userCache.TryGetValue(SelectedGroup, out var selectedUsers)
+                && !ReferenceEquals(list, selectedUsers)
+                && selectedUsers.Count == 0)
+            {
+                await LoadUsersAsync();
+            }
         }
     }
 
@@ -136,6 +168,7 @@ public sealed partial class FollowsPageViewModel : LayoutPageViewModelBase
             Groups.Clear();
             _userCache.Clear();
             _offsetCache.Clear();
+            _recentGroups.Clear();
             SelectedGroup = default;
             await InitializeAsync();
         });

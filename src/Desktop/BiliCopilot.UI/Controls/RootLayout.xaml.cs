@@ -13,6 +13,7 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 
@@ -39,12 +40,14 @@ public sealed partial class RootLayout : RootLayoutBase
     private readonly string _primaryTitle;
     private readonly DispatcherQueue _dispatcher;
     private readonly RootChromeRegionAuthority _chromeRegions;
+    private double _lastChromeScale = 1d;
     private NonClientRegionSink? _chromeSink;
     private XamlRoot? _chromeXamlRoot;
     private bool _chromeCompact;
     private double _chromeCompactThreshold;
     private bool _chromeWindowActive = true;
     private PlayerViewModel? _embeddedViewModel;
+    private Rect? _playerLayerBounds;
     private PropertyChangedEventHandler? _navigationChanged;
     private PropertyChangedEventHandler? _accountChanged;
     private EventHandler? _accountBoundaryChanged;
@@ -78,6 +81,7 @@ public sealed partial class RootLayout : RootLayoutBase
             ResolveChromeSink);
         ActualThemeChanged += OnChromeThemeChanged;
         LayoutGrid.SizeChanged += OnLayoutGridSizeChanged;
+        MainGrid.LayoutUpdated += OnPlayerLayerLayoutUpdated;
         Loaded += OnRootLoaded;
         Unloaded += OnRootUnloaded;
     }
@@ -151,8 +155,20 @@ public sealed partial class RootLayout : RootLayoutBase
             return;
         }
 
+        // Keep the full-window layer in place until the restored native client rectangle is final.
+        if (mode != PlayerPresentationMode.FullScreen && TitleBarPresentation == PlayerPresentationMode.FullScreen
+            && _embeddedViewModel.Window is MainPlayerHost { IsPresenterChanging: true }) return;
         EmbeddedPlayerHost.SetPresentationMode(mode);
         ApplyPresentation(mode);
+    }
+
+    /// <summary>Restore navigation immediately on close without releasing the still-owned playback view.</summary>
+    internal void HideEmbeddedPlayer(PlayerViewModel expectedViewModel)
+    {
+        if (!ReferenceEquals(_embeddedViewModel, expectedViewModel)) return;
+        EmbeddedPlayerHost.Visibility = Visibility.Collapsed;
+        NavigationContentHost.Visibility = Visibility.Visible;
+        ApplyPresentation(PlayerPresentationMode.Normal);
     }
 
     /// <summary>
@@ -429,8 +445,11 @@ public sealed partial class RootLayout : RootLayoutBase
         _account.AccountChanged += _accountBoundaryChanged;
         foreach (var item in _loadedNavigationItems.ToArray())
             if (item.IsLoaded) TrackNavigationItem(item);
-        _isNarrow = LayoutGrid.ActualWidth > 0 && LayoutGrid.ActualWidth < _narrowMinWidth;
         AttachChromeXamlRoot();
+        UpdatePlayerLayerLayout();
+        var shellWidth = LayoutGrid.Width > 0 ? LayoutGrid.Width : LayoutGrid.ActualWidth;
+        _isNarrow = shellWidth > 0 && shellWidth < _narrowMinWidth;
+        VisualStateManager.GoToState(this, _isNarrow ? nameof(NarrowState) : nameof(WideState), false);
         SetChromeWindowActivation(_chromeWindowActive);
         ApplyTitleBarChrome();
         UpdateChromeRegionOwnership();
@@ -465,7 +484,7 @@ public sealed partial class RootLayout : RootLayoutBase
         });
 
     /// <summary>
-    /// 全屏与小窗：隐藏主标题栏整行，播放层铺满客户区并使用自身的纯视觉标题区.
+    /// 全屏与小窗：播放层覆盖整个客户区，保留其下外壳的布局与纯视觉标题区.
     /// 旧的全窗口（FullWindow）已不再面向用户，按常规呈现处理；枚举值保留给旧数据归一化.
     /// </summary>
     private static bool IsPlayerChromeMode(PlayerPresentationMode mode)
@@ -488,44 +507,94 @@ public sealed partial class RootLayout : RootLayoutBase
     }
 
     /// <summary>
-    /// 应用呈现：先落外壳布局，再落唯一标题栏外观，最后记录并发布当前模式.
+    /// 应用呈现：只改变播放层的覆盖范围与原生标题栏区域所有权，外壳布局保持不变.
     /// </summary>
     private void ApplyPresentation(PlayerPresentationMode mode)
     {
         var titleBarMode = NormalizeTitleBarMode(mode);
         var modeChanged = TitleBarPresentation != titleBarMode;
         TitleBarPresentation = titleBarMode;
-        if (modeChanged) _chromeRegions.Deactivate();
-        ApplyShellLayout(titleBarMode);
-        ApplyTitleBarChrome();
+        UpdateChromeRegionOwnership(modeChanged);
+        UpdatePlayerLayerLayout(applyMode: true);
+        if (titleBarMode == PlayerPresentationMode.Normal) ApplyTitleBarChrome();
         ActiveTitleBarChanged?.Invoke(this, titleBarMode);
     }
 
-    private void ApplyShellLayout(PlayerPresentationMode mode)
+    private void OnPlayerLayerLayoutUpdated(object? sender, object args)
     {
-        // 全屏/小窗：标题行高度归零且折叠，视频槽填满整个客户区（不留 32px 标题条）.
-        var playerChrome = IsPlayerChromeMode(mode);
-        // Ownership changes before the row collapses/expands, so layout callbacks raised by the change already
-        // see the new generation (an inactive chrome never writes; reactivation re-measures).
-        UpdateChromeRegionOwnership();
-        MainTitleBar.Visibility = playerChrome ? Visibility.Collapsed : Visibility.Visible;
-        LayoutGrid.RowDefinitions[0].Height = playerChrome ? new GridLength(0) : GridLength.Auto;
-        NavView.IsPaneVisible = !playerChrome;
+        if (EmbeddedPresentationLayer.Visibility == Visibility.Visible) UpdatePlayerLayerLayout();
+    }
+
+    private void UpdatePlayerLayerLayout(bool applyMode = false)
+        => TryChrome(nameof(UpdatePlayerLayerLayout), () => ApplyPlayerLayerGeometry(applyMode));
+
+    /// <summary>Apply only the visual layer geometry, retaining valid measurements across presenter transitions.</summary>
+    /// <param name="applyMode">Whether this is the presentation's final layout commit.</param>
+    private void ApplyPlayerLayerGeometry(bool applyMode)
+    {
+        var visibility = EmbeddedPlayerHost.Visibility == Visibility.Visible || EmbeddedLiveHost.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+        if (EmbeddedPresentationLayer.Visibility != visibility) EmbeddedPresentationLayer.Visibility = visibility;
+        // Normal video/Live panels inherit the window backdrop; only an active full-window layer paints black.
+        if (visibility == Visibility.Visible && IsPlayerChromeMode(TitleBarPresentation))
+            EmbeddedPresentationLayer.Background ??= new SolidColorBrush(Colors.Black);
+        else if (EmbeddedPresentationLayer.Background is not null)
+            EmbeddedPresentationLayer.Background = null;
+        if (XamlRoot is not { } root) return;
+
+        var size = root.Size;
+        var width = GetValidChromeLength(size.Width, WindowLayout.Width, "XamlRoot.Size.Width");
+        var height = GetValidChromeLength(size.Height, WindowLayout.Height, "XamlRoot.Size.Height");
+        if (width <= 0 || height <= 0) return;
+        if (WindowLayout.Width != width) WindowLayout.Width = width;
+        if (WindowLayout.Height != height) WindowLayout.Height = height;
+        var kind = ResolveChromeWindow()?.Presenter.Kind;
+        // Keep the shell's previous measure/arrange size while either player covers it. Native FullScreen/compact
+        // can be published before Live's logical mode; that presenter guard also prevents an intermediate page resize.
+        if (TitleBarPresentation == PlayerPresentationMode.Normal && kind == AppWindowPresenterKind.Overlapped)
+        {
+            if (LayoutGrid.Width != width) LayoutGrid.Width = width;
+            if (LayoutGrid.Height != height) LayoutGrid.Height = height;
+        }
+        if (visibility != Visibility.Visible) return;
+        if (!applyMode && TitleBarPresentation == PlayerPresentationMode.FullScreen && kind != AppWindowPresenterKind.FullScreen)
+            return; // The old full-window rectangle stays covered until the presentation's final commit.
+
+        Rect bounds;
+        if (IsPlayerChromeMode(TitleBarPresentation)) bounds = new Rect(0, 0, width, height);
+        else
+        {
+            var playerWidth = GetValidChromeLength(MainGrid.ActualWidth, _playerLayerBounds?.Width ?? 0, "MainGrid.ActualWidth");
+            var playerHeight = GetValidChromeLength(MainGrid.ActualHeight, _playerLayerBounds?.Height ?? 0, "MainGrid.ActualHeight");
+            if (playerWidth <= 0 || playerHeight <= 0) return;
+            var origin = MainGrid.TransformToVisual(WindowLayout).TransformPoint(new Windows.Foundation.Point(0, 0));
+            var left = GetValidChromeLength(origin.X, _playerLayerBounds?.X ?? 0, "MainGrid.Origin.X");
+            var top = GetValidChromeLength(origin.Y, _playerLayerBounds?.Y ?? 0, "MainGrid.Origin.Y");
+            bounds = new Rect(left, top, playerWidth, playerHeight);
+        }
+        if (_playerLayerBounds?.Equals(bounds) == true) return;
+        Canvas.SetLeft(EmbeddedPresentationLayer, bounds.X);
+        Canvas.SetTop(EmbeddedPresentationLayer, bounds.Y);
+        EmbeddedPresentationLayer.Width = bounds.Width;
+        EmbeddedPresentationLayer.Height = bounds.Height;
+        // Cache only an applied rectangle so transient assignment failures can be retried.
+        _playerLayerBounds = bounds;
     }
 
     /// <summary>
     /// 唯一持久主标题栏只保留 Store 主外观（图标/标题/顶部导航/搜索/账户）；
-    /// 全屏/小窗时该行整体折叠，并由 <see cref="RootChromeRegionAuthority"/> 收回其原生区域.
+    /// 全屏/小窗时该行仍保留在播放层下方，由 <see cref="RootChromeRegionAuthority"/> 收回其原生区域.
     /// </summary>
     private void ApplyTitleBarChrome()
-    {
-        HeaderHost.Visibility = ViewModel.IsTopNavBarShown ? Visibility.Visible : Visibility.Collapsed;
-        SearchBox.Visibility = Visibility.Visible;
-        FooterHost.Visibility = Visibility.Visible;
-        UpdateChromeBackButtonVisibility();
-        ApplyChromeTitle();
-        _chromeRegions.Request();
-    }
+        => TryChrome(nameof(ApplyTitleBarChrome), () =>
+        {
+            HeaderHost.Visibility = ViewModel.IsTopNavBarShown ? Visibility.Visible : Visibility.Collapsed;
+            SearchBox.Visibility = Visibility.Visible;
+            FooterHost.Visibility = Visibility.Visible;
+            UpdateChromeBackButtonVisibility();
+            ApplyChromeTitle();
+            _chromeRegions.Request();
+        });
 
     private void UpdateChromeBackButtonVisibility()
     {
@@ -538,28 +607,32 @@ public sealed partial class RootLayout : RootLayoutBase
     /// <summary>
     /// Root chrome owns only the main window's Normal regions; the compact island owns its own input window.
     /// </summary>
-    private void UpdateChromeRegionOwnership()
-    {
-        if (_stateLoaded && IsLoaded && TitleBarPresentation == PlayerPresentationMode.Normal)
+    /// <param name="modeChanged">Whether to retire the previous presentation's chrome regions first.</param>
+    private void UpdateChromeRegionOwnership(bool modeChanged = false)
+        => TryChrome(nameof(UpdateChromeRegionOwnership), () =>
         {
-            _chromeRegions.Activate();
-            UpdateChromeInsets();
-            ApplyCaptionButtonColors();
-        }
-        else if (_stateLoaded)
-        {
-            _chromeRegions.Deactivate();
-        }
-    }
+            if (modeChanged) _chromeRegions.Deactivate();
+            if (_stateLoaded && IsLoaded && TitleBarPresentation == PlayerPresentationMode.Normal)
+            {
+                _chromeRegions.Activate();
+                UpdateChromeInsets();
+                ApplyCaptionButtonColors();
+            }
+            else if (_stateLoaded)
+            {
+                _chromeRegions.Deactivate();
+            }
+        });
 
     private void ApplyChromeTitle()
-    {
-        // Narrow windows drop the title text (as before); a squeezed search box also borrows its space.
-        ChromeTitle.Visibility = !_isNarrow && !_chromeCompact && !string.IsNullOrEmpty(_primaryTitle)
-            ? Visibility.Visible : Visibility.Collapsed;
-        ChromeSearchArea.HorizontalAlignment = _chromeCompact ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
-        ChromeSearchArea.Margin = _chromeCompact ? new Thickness(16, 0, 16, 0) : new Thickness(0);
-    }
+        => TryChrome(nameof(ApplyChromeTitle), () =>
+        {
+            // Narrow windows drop the title text (as before); a squeezed search box also borrows its space.
+            ChromeTitle.Visibility = !_isNarrow && !_chromeCompact && !string.IsNullOrEmpty(_primaryTitle)
+                ? Visibility.Visible : Visibility.Collapsed;
+            ChromeSearchArea.HorizontalAlignment = _chromeCompact ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+            ChromeSearchArea.Margin = _chromeCompact ? new Thickness(16, 0, 16, 0) : new Thickness(0);
+        });
 
     private void OnLayoutGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -571,6 +644,8 @@ public sealed partial class RootLayout : RootLayoutBase
         }
 
         _isNarrow = narrow;
+        // Use the frozen shell width, not fullscreen's temporary Window width, for its responsive chrome.
+        VisualStateManager.GoToState(this, narrow ? nameof(NarrowState) : nameof(WideState), false);
         ApplyChromeTitle();
         _chromeRegions.Request();
     }
@@ -619,6 +694,7 @@ public sealed partial class RootLayout : RootLayoutBase
     private void OnChromeXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
     {
         if (!ReferenceEquals(sender, _chromeXamlRoot)) return;
+        UpdatePlayerLayerLayout();
         // DPI moves change both the caption-button insets and every physical rect.
         UpdateChromeInsets();
         _chromeRegions.Request();
@@ -637,18 +713,22 @@ public sealed partial class RootLayout : RootLayoutBase
 
     /// <summary>Keep content clear of the system caption buttons (same inset rule as the replaced bar).</summary>
     private void UpdateChromeInsets()
-    {
-        if (!_chromeRegions.IsActive || XamlRoot is not { } root || !(root.RasterizationScale > 0)
-            || ResolveChromeWindow() is not { } window) return;
-        var scale = root.RasterizationScale;
-        var left = window.TitleBar.LeftInset / scale;
-        var right = window.TitleBar.RightInset / scale;
-        if (ChromeLeftInsetColumn.Width.Value != left) ChromeLeftInsetColumn.Width = new GridLength(left);
-        if (ChromeRightInsetColumn.Width.Value != right) ChromeRightInsetColumn.Width = new GridLength(right);
-    }
+        => TryChrome(nameof(UpdateChromeInsets), () =>
+        {
+            if (!_chromeRegions.IsActive || XamlRoot is not { } root || ResolveChromeWindow() is not { } window) return;
+            var scale = GetValidChromeScale(root.RasterizationScale);
+            var left = GetValidChromeLength(window.TitleBar.LeftInset, ChromeLeftInsetColumn.Width.Value, "TitleBar.LeftInset", scale);
+            var right = GetValidChromeLength(window.TitleBar.RightInset, ChromeRightInsetColumn.Width.Value, "TitleBar.RightInset", scale);
+            if (ChromeLeftInsetColumn.Width.Value != left) ChromeLeftInsetColumn.Width = new GridLength(left);
+            if (ChromeRightInsetColumn.Width.Value != right) ChromeRightInsetColumn.Width = new GridLength(right);
+        });
 
     /// <summary>Caption-button colors follow the theme while the root chrome owns the title row.</summary>
     private void ApplyCaptionButtonColors()
+        => TryChrome(nameof(ApplyCaptionButtonColors), UpdateCaptionButtonColors);
+
+    /// <summary>Apply only cosmetic native caption-button colors.</summary>
+    private void UpdateCaptionButtonColors()
     {
         if (!_chromeRegions.IsActive || ResolveChromeWindow() is not { } window) return;
         var bar = window.TitleBar;
@@ -686,8 +766,16 @@ public sealed partial class RootLayout : RootLayoutBase
     /// </summary>
     private RootChromeRegions? MeasureChromeRegions()
     {
+        RootChromeRegions? regions = null;
+        TryChrome(nameof(MeasureChromeRegions), () => regions = MeasureChromeGeometry());
+        return regions;
+    }
+
+    /// <summary>Measure native chrome regions using the same validated DPI scale as the inset columns.</summary>
+    private RootChromeRegions? MeasureChromeGeometry()
+    {
         if (!_stateLoaded || !IsLoaded || XamlRoot is not { } root) return null;
-        var scale = root.RasterizationScale;
+        var scale = GetValidChromeScale(root.RasterizationScale);
 
         if (MainTitleBar.Visibility != Visibility.Visible) return null;
         if (PhysicalBounds(MainTitleBar, scale) is not { } caption) return null;
@@ -705,6 +793,72 @@ public sealed partial class RootLayout : RootLayoutBase
         if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0 || element.ActualHeight <= 0) return null;
         var origin = element.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(0, 0));
         return RootChromeGeometry.ToPhysical(origin.X, origin.Y, element.ActualWidth, element.ActualHeight, scale);
+    }
+
+    /// <summary>Retain the last finite positive DPI scale while window metrics are transitioning.</summary>
+    /// <param name="scale">The raw XAML rasterization scale.</param>
+    /// <returns>The current valid scale, or the last valid scale (initially one).</returns>
+    private double GetValidChromeScale(double scale)
+    {
+        if (double.IsFinite(scale) && scale > 0)
+        {
+            _lastChromeScale = scale;
+        }
+        else
+        {
+            var logger = this.Get<ILogger<RootLayout>>();
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(
+                    "忽略无效的根布局缩放：RawScale={RawScale}, FallbackScale={FallbackScale}, Presentation={Presentation}",
+                    scale, _lastChromeScale, TitleBarPresentation);
+            }
+        }
+
+        return _lastChromeScale;
+    }
+
+    /// <summary>Validate a metric-derived length before assigning XAML geometry.</summary>
+    /// <param name="value">The raw window or element metric.</param>
+    /// <param name="previousValue">The last applied length, if valid.</param>
+    /// <param name="metric">The metric name used for the debug diagnostic.</param>
+    /// <param name="scale">A validated scale for converting physical insets to DIPs.</param>
+    /// <returns>A finite nonnegative length, falling back to the previous value or zero.</returns>
+    private double GetValidChromeLength(double value, double previousValue, string metric, double scale = 1d)
+    {
+        var length = value / scale;
+        if (double.IsFinite(length) && length >= 0) return length;
+
+        var fallback = double.IsFinite(previousValue) && previousValue >= 0 ? previousValue : 0;
+        var logger = this.Get<ILogger<RootLayout>>();
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.LogDebug(
+                "忽略无效的根布局尺寸 {Metric}：RawValue={RawValue}, Scale={Scale}, Length={Length}, Fallback={Fallback}, Presentation={Presentation}",
+                metric, value, scale, length, fallback, TitleBarPresentation);
+        }
+
+        return fallback;
+    }
+
+    /// <summary>Keep cosmetic chrome failures from interrupting player close or presentation changes.</summary>
+    /// <param name="operation">The cosmetic operation to run.</param>
+    /// <param name="action">The visual assignment or measurement.</param>
+    private void TryChrome(string operation, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception)
+        {
+            var logger = this.Get<ILogger<RootLayout>>();
+            if (logger.IsEnabled(LogLevel.Warning))
+            {
+                logger.LogWarning(exception,
+                    "根布局外观更新失败 {Operation}，继续后续流程。Presentation={Presentation}", operation, TitleBarPresentation);
+            }
+        }
     }
 
     /// <summary>Keep the shared unread-dot source for every non-message navigation item.</summary>

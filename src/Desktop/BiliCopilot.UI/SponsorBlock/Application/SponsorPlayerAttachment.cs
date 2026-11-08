@@ -76,20 +76,24 @@ internal sealed class SponsorPlayerAttachment
         Task.FromResult(!IsClosed && port.SponsorSnapshot?.Owner == input.Owner && port.UpdateSponsorInput(input)));
 
     internal Task<bool> RequestAsync(PlaybackRequest request) => dispatcher.RunAsync(() =>
-        Task.FromResult(!IsClosed && port.SponsorSnapshot?.Stamp == request.Stamp && port.RequestSponsorAction(request)));
+    {
+        if (IsClosed || ReadCurrentSnapshot()?.Stamp is not { } stamp || !request.Stamp.HasSameContext(stamp))
+            return Task.FromResult(false);
+        var admitted = port.RequestSponsorAction(request with { Stamp = stamp });
+        ReadCurrentSnapshot();
+        return Task.FromResult(admitted);
+    });
 
     internal Task<SponsorControllerResult?> ObserveAsync(PlaybackStamp expected) => dispatcher.RunAsync(async () =>
     {
-        if (IsClosed || port.SponsorSnapshot?.Stamp != expected) return null;
+        if (IsClosed || !expected.HasSameContext(ReadCurrentSnapshot()?.Stamp)) return null;
         var observed = await port.ObserveSponsorAsync();
         if (IsClosed || observed?.Stamp is not { } stamp || !SameVisit(expected, stamp)
-            || port.SponsorSnapshot?.Stamp != stamp) return null;
+            || !stamp.HasSameContext(ReadCurrentSnapshot()?.Stamp)) return null;
         return observed;
     });
 
-    internal static bool SameVisit(PlaybackStamp a, PlaybackStamp b) => a.Owner == b.Owner
-        && a.PolicyRevision == b.PolicyRevision && a.VisitRevision == b.VisitRevision
-        && a.MuteUserEpoch == b.MuteUserEpoch && a.RateUserEpoch == b.RateUserEpoch;
+    internal static bool SameVisit(PlaybackStamp a, PlaybackStamp b) => a.HasSameContext(b);
 
     internal Task<SponsorControllerResult?> ReadSnapshotAsync() => dispatcher.RunAsync(() =>
     {
@@ -97,19 +101,20 @@ internal sealed class SponsorPlayerAttachment
     });
 
     internal Task<SponsorEditorReply> FrameAsync(PlaybackStamp expected, FrameDirection direction) =>
-        EditorAsync(expected, editor => editor.RequestSponsorFrameAsync(expected, direction));
+        EditorAsync(expected, (editor, stamp) => editor.RequestSponsorFrameAsync(stamp, direction));
     internal Task<SponsorEditorReply> StartPreviewAsync(PlaybackStamp expected, PreviewInterval preview) =>
-        EditorAsync(expected, editor => editor.RequestSponsorPreviewAsync(expected, preview));
+        EditorAsync(expected, (editor, stamp) => editor.RequestSponsorPreviewAsync(stamp, preview));
     internal Task<SponsorEditorReply> ReleaseMuteAsync(PlaybackStamp expected, string leaseToken) =>
-        EditorAsync(expected, editor => editor.RequestSponsorMuteReleaseAsync(expected, leaseToken));
+        EditorAsync(expected, (editor, stamp) => editor.RequestSponsorMuteReleaseAsync(stamp, leaseToken));
 
     private Task<SponsorEditorReply> EditorAsync(PlaybackStamp expected,
-        Func<ISponsorEditorPlayerPort, Task<SponsorEditorReply>> command) => dispatcher.RunAsync(async () =>
+        Func<ISponsorEditorPlayerPort, PlaybackStamp, Task<SponsorEditorReply>> command) => dispatcher.RunAsync(async () =>
     {
         if (port is not ISponsorEditorPlayerPort editor) return new(SponsorEditorOutcome.Unavailable, null, Reason: "EditorPlayerPortUnavailable");
-        if (IsClosed || detached) return new(SponsorEditorOutcome.Unavailable, port.SponsorSnapshot, Reason: "EditorAdmissionClosed");
-        if (port.SponsorSnapshot?.Stamp != expected) return new(SponsorEditorOutcome.Stale, port.SponsorSnapshot, Reason: "EditorStampChanged");
-        var reply = await command(editor); // Join the actual VM task, not a posted/admitted boolean.
+        if (IsClosed) return new(SponsorEditorOutcome.Unavailable, port.SponsorSnapshot, Reason: "EditorAdmissionClosed");
+        if (ReadCurrentSnapshot()?.Stamp is not { } stamp || !expected.HasSameContext(stamp))
+            return new(SponsorEditorOutcome.Stale, port.SponsorSnapshot, Reason: "EditorStampChanged");
+        var reply = await command(editor, stamp); // Join the actual VM task, not a posted/admitted boolean.
         ReadCurrentSnapshot();
         return reply;
     });
@@ -125,10 +130,10 @@ internal sealed class SponsorPlayerAttachment
     });
 
     internal Task<bool> ReconcileFieldAsync(PlaybackStamp expected, SponsorReconciliation request) => dispatcher.RunAsync(async () =>
-        !IsClosed && port.SponsorSnapshot?.Stamp == expected && request.Owner == expected.Owner
+        !IsClosed && expected.HasSameContext(ReadCurrentSnapshot()?.Stamp) && request.Owner == expected.Owner
         && await port.ReconcileSponsorFieldAsync(request));
     internal Task<bool> ReconcileSeekAsync(PlaybackStamp expected, SponsorSeekReconciliation request) => dispatcher.RunAsync(async () =>
-        !IsClosed && port.SponsorSnapshot?.Stamp == expected && request.Owner == expected.Owner
+        !IsClosed && expected.HasSameContext(ReadCurrentSnapshot()?.Stamp) && request.Owner == expected.Owner
         && await port.ReconcileSponsorSeekAsync(request));
 
     internal void StopAdmission() => Interlocked.Exchange(ref closed, 1);

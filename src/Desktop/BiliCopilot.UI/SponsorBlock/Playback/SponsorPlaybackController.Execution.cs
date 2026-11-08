@@ -12,11 +12,18 @@ internal sealed partial class SponsorPlaybackController
     private ImmutableArray<PlaybackRateCooldown> _cooldowns = [];
     private ImmutableArray<SponsorSeekStatus> _seekClaims = [];
     private RateSample? _rateSample;
+    private SponsorCoordinatorInput? _selectionFacts;
+    private double? _selectionDuration;
+    private SponsorPlaybackRules.PreparedSelection? _selection;
     private sealed record RateSample(string Token, long Revision, long Visit, double Position, double Time);
 
     private async Task ObserveAsync()
     {
-        var revision = _observationRevision;
+        var facts = _input;
+        var stamp = CurrentStamp;
+        var intentId = _intentId;
+        var request = _request;
+        var sponsorOpen = _sponsorOpen;
         NativePlaybackSnapshot actual;
         try { actual = await ReadAsync(NativeAdmissionPurpose.Observation); }
         catch (Exception ex)
@@ -33,8 +40,11 @@ internal sealed partial class SponsorPlaybackController
             Publish();
             return;
         }
-        // Events/fact changes during a read only prompt another read; no mixed snapshot dispatch.
-        if (revision != _observationRevision || !CanUseBinding) return;
+        // Progress prompts queue a follow-up read, but must not starve this one. Changed facts,
+        // visits, user intents or admission still invalidate a decision made across the await.
+        if (!CanUseBinding || !ReferenceEquals(facts, _input) || intentId != _intentId
+            || !ReferenceEquals(request, _request) || sponsorOpen != _sponsorOpen
+            || stamp is not null && !stamp.HasSameContext(CurrentStamp)) return;
         ConfirmLeases(actual);
         ConfirmSeeks(actual);
         if (!_sponsorOpen || _input is null || _interaction is null || _intents.Count != 0)
@@ -54,8 +64,12 @@ internal sealed partial class SponsorPlaybackController
             Publish();
             return;
         }
-        _cooldowns = _cooldowns.Where(c => _clock() < c.CancelledAtMonotonicSeconds + 5
-            && actual.Position >= c.Start - .3 && actual.Position < c.End + .5).ToImmutableArray();
+        if (!_cooldowns.IsDefaultOrEmpty)
+        {
+            var now = _clock();
+            _cooldowns = _cooldowns.Where(c => now < c.CancelledAtMonotonicSeconds + 5
+                && actual.Position >= c.Start - .3 && actual.Position < c.End + .5).ToImmutableArray();
+        }
         var context = new PlaybackExecutionContext(input.Stamp, _clock())
         {
             Speed = _input.Speed,
@@ -66,9 +80,23 @@ internal sealed partial class SponsorPlaybackController
             RateCooldowns = _cooldowns,
             Source2 = _input.AlignedEligibleSource2 is { } keys ? new(input.Stamp, keys) : null,
         };
-        var plan = _plan = SponsorPlaybackRules.EvaluateExecution(input, context);
-        if (input.Request is not null && plan.OrdinaryPlan.Effects.IsDefaultOrEmpty)
-            ConsumeRequest(input.Request.Id); // Rejected explicit requests never wake into replays.
+        var duration = actual.Duration is double total && double.IsFinite(total) && total > 0 ? actual.Duration : null;
+        // The immutable facts identity includes owner, input/policy revisions, segments, music and
+        // all local/draft exclusions. Duration is normalization's only native-dependent input.
+        if (!ReferenceEquals(_selectionFacts, _input) || !Nullable.Equals(_selectionDuration, duration))
+        {
+            var selection = SponsorPlaybackRules.PrepareSelection(input, execution: true);
+            _selectionFacts = _input;
+            _selectionDuration = duration;
+            _selection = selection;
+        }
+        var plan = _plan = SponsorPlaybackRules.EvaluateExecution(input, context, _selection);
+        if (input.Request is { } explicitRequest && plan.OrdinaryPlan.Effects.IsDefaultOrEmpty)
+        {
+            ConsumeRequest(explicitRequest.Id); // Rejected explicit requests never wake into replays.
+            ResolveRequest(explicitRequest.Id, SponsorRequestPhase.Rejected,
+                plan.OrdinaryPlan.Diagnostics.LastOrDefault(d => d.Contributor is null)?.Reason ?? "PlaybackRequestRejected");
+        }
         if (plan.Validity != PlaybackExecutionValidity.Current || !plan.OrdinaryPlan.IsCurrent)
         {
             CancelWake();
@@ -156,6 +184,7 @@ internal sealed partial class SponsorPlaybackController
                         ConsumeRequest(requestId);
                         PromoteManualMute(effect.Contributors);
                         ApplyReviews(effect);
+                        ResolveRequest(requestId, SponsorRequestPhase.Completed);
                     }
                     _mute = _mute with { Coverage = new(effect.Contributors.Min(c => c.Segment.Segment[0]),
                         effect.Contributors.Max(c => c.Segment.Segment[1]), effect.Contributors) };
@@ -173,6 +202,7 @@ internal sealed partial class SponsorPlaybackController
                 // The release is a real conditional-restore outcome, not an automatic unmute.
                 if (effect.RequestId is not null) ConsumeRequest(effect.RequestId);
                 ApplyReviews(effect);
+                ResolveRequest(effect.RequestId, SponsorRequestPhase.Completed);
                 RequestObservation();
                 Publish();
                 return;
@@ -257,13 +287,19 @@ internal sealed partial class SponsorPlaybackController
                 permit => _backend!.WriteMuteAsync(permit, true), stamp);
             _mute = _mute with { Phase = PlaybackLeasePhase.SucceededUnobserved };
         }
-        catch (Exception ex) { _mute = _mute with { Phase = FailurePhase(ex) }; throw; }
+        catch (Exception ex)
+        {
+            _mute = _mute with { Phase = FailurePhase(ex) };
+            ResolveRequest(effect.RequestId, SponsorRequestPhase.Failed, "PlaybackRequestFailed");
+            throw;
+        }
         RequestObservation();
     }
 
     private async Task AdmitSeekAsync(PlaybackEffect effect, PlaybackStamp stamp)
     {
-        var claim = new SponsorSeekStatus("seek-" + (_operationId + 1), effect, stamp, SponsorOperationPhase.Pending);
+        var claim = new SponsorSeekStatus("seek-" + (_operationId + 1), effect, stamp, SponsorOperationPhase.Pending)
+        { OperationId = _operationId + 1, PositionIntentId = _positionIntentId };
         _seekClaims = _seekClaims.Add(claim);
         _interaction = _interaction! with
         { AdmittedSeeks = _interaction.AdmittedSeeks.Add(new(effect.Contributors.Select(c => c.Key).ToImmutableArray())) };
@@ -278,6 +314,7 @@ internal sealed partial class SponsorPlaybackController
         {
             _seekClaims = _seekClaims.Replace(claim, claim with { Phase = ex is OperationCanceledException
                 ? SponsorOperationPhase.Unknown : SponsorOperationPhase.Failed });
+            ResolveRequest(effect.RequestId, SponsorRequestPhase.Failed, "PlaybackRequestFailed");
             throw;
         }
         RequestObservation();
@@ -294,6 +331,7 @@ internal sealed partial class SponsorPlaybackController
                     PromoteManualMute(mute.Coverage.Contributors);
                 ConfirmEffect(effect, mute.Owner);
             }
+            else ResolveRequest(mute.RequestId, SponsorRequestPhase.Rejected, "PlaybackRequestSuperseded");
         }
         if (_rate is { Phase: PlaybackLeasePhase.SucceededUnobserved } rate && SameRate(actual.Rate, rate.Target))
         {
@@ -305,13 +343,25 @@ internal sealed partial class SponsorPlaybackController
 
     private void ConfirmSeeks(NativePlaybackSnapshot actual)
     {
+        if (_operation is not { Kind: NativeOperationKind.Read, Phase: SponsorOperationPhase.SucceededUnobserved } read
+            || read.Generation != actual.NativeGeneration || _intents.Count != 0) return;
+        var latestSeekId = _seekClaims.IsDefaultOrEmpty ? 0 : _seekClaims.Max(c => c.OperationId);
         foreach (var claim in _seekClaims)
         {
-            // Acknowledgement alone, a newer user intent, or an unrelated later position is not a receipt.
+            // The serial native lane must have completed a NEW read after the seek acknowledgement.
             if (claim.Phase != SponsorOperationPhase.SucceededUnobserved || claim.Stamp.Owner != _owner
-                || claim.Stamp.VisitRevision != _visit || claim.Stamp.MuteUserEpoch != _muteEpoch
-                || claim.Stamp.RateUserEpoch != _rateEpoch || _intents.Count != 0
-                || Math.Abs(actual.Position - claim.Effect.To) > .05) continue;
+                || read.Id <= claim.OperationId) continue;
+            if (claim.OperationId != latestSeekId || claim.Stamp.VisitRevision != _visit || claim.PositionIntentId != _positionIntentId
+                || claim.Stamp.MuteUserEpoch != _muteEpoch || claim.Stamp.RateUserEpoch != _rateEpoch)
+            {
+                // A completed seek superseded by a visit or newer transport action owns no field to restore.
+                // This read releases its ambiguity without inventing a successful-effect receipt.
+                _seekClaims = _seekClaims.Replace(claim, claim with { Phase = SponsorOperationPhase.Reconciled });
+                ResolveRequest(claim.Effect.RequestId, SponsorRequestPhase.Rejected, "PlaybackRequestSuperseded");
+                continue;
+            }
+            var forwardTolerance = actual.State == SponsorPlaybackState.Playing ? 2 : .25;
+            if (actual.Position < claim.Effect.To - .25 || actual.Position > claim.Effect.To + forwardTolerance) continue;
             _seekClaims = _seekClaims.Replace(claim, claim with { Phase = SponsorOperationPhase.Confirmed });
             ConfirmEffect(claim.Effect, claim.Stamp.Owner);
             // A real confirmed seek advances visit but keeps admitted claims through delayed position events.
@@ -349,6 +399,7 @@ internal sealed partial class SponsorPlaybackController
         _applied = new(owner, effect.Kind, effect.From, effect.To, effect.Contributors, _input?.Preview is not null);
         _appliedId = ++_receiptId;
         ApplyReviews(effect);
+        ResolveRequest(effect.RequestId, SponsorRequestPhase.Completed);
     }
 
     private void ApplyReviews(PlaybackEffect effect)
@@ -368,16 +419,23 @@ internal sealed partial class SponsorPlaybackController
         if (_request?.Id == id) _request = null;
     }
 
+    private void ResolveRequest(string? id, SponsorRequestPhase phase, string? reason = null)
+    {
+        if (id is not null && _requestResult?.Id == id)
+            _requestResult = new(id, phase, reason);
+    }
+
     private void ExpireRequest()
     {
         if (_request is not { } pending) return;
         var stamp = CurrentStamp;
         // Observation prompts necessarily advance ObservationRevision. Only that revision is
         // rebound to the fresh read; accepted facts/policy/visit/field ownership may not change.
-        if (stamp is null || _requestRevision != _input?.Revision || pending.Stamp.Owner != stamp.Owner
-            || pending.Stamp.PolicyRevision != stamp.PolicyRevision || pending.Stamp.VisitRevision != stamp.VisitRevision
-            || pending.Stamp.MuteUserEpoch != stamp.MuteUserEpoch || pending.Stamp.RateUserEpoch != stamp.RateUserEpoch)
+        if (_requestRevision != _input?.Revision || !pending.Stamp.HasSameContext(stamp))
+        {
             ConsumeRequest(pending.Id);
+            ResolveRequest(pending.Id, SponsorRequestPhase.Rejected, "PlaybackRequestExpired");
+        }
     }
 
     private void PromoteManualMute(ImmutableArray<PlaybackContributor> contributors)
@@ -519,23 +577,32 @@ internal sealed partial class SponsorPlaybackController
     private sealed record VisitObservation(long Revision, double Position, SponsorPlaybackState State,
         ImmutableArray<VisitInterval> Intervals);
     private VisitObservation? _visitObservation;
+    private ImmutableArray<PlaybackMarker> _visitMarkers;
+    private ImmutableArray<VisitInterval> _visitIntervals = [];
     private bool _visitRebasePending;
 
     // Markers are the frozen evaluator's normalized, source-keyed projection, NOT authority.
     // A changed visit always forces another real evaluation before any effect can dispatch.
     private bool ObserveIntervalVisit(NativePlaybackSnapshot actual, PlaybackPlan plan)
     {
-        var intervals = plan.Markers.Where(m => m.Policy is CategoryPolicy.AutoSkip or CategoryPolicy.ManualSkip
-            && m.Contributor.Segment.ActionType is "skip" or "mute")
-            .Select(m => new VisitInterval(m.Contributor.Key, m.Contributor.Segment.Segment[0], m.Contributor.Segment.Segment[1]))
-            .OrderBy(i => i.Start).ThenBy(i => i.End).ThenBy(i => i.Key.Uuid, StringComparer.Ordinal)
-            .ThenBy(i => i.Key.Source ?? -1).ToImmutableArray();
+        if (!_visitMarkers.Equals(plan.Markers))
+        {
+            var built = ImmutableArray.CreateBuilder<VisitInterval>();
+            foreach (var marker in plan.Markers)
+                if (marker.Policy is CategoryPolicy.AutoSkip or CategoryPolicy.ManualSkip
+                    && marker.Contributor.Segment.ActionType is "skip" or "mute")
+                    built.Add(new(marker.Contributor.Key, marker.Contributor.Segment.Segment[0], marker.Contributor.Segment.Segment[1]));
+            _visitMarkers = plan.Markers;
+            _visitIntervals = built.ToImmutable(); // Markers already carry the normalized interval order.
+        }
+        var intervals = _visitIntervals;
         var previous = _visitObservation;
         _visitObservation = new(_input!.Revision, actual.Position, actual.State, intervals);
-        if (previous is null || previous.Revision != _input.Revision || !previous.Intervals.SequenceEqual(intervals)
+        if (previous is null || previous.Revision != _input.Revision
+            || !previous.Intervals.Equals(intervals) && !previous.Intervals.SequenceEqual(intervals)
             || previous.State != SponsorPlaybackState.Playing || actual.State != SponsorPlaybackState.Playing
             || previous.Position == actual.Position
-            || _seekClaims.Any(c => c.Phase is SponsorOperationPhase.Pending or SponsorOperationPhase.SucceededUnobserved)) return true;
+            || _seekClaims.Any(c => c.Phase == SponsorOperationPhase.Pending)) return true;
         if (IntervalAt(previous.Intervals, previous.Position) == IntervalAt(intervals, actual.Position)) return true;
         if (_visitRebasePending)
         {
@@ -584,7 +651,10 @@ internal sealed partial class SponsorPlaybackController
                 SeekSuppressed = seekSuppressed,
                 MuteSuppressed = false,
                 ManualMute = null,
-                AdmittedSeeks = _seekClaims.Select(c => new PlaybackClaim(c.Effect.Contributors.Select(v => v.Key).ToImmutableArray())).ToImmutableArray(),
+                // Completed-but-unobserved seeks suppress only their original visit. A new actual
+                // read reconciles them; failed/unknown native work still requires explicit recovery.
+                AdmittedSeeks = _seekClaims.Where(c => c.Phase != SponsorOperationPhase.SucceededUnobserved || c.Stamp.VisitRevision == _visit)
+                    .Select(c => new PlaybackClaim(c.Effect.Contributors.Select(v => v.Key).ToImmutableArray())).ToImmutableArray(),
             };
     }
 

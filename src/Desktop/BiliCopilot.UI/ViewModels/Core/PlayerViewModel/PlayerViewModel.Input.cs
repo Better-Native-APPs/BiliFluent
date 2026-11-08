@@ -51,6 +51,11 @@ public sealed partial class PlayerViewModel
 
     internal bool IsPlayerInputCancellationPending => _inputCancellations != 0;
 
+    // A mouse double-click restores an explicit pre-click state, never another toggle based on a delayed mpv event.
+    internal Task RestoreMouseClickPlaybackAsync(long generation, bool wasPlaying)
+        => generation != MediaGeneration || IsPlaybackClosing || Client?.IsDisposed != false || Player?.IsPlaybackInitialized != true
+            ? Task.CompletedTask : SetUserPausedAsync(!wasPlaying);
+
     private bool CanAcceptPlayerInput => !IsPlaybackClosing && !IsConnecting
         && !IsWindowDeactivated && !IsPlayerInputCancellationPending
         && Client?.IsDisposed == false && Player?.IsPlaybackInitialized == true
@@ -347,7 +352,7 @@ public sealed partial class PlayerViewModel
                 VirtualKey.Right => SkipForwardCommand,
                 VirtualKey.Up => IncreaseVolumeCommand,
                 VirtualKey.Down => DecreaseVolumeCommand,
-                VirtualKey.F11 => ToggleFullScreenCommand,
+                VirtualKey.F or VirtualKey.F11 => ToggleFullScreenCommand,
                 VirtualKey.Escape => BackToDefaultModeCommand,
                 VirtualKey.PageUp => SwitchToPreviousChapterCommand,
                 VirtualKey.PageDown => SwitchToNextChapterCommand,

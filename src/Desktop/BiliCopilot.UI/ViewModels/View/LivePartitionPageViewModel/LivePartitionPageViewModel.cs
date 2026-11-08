@@ -171,6 +171,14 @@ public sealed partial class LivePartitionPageViewModel : LayoutPageViewModelBase
             SelectedDetail = newVM;
             newVM.InitializeCommand.Execute(default);
         }
+
+        _recentPartitions.Remove(vm);
+        _recentPartitions.AddFirst(vm);
+        if (_recentPartitions.Count > 4)
+        {
+            _partitionCache.Remove(_recentPartitions.Last!.Value);
+            _recentPartitions.RemoveLast();
+        }
     }
 
     [RelayCommand]

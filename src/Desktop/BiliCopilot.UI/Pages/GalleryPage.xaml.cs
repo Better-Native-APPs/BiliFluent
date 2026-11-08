@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.View;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Richasy.BiliKernel.Models.Appearance;
 using Richasy.WinUIKernel.Share.Base;
@@ -12,6 +13,8 @@ namespace BiliCopilot.UI.Pages;
 /// </summary>
 public sealed partial class GalleryPage : GalleryPageBase
 {
+    private XamlRoot? _galleryXamlRoot;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GalleryPage"/> class.
     /// </summary>
@@ -32,6 +35,13 @@ public sealed partial class GalleryPage : GalleryPageBase
     /// <inheritdoc/>
     protected override void OnPageLoaded()
     {
+        _galleryXamlRoot = XamlRoot;
+        if (_galleryXamlRoot is not null)
+        {
+            _galleryXamlRoot.Changed += OnGalleryXamlRootChanged;
+        }
+
+        UpdateGalleryDecodePixelWidth();
         FactoryBlock.Text = 1.ToString("p00");
         ImageScrollView.ZoomTo(0.8f, default);
         ImageView.ScrollView.VerticalScrollMode = ScrollingScrollMode.Disabled;
@@ -42,7 +52,47 @@ public sealed partial class GalleryPage : GalleryPageBase
     }
 
     protected override void OnPageUnloaded()
-        => ImageView.ItemsSource = default;
+    {
+        if (_galleryXamlRoot is not null)
+        {
+            _galleryXamlRoot.Changed -= OnGalleryXamlRootChanged;
+            _galleryXamlRoot = null;
+        }
+
+        ImageView.ItemsSource = default;
+    }
+
+    private BitmapImage? CreateGalleryBitmap(Uri? sourceUri)
+        => sourceUri is null ? null : new BitmapImage
+        {
+            DecodePixelWidth = GetGalleryDecodePixelWidth(),
+            UriSource = sourceUri,
+        };
+
+    private int GetGalleryDecodePixelWidth()
+    {
+        // Keep headroom for the 1.5x zoom without decoding an unrestricted full-size image.
+        var viewportPixels = ImageScrollView.ActualWidth * (XamlRoot?.RasterizationScale ?? 1);
+        return viewportPixels > 0 ? (int)Math.Min(2560, Math.Ceiling(viewportPixels * 2)) : 2560;
+    }
+
+    private void OnGalleryViewportSizeChanged(object sender, SizeChangedEventArgs e)
+        => UpdateGalleryDecodePixelWidth();
+
+    private void OnGalleryXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+        => UpdateGalleryDecodePixelWidth();
+
+    private void UpdateGalleryDecodePixelWidth()
+    {
+        if (Image.Source is BitmapImage bitmap)
+        {
+            var width = GetGalleryDecodePixelWidth();
+            if (bitmap.DecodePixelWidth != width)
+            {
+                bitmap.DecodePixelWidth = width;
+            }
+        }
+    }
 
     private void OnScrollViewTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         => ViewModel.IsMenuHide = !ViewModel.IsMenuHide;

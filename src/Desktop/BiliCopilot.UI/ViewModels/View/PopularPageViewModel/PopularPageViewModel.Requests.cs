@@ -113,9 +113,10 @@ public sealed partial class PopularPageViewModel
             foreach (var item in videos)
             {
                 if (!IsCurrentVideoRequest(generation, accountGeneration, token)) return;
-                if (Videos.Any(video => video.Data.Identifier.Id == item.Identifier.Id)) continue;
+                if (_videoIds.Contains(item.Identifier.Id)) continue;
                 var card = new VideoItemViewModel(item, style);
                 if (!IsCurrentVideoRequest(generation, accountGeneration, token)) return;
+                _videoIds.Add(item.Identifier.Id);
                 Videos.Add(card);
             }
         }

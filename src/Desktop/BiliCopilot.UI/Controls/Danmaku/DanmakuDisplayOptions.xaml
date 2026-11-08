@@ -27,6 +27,7 @@
                 SelectionChanged="OnRendererChanged">
                 <ComboBoxItem Content="DirectX" />
                 <ComboBoxItem Content="Win2D" />
+                <ComboBoxItem Content="{ext:Locale Name=MpvDanmakuRenderer}" />
             </ComboBox>
             <Slider
                 x:Name="OpacitySlider"
@@ -66,8 +67,10 @@
             <ComboBox
                 x:Name="DanmakuFontComboBox"
                 HorizontalAlignment="Stretch"
+                DropDownOpened="OnDanmakuFontDropDownOpened"
                 Header="{ext:Locale Name=DanmakuFont}"
                 ItemsSource="{x:Bind ViewModel.Fonts, Mode=OneWay}"
+                PlaceholderText="{x:Bind ViewModel.DanmakuFontFamily, Mode=OneWay}"
                 SelectionChanged="OnDanmakuFontChanged" />
             <StackPanel Spacing="8">
                 <TextBlock HorizontalAlignment="Left" Text="{ext:Locale Name=EnabledDanmakuMode}" />

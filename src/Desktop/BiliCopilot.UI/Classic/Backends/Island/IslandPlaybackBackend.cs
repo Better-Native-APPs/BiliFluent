@@ -357,8 +357,9 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
         catch (Exception error) { stopFailure = error; }
         try
         {
-            // This awaits the library's disposal, NOT a join of its private untracked event task.
-            // The pinned MpvKernel API does not expose that join; do not claim otherwise.
+            // Let the library's event pump observe SHUTDOWN before disposal cancels it.
+            // Its private event task still has no public join.
+            await MpvShutdownHelper.QuitCoreAsync(client, this.Get<ILogger<IslandPlaybackBackend>>(), TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             await client.DisposeAsync().ConfigureAwait(false);
         }
         catch

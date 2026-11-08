@@ -48,7 +48,7 @@ internal sealed partial class SponsorApplicationCoordinator
         var actual = current?.Actual;
         var open = !Stopping && !state.Attachment.IsClosed && state.EditorWork is not { IsCompleted: false }
             && state.CleanupWork is not { IsCompleted: false } && current?.Stamp is { } stamp
-            && stamp.PolicyRevision == policyRevision && state.Attachment.Latest?.Stamp == stamp;
+            && stamp.PolicyRevision == policyRevision && stamp.HasSameContext(state.Attachment.Latest?.Stamp);
         var editorPort = state.Attachment.HasEditorPort;
         var editorAvailable = editor is null || editor == state.Attachment.Id;
         var frame = open && editorPort && editorAvailable && actual is { CanStepFrames: true, State: SponsorPlaybackState.Paused };

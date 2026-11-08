@@ -99,8 +99,6 @@ public enum SettingNames
     IsRollingDanmakuEnabled,
     IsTopDanmakuEnabled,
     IsBottomDanmakuEnabled,
-    DanmakuRefreshRate,
-    DanmakuForceSoftwareRenderer,
     IsChapterVisible,
     HideMainWindowOnPlay,
     UseIntegrationWhenSinglePlayWindow,
@@ -137,4 +135,5 @@ public enum SettingNames
     ClassicPlayerDecodePreference = 138,
     ClassicExternalPlayerPath = 139,
     ClassicUseWebPlayerWhenLive = 140,
+    DanmakuRendererMpvMigrated = 141,
 }

@@ -7,6 +7,7 @@ using BiliCopilot.UI.Models.Constants;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
+using System.ComponentModel;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -151,12 +152,16 @@ public sealed partial class AppViewModel
         ClassicPlayers.Add(window);
         if (window.Content is not null) Windows.Add(window); // A retained failed-construction host may have no frontend.
         window.Activated += OnClassicActivated;
+        if (window.Session is { } session) session.PropertyChanged += OnClassicPlaybackActivityChanged;
+        NotifyPlaybackActivityChanged();
     }
     public void UnregisterClassicWindow(ClassicPlayerWindow window)
     {
         window.Activated -= OnClassicActivated;
+        if (window.Session is { } session) session.PropertyChanged -= OnClassicPlaybackActivityChanged;
         ClassicPlayers.Remove(window);
         Windows.Remove(window);
+        NotifyPlaybackActivityChanged();
         if (ReferenceEquals(ActivatedWindow, window)) ActivatedWindow = Windows.LastOrDefault()!;
         if (!IsClosed && ClassicPlayers.Count == 0 && Players.Count == 0 && !IsMainWindowVisible())
             Windows.OfType<MainWindow>().FirstOrDefault()?.Activate();
@@ -165,6 +170,11 @@ public sealed partial class AppViewModel
     {
         if (args.WindowActivationState != WindowActivationState.Deactivated && sender is ClassicPlayerWindow window)
             ActivatedWindow = window;
+    }
+    private void OnClassicPlaybackActivityChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(ClassicPlaybackSession.State))
+            NotifyPlaybackActivityChanged();
     }
     public void ReportClassicFailure(Exception exception)
     {

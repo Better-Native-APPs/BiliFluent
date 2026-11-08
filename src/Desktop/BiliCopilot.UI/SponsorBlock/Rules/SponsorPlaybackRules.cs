@@ -8,8 +8,9 @@ public static partial class SponsorPlaybackRules
 {
     public const int MaximumRecords = 4096;
 
-    private sealed record Selected(PlaybackContributor Contributor, CategoryPolicy Policy)
+    internal sealed record Selected(PlaybackContributor Contributor, CategoryPolicy Policy)
     {
+        internal ImmutableArray<PlaybackContributor> Contributors { get; } = [Contributor];
         public SponsorSegment Segment => Contributor.Segment;
         public double Start => Segment.Segment[0];
         public double End => Segment.Segment[1];
@@ -18,20 +19,37 @@ public static partial class SponsorPlaybackRules
     private sealed record CommonEvaluation(PlaybackPlan Plan, ImmutableArray<Selected> Selected,
         ImmutableArray<Selected> AutomaticSkips, bool CanExecute);
 
+    internal sealed record PreparedSelection(bool IsValid, ImmutableArray<Selected> Segments,
+        ImmutableArray<PlaybackMarker> Markers, ImmutableArray<PlaybackDiagnostic> Diagnostics);
+
+    internal static PreparedSelection PrepareSelection(PlaybackInput input, bool execution)
+    {
+        if (input.Data.Segments.IsDefault || input.Data.Segments.Length > MaximumRecords || !ValidNormalizationFacts(input))
+            return new(false, [], [], []);
+        var duration = input.Actual.Duration is double total && double.IsFinite(total) && total > 0 ? input.Actual.Duration : null;
+        var diagnostics = ImmutableArray.CreateBuilder<PlaybackDiagnostic>();
+        var selected = Select(input, duration, diagnostics, execution);
+        return new(true, selected, selected.Select(item => new PlaybackMarker(item.Contributor, item.Policy)).ToImmutableArray(),
+            diagnostics.ToImmutable());
+    }
+
     public static PlaybackPlan Evaluate(PlaybackInput input) => EvaluateCore(input, null).Plan;
 
     // One normalization/admission/request/undo seam. No fictional capabilities or cloned policy inputs.
-    private static CommonEvaluation EvaluateCore(PlaybackInput input, PlaybackExecutionContext? execution)
+    private static CommonEvaluation EvaluateCore(PlaybackInput input, PlaybackExecutionContext? execution,
+        PreparedSelection? prepared = null)
     {
         var diagnostics = ImmutableArray.CreateBuilder<PlaybackDiagnostic>();
         var notices = ImmutableArray.CreateBuilder<PlaybackNotice>();
-        var markers = ImmutableArray.CreateBuilder<PlaybackMarker>();
+        ImmutableArray<PlaybackMarker> markers = [];
         var effects = ImmutableArray.CreateBuilder<PlaybackEffect>();
         ImmutableArray<Selected> selected = [];
         ImmutableArray<Selected> automaticSkips = [];
+        PreparedSelection? normalized = null;
         var canExecute = false;
         CommonEvaluation Finish(bool current, PlaybackBoundary? boundary = null) => new(new(input.Stamp, current,
-            effects.ToImmutable(), notices.ToImmutable(), markers.ToImmutable(), diagnostics.ToImmutable(), boundary, input.Channel),
+            effects.ToImmutable(), notices.ToImmutable(), markers, diagnostics.ToImmutable(), boundary, input.Channel)
+            { Selection = normalized },
             selected, automaticSkips, canExecute);
 
         if (input.Data.Owner != input.Stamp.Owner || input.Policy.Revision != input.Stamp.PolicyRevision
@@ -45,7 +63,7 @@ public static partial class SponsorPlaybackRules
             || input.Interaction.Reviews.IsDefault || input.Interaction.Reviews.Length > MaximumRecords
             || input.Interaction.AdmittedSeeks.IsDefault || input.Interaction.AdmittedSeeks.Length > MaximumRecords
             || input.Interaction.AdmittedRequestIds.IsDefault || input.Interaction.AdmittedRequestIds.Length > MaximumRecords
-            || !ValidInteraction(input) || !ValidNormalizationFacts(input))
+            || !ValidInteraction(input) || !(prepared?.IsValid ?? ValidNormalizationFacts(input)))
         {
             diagnostics.Add(new("InvalidOrUnboundedSnapshot"));
             return Finish(true);
@@ -81,11 +99,21 @@ public static partial class SponsorPlaybackRules
             || !ValidRange(preview.Start, preview.End) || !validDuration || preview.End > actual.Duration!.Value))
             diagnostics.Add(new("InvalidOrStalePreviewStillIsolated"));
 
-        selected = Select(input, validDuration ? actual.Duration : null, diagnostics, execution is not null);
+        if (prepared is not null)
+        {
+            normalized = prepared;
+            selected = prepared.Segments;
+            markers = prepared.Markers;
+            diagnostics.AddRange(prepared.Diagnostics);
+        }
+        else
+        {
+            selected = Select(input, validDuration ? actual.Duration : null, diagnostics, execution is not null);
+            markers = selected.Select(item => new PlaybackMarker(item.Contributor, item.Policy)).ToImmutableArray();
+        }
         foreach (var item in selected)
         {
-            markers.Add(new(item.Contributor, item.Policy));
-            var contributors = ImmutableArray.Create(item.Contributor);
+            var contributors = item.Contributors;
             var actionReason = reason ?? CapabilityReason(input, item, execution);
             if (item.Segment.ActionType == "full")
                 notices.Add(new(SponsorNoticeKind.FullLabel, contributors, false));
@@ -107,7 +135,7 @@ public static partial class SponsorPlaybackRules
         if (reason is not null) return Finish(true);
         canExecute = true;
         // Existing rate ownership can coexist with a mute-only explicit request. Selection remains shared.
-        if (execution is not null && actual.State == SponsorPlaybackState.Playing)
+        if (actual.State == SponsorPlaybackState.Playing)
             automaticSkips = selected.Where(item => item.Segment.ActionType == "skip" && Automatic(input, item, execution)).ToImmutableArray();
         if (input.Request is { } request)
         {
@@ -128,8 +156,6 @@ public static partial class SponsorPlaybackRules
         if (actual.State != SponsorPlaybackState.Playing)
             return Finish(true);
 
-        var eligible = selected.Where(item => Automatic(input, item, execution)).ToArray();
-        automaticSkips = eligible.Where(item => item.Segment.ActionType == "skip").ToImmutableArray();
         var skip = execution is not null && input.Policy.SkipStrategy == SponsorSkipStrategy.SpeedUp
             ? ImmutableArray<Selected>.Empty : ConnectedAtPosition(automaticSkips, actual.Position);
         if (skip.Length > 0)
@@ -239,10 +265,10 @@ public static partial class SponsorPlaybackRules
 
     private static ImmutableArray<Selected> ConnectedAtPosition(IEnumerable<Selected> candidates, double position)
     {
-        var ordered = candidates.OrderBy(item => item.Start).ThenBy(item => item.End).ToArray();
         var result = ImmutableArray.CreateBuilder<Selected>();
         var end = position;
-        foreach (var item in ordered)
+        // Every caller filters the normalized start/end-ordered selection without reordering it.
+        foreach (var item in candidates)
         {
             if (item.End <= position) continue;
             if (item.Start > end) break;
@@ -259,8 +285,9 @@ public static partial class SponsorPlaybackRules
     private static PlaybackBoundary? NextBoundary(PlaybackInput input, ImmutableArray<Selected> selected)
     {
         var next = double.PositiveInfinity;
-        foreach (var item in selected.Where(item => item.Segment.ActionType is "skip" or "mute"))
+        foreach (var item in selected)
         {
+            if (item.Segment.ActionType is not ("skip" or "mute")) continue;
             if (item.Start > input.Actual.Position) next = Math.Min(next, item.Start);
             if (item.End > input.Actual.Position) next = Math.Min(next, item.End);
             if (item.Policy != CategoryPolicy.ShowOverlay && input.Policy.UpcomingMediaSeconds is double lead

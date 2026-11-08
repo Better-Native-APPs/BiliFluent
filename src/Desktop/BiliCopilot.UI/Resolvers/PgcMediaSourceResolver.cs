@@ -107,6 +107,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             UserAgent = userAgent,
             HttpHeaders = headers,
             EnableCookies = true,
+            EnableYtdl = false,
         };
 
         await LoadMediaInfoAsync(request);

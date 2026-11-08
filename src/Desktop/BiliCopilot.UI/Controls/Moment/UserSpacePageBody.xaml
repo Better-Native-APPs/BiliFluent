@@ -297,7 +297,7 @@
                     </Grid.RowDefinitions>
                     <controls:BasicCoverImage
                         CornerRadius="4,4,0,0"
-                        DecodeWidth="600"
+                        DecodeWidth="400"
                         Source="{x:Bind Cover, Mode=OneTime}" />
                     <Border
                         Margin="4"
@@ -395,7 +395,7 @@
                     </Grid.RowDefinitions>
                     <controls:BasicCoverImage
                         CornerRadius="4,4,0,0"
-                        DecodeWidth="600"
+                        DecodeWidth="400"
                         Source="{x:Bind Cover, Mode=OneTime}"
                         Visibility="{x:Bind local:UserSpacePageBody.IsCoverVisible(Cover), Mode=OneTime}" />
                     <Grid
@@ -614,7 +614,7 @@
                             <!--
                                 纵向滚轮不被截走：内容面板的 PointerWheelChanged 先于 ScrollViewer 处理，
                                 未按 Shift 的纵向滚轮转交外层页面滚动并标记 Handled；Shift+滚轮/水平滚轮/触控板横滑/翻页按钮负责横向.
-                                组内视频不虚拟化（ItemsControl + StackPanel），避免回收导致封面请求被反复取消.
+                                组内视频由 ItemsRepeater + 横向 StackLayout 按可见区域虚拟化，减少长轨道的元素与封面占用.
                             -->
                             <ScrollViewer
                                 HorizontalScrollBarVisibility="Auto"
@@ -630,16 +630,13 @@
                                     Orientation="Horizontal"
                                     PointerWheelChanged="OnRailPointerWheelChanged"
                                     Spacing="12">
-                                    <ItemsControl
-                                        IsTabStop="False"
+                                    <ItemsRepeater
                                         ItemTemplate="{StaticResource VideoRailCardTemplate}"
                                         ItemsSource="{x:Bind Videos, Mode=OneWay}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" Spacing="12" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout Orientation="Horizontal" Spacing="12" />
+                                        </ItemsRepeater.Layout>
+                                    </ItemsRepeater>
                                     <!-- 轨道末尾：继续加载本组 -->
                                     <Button
                                         Width="120"

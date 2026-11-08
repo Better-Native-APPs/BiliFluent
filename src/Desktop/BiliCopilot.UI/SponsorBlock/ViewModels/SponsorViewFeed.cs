@@ -17,16 +17,20 @@ internal sealed class SponsorViewFeed
     private readonly SponsorApplicationCoordinator _app;
     private readonly DispatcherQueue _queue;
     private readonly Action<SponsorApplicationView> _apply;
+    private readonly Func<SponsorApplicationView, SponsorApplicationView, bool>? _unchanged;
+    private SponsorApplicationView? _received;
     private SponsorApplicationView? _pending;
     private int _scheduled;
     private int _closed;
     private long _appliedRevision = -1;
 
-    internal SponsorViewFeed(SponsorApplicationCoordinator app, DispatcherQueue queue, Action<SponsorApplicationView> apply)
+    internal SponsorViewFeed(SponsorApplicationCoordinator app, DispatcherQueue queue, Action<SponsorApplicationView> apply,
+        Func<SponsorApplicationView, SponsorApplicationView, bool>? unchanged = null)
     {
         _app = app;
         _queue = queue;
         _apply = apply;
+        _unchanged = unchanged;
     }
 
     /// <summary>界面线程上最近一次应用的视图。</summary>
@@ -46,6 +50,7 @@ internal sealed class SponsorViewFeed
         Interlocked.Exchange(ref _closed, 1);
         _app.Updated -= OnUpdated;
         Interlocked.Exchange(ref _pending, null);
+        Interlocked.Exchange(ref _received, null);
         Current = null;
     }
 
@@ -55,6 +60,18 @@ internal sealed class SponsorViewFeed
         if (IsClosed || view is null)
         {
             return;
+        }
+
+        if (_unchanged is not null)
+        {
+            while (true)
+            {
+                var previous = Volatile.Read(ref _received);
+                if (previous is not null && previous.Revision >= view.Revision) return;
+                if (Interlocked.CompareExchange(ref _received, view, previous) != previous) continue;
+                if (previous is not null && _unchanged(previous, view)) return;
+                break;
+            }
         }
 
         while (true)
@@ -89,7 +106,12 @@ internal sealed class SponsorViewFeed
 
         _appliedRevision = view.Revision;
         Current = view;
-        _apply(view);
+        try { _apply(view); }
+        catch
+        {
+            Interlocked.Exchange(ref _received, null); // A failed projection must not suppress its next retry.
+            throw;
+        }
     }
 }
 

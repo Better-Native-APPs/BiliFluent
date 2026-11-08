@@ -82,11 +82,14 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         if (selectedFormat is null)
         {
-            var maxQuality = availableFormats.Max(p => p.Data.Quality);
-            selectedFormat = availableFormats.Find(p => p.Data.Quality == maxQuality);
+            // Auto without a remembered choice stays at 1080p60 (qn 116) or below.
+            selectedFormat = availableFormats
+                .Where(p => preferFormatSetting != PreferQualityType.Auto || _snapshot.PreferQuality > 0 || p.Data.Quality <= 116)
+                .OrderByDescending(p => p.Data.Quality)
+                .FirstOrDefault();
         }
 
-        return selectedFormat.Data;
+        return selectedFormat?.Data;
     }
 
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
@@ -112,6 +115,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             UserAgent = userAgent,
             HttpHeaders = headers,
             EnableCookies = true,
+            EnableYtdl = false,
         };
 
         await LoadMediaInfoAsync(request);
@@ -212,8 +216,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         var maxAudioQuality = audioSegments?.Max(p => Convert.ToInt32(p.Id));
         var preferCodec = AppToolkit.GetPreferCodecId();
-        var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
-            ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
+        var preferCodecId = preferCodec switch { "hev" => 12, "av01" => 13, _ => 7 };
+        var quality = selectedFormat.Quality.ToString();
+        var vSeg = videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == preferCodecId || p.Codecs.Contains(preferCodec, StringComparison.Ordinal)))
+            ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 7 || p.Codecs.Contains("avc", StringComparison.Ordinal)))
+            ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 12 || p.Codecs.Contains("hev", StringComparison.Ordinal)))
+            ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 13 || p.Codecs.Contains("av01", StringComparison.Ordinal)))
+            ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
         var aSeg = audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
         var videoUrl = vSeg?.BaseUrl;

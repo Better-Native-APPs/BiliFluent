@@ -39,7 +39,7 @@ internal static class SponsorFilterProjection
             .Where(s => s.Source != 2 || facts.AlignedEligibleSource2?.Contains(new(currentMedia, s.Uuid, s.Source)) == true)
             .Where(s => facts.LocalExcluded?.Contains(new(currentMedia, s.Uuid, s.Source)) != true)
             .Where(s => surface == SponsorContentSurface.VideoCard ? s.ActionType == "full"
-                : SponsorRules.CanExecuteInterval(s) && s.Segment[0] <= danmakuMediaTime && danmakuMediaTime < s.Segment[1])
+                : (s.ActionType is "skip" or "mute") && s.Segment[0] <= danmakuMediaTime && danmakuMediaTime < s.Segment[1])
             .Select(s => new PlaybackSegmentKey(currentMedia, s.Uuid, s.Source)).Distinct().ToImmutableArray();
         return matching.IsEmpty ? Pass() : new(SponsorFilterDecision.HideByExplicitPreference, matching);
     }

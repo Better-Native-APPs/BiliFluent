@@ -82,9 +82,13 @@ public sealed partial class SettingsPage : SettingsPageBase
     private void ApplySponsorSettings()
     {
         var viewModel = _pageLoaded ? _sponsorSettings : null;
-        if (!ReferenceEquals(SponsorSettings.ViewModel, viewModel)) SponsorSettings.ViewModel = viewModel;
         var visibility = viewModel is null ? Visibility.Collapsed : Visibility.Visible;
-        SponsorSettings.Visibility = visibility;
+        if (viewModel is not null && SponsorSettings is null) _ = FindName(nameof(SponsorSettings));
+        if (SponsorSettings is not null)
+        {
+            if (!ReferenceEquals(SponsorSettings.ViewModel, viewModel)) SponsorSettings.ViewModel = viewModel;
+            SponsorSettings.Visibility = visibility;
+        }
         if (SponsorGroupHeader is not null) SponsorGroupHeader.Visibility = visibility;
     }
 }

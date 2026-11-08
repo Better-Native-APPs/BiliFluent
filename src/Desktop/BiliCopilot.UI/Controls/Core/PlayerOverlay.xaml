@@ -234,7 +234,10 @@
                     x:Name="TransportControls"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Bottom"
+                    x:Load="{x:Bind local:PlayerOverlay.IsOverlayTransportLoaded(ViewModel.Presentation), Mode=OneWay}"
                     IsActive="{x:Bind local:PlayerOverlay.IsFullScreenActive(ViewModel.IsControlsVisible, ViewModel.IsWindowDeactivated, ViewModel.IsConnecting, ViewModel.IsPlaybackClosing, ViewModel.Presentation), Mode=OneWay}"
+                    Loaded="OnTransportLoaded"
+                    Unloaded="OnTransportUnloaded"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}"
                     Visibility="{x:Bind local:PlayerOverlay.IsFullScreenTransportVisible(ViewModel.IsControlsVisible, ViewModel.Presentation), Mode=OneWay}">
                     <local:OverlayTransportControls.LeftElement>
@@ -272,7 +275,10 @@
                     x:Name="IslandTransport"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Bottom"
+                    x:Load="{x:Bind local:PlayerOverlay.IsIslandTransportLoaded(ViewModel.Presentation), Mode=OneWay}"
                     IsActive="{x:Bind local:PlayerOverlay.IsIslandActive(ViewModel.IsControlsVisible, ViewModel.IsWindowDeactivated, ViewModel.IsConnecting, ViewModel.IsPlaybackClosing, ViewModel.Presentation), Mode=OneWay}"
+                    Loaded="OnTransportLoaded"
+                    Unloaded="OnTransportUnloaded"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}"
                     Visibility="{x:Bind local:PlayerOverlay.IsIslandVisible(ViewModel.IsControlsVisible, ViewModel.Presentation), Mode=OneWay}">
                     <local:IslandTransportControls.LeftContent>
@@ -373,7 +379,7 @@
                 CornerRadius="20"
                 Orientation="Horizontal"
                 Visibility="{x:Bind ViewModel.IsProgressChanging, Mode=OneWay}">
-                <TextBlock VerticalAlignment="Center" Text="{x:Bind GetTimeText(ViewModel.Player.Position), Mode=OneWay}" />
+                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PositionText, Mode=OneWay}" />
                 <TextBlock
                     Margin="8,0"
                     VerticalAlignment="Center"
@@ -500,13 +506,13 @@
                 VerticalAlignment="Bottom"
                 Visibility="{x:Bind local:PlayerOverlay.IsBottomProgressShouldDisplay(ViewModel.Player.IsCompactOverlay, ViewModel.Player.IsFullScreen, ViewModel.Player.IsLoading, ViewModel.Player.PlaybackState), Mode=OneWay}">
                 <ProgressBar
+                    x:Name="BottomProgressBar"
                     HorizontalAlignment="Stretch"
                     Background="Transparent"
                     IsIndeterminate="{x:Bind local:PlayerOverlay.IsLoading(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}"
                     Maximum="{x:Bind ViewModel.Player.Duration, Mode=OneWay}"
                     ShowPaused="{x:Bind local:PlayerOverlay.IsPaused(ViewModel.Player.PlaybackState), Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.IsBottomProgressBarVisible, Mode=OneWay}"
-                    Value="{x:Bind ViewModel.Player.Position, Mode=OneWay}" />
+                    Visibility="{x:Bind ViewModel.IsBottomProgressBarVisible, Mode=OneWay}" />
             </Grid>
             <Grid Height="60" Visibility="{x:Bind local:PlayerOverlay.IsOverlayHeaderVisible(ViewModel.IsControlsVisible, ViewModel.IsEmbedded, ViewModel.Presentation), Mode=OneWay}">
                 <Grid.Background>
@@ -952,9 +958,11 @@
                         <ComboBox
                             x:Name="SubtitleFontComboBox"
                             HorizontalAlignment="Stretch"
+                            DropDownOpened="OnSubtitleFontDropDownOpened"
                             IsEnabled="{x:Bind ViewModel.IsSubtitleEnabled, Mode=OneWay}"
                             ItemsSource="{x:Bind ViewModel.Fonts, Mode=OneWay}"
                             Loaded="OnSubtitleFontComboLoaded"
+                            PlaceholderText="{x:Bind ViewModel.SubtitleFontFamily, Mode=OneWay}"
                             SelectionChanged="OnSubtitleFontChanged"
                             SelectionChangedTrigger="Committed" />
                         <TextBlock

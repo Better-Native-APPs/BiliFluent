@@ -39,6 +39,10 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
     private long _fetchEpoch;
     private long _dismissedAppliedId;
     private long _dismissedRateId;
+    private DispatcherQueue? _queue;
+    private DispatcherQueueTimer? _appliedNoticeTimer;
+    private DispatcherQueueTimer? _feedbackTimer;
+    private (PlaybackOwner Owner, long Id, bool IsRate)? _appliedNoticeReceipt;
     private ImmutableArray<SponsorAvailability> _availability = [];
 
     private sealed class AutoFetchIntent
@@ -78,6 +82,9 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasApplied;
+
+    [ObservableProperty]
+    private bool _hasAppliedNotice;
 
     [ObservableProperty]
     private string _appliedText = string.Empty;
@@ -148,7 +155,7 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
     public SponsorRecoveryItem? PrimaryRecovery => Recoveries.FirstOrDefault();
 
     /// <summary>是否有浮层需要显示的内容.</summary>
-    public bool HasOverlayContent => IsActive && (Notices.Count > 0 || HasApplied || Recoveries.Count > 0 || HasFeedback);
+    public bool HasOverlayContent => IsActive && (Notices.Count > 0 || HasAppliedNotice || Recoveries.Count > 0 || HasFeedback);
 
     /// <summary>
     /// 在播放器所在窗口的界面线程上绑定。<paramref name="attachment"/> 必须是 <c>AttachAsync</c> 对该播放器返回的 ID。
@@ -159,10 +166,11 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         var queue = DispatcherQueue.GetForCurrentThread() ?? throw new InvalidOperationException("SponsorPlaybackBindRequiresUiThread");
         Unbind();
         _epoch++;
+        _queue = queue;
         _app = app;
         _attachment = attachment;
         _availability = app.Availability;
-        _feed = new SponsorViewFeed(app, queue, Apply);
+        _feed = new SponsorViewFeed(app, queue, Apply, (before, after) => SamePlaybackView(before, after, attachment));
         _feed.Start();
     }
 
@@ -178,14 +186,21 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         ResetFetch();
         ClearRemote();
         Clear("空降助手未连接");
+        _queue = null;
     }
 
     private void Clear(string status)
     {
+        _segmentProjection = null;
+        _noticeProjection = null;
+        ResetNotices();
         IsActive = false;
         StatusText = status;
         CanFetch = false;
         HasApplied = false;
+        CanUndo = false;
+        CanReleaseMute = false;
+        CanReportViewed = false;
         HasPending = false;
         HasProblem = false;
         HasFullLabel = false;
@@ -232,6 +247,7 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         {
             // New media/generation: drop all per-media UI feedback; nothing carries over.
             _owner = owner;
+            ResetNotices();
             ResetFetch();
             HasFeedback = false;
             ClearRemote();
@@ -251,7 +267,7 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
 
         IsActive = true;
         ProjectStatus(player);
-        ProjectNotices(controller, player);
+        ProjectNotices(controller);
         ProjectOwner(player);
         ProjectApplied(controller, owner);
         ProjectRecovery(controller);
@@ -295,11 +311,14 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
                 : player.DeliveryStatus == ApplicationStatus.Stale ? "播放状态正在变化，设置稍后生效" : string.Empty;
     }
 
-    private void ProjectNotices(SponsorControllerResult controller, SponsorPlayerView player)
+    private void ProjectNotices(SponsorControllerResult controller)
     {
         var notices = Safe(controller.Plan?.OrdinaryPlan.Notices);
         var speedUp = _settings.Policy.SkipStrategy == SponsorSkipStrategy.SpeedUp;
         var canSeek = controller.Actual?.CanSeekExactly == true;
+        if (_noticeProjection is { } previous && previous.Owner == controller.Owner
+            && previous.Strategy == _settings.Policy.SkipStrategy && previous.CanSeek == canSeek
+            && SameItems(previous.Notices, notices)) return;
         var full = notices.FirstOrDefault(n => n.Kind == SponsorNoticeKind.FullLabel && !n.Contributors.IsDefaultOrEmpty);
         HasFullLabel = full is not null;
         if (full is not null)
@@ -359,6 +378,7 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
                     break;
             }
         });
+        _noticeProjection = new(controller.Owner, notices, _settings.Policy.SkipStrategy, canSeek);
     }
 
     private static string NoticeKey(PlaybackNotice notice)
@@ -375,10 +395,17 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1508", Justification = "Receipts are populated by the controller and record with-expressions; they are not limited to their null initializers.")]
     private void ProjectApplied(SponsorControllerResult controller, PlaybackOwner owner)
     {
-        var applied = controller.AppliedId > _dismissedAppliedId && controller.Applied is { } a && a.Owner == owner && !a.WasPreview ? a : null;
-        var rate = applied is null && controller.RateReceiptId > _dismissedRateId && controller.RateReceipt is { } r && r.Owner == owner
+        var applied = controller.Applied is { } a && a.Owner == owner && !a.WasPreview ? a : null;
+        var rate = (applied is null || controller.RateReceiptId > controller.AppliedId) && controller.RateReceipt is { } r && r.Owner == owner
             && !r.ObservedCoverage.IsDefaultOrEmpty ? r : null;
+        if (rate is not null) applied = null;
         HasApplied = applied is not null || rate is not null;
+        // The panel retains the receipt and Undo; only the compact notice expires.
+        HasAppliedNotice = applied is not null && controller.AppliedId > _dismissedAppliedId
+            || rate is not null && controller.RateReceiptId > _dismissedRateId;
+        if (HasAppliedNotice)
+            ArmAppliedNotice(owner, applied is not null ? controller.AppliedId : controller.RateReceiptId, rate is not null);
+        else StopAppliedNoticeTimer();
         CanUndo = applied?.Kind == SponsorEffectKind.SeekInterval;
         // Release follows the actual current lease capability, not the presence of an old HoldMute receipt.
         CanReleaseMute = _releaseMuteAvailable;
@@ -415,19 +442,29 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
             AppliedText = $"已以 {rate.Target:0.#}× 加速播放{SponsorUiText.CategoryTitle(category)}";
         }
 
-        if (_admittedBaseline is { } baseline && (controller.AppliedId > baseline.Applied || controller.RateReceiptId > baseline.Rate))
-        {
-            _admittedBaseline = null;
-            HasFeedback = false;
-        }
+        ProjectRequestFeedback(controller);
 
         var op = controller.Operation;
-        HasPending = op is { Purpose: NativeAdmissionPurpose.Sponsor, Phase: SponsorOperationPhase.Pending or SponsorOperationPhase.SucceededUnobserved };
-        PendingText = op?.Phase == SponsorOperationPhase.SucceededUnobserved ? "已执行，正在确认…" : HasPending ? "正在处理…" : string.Empty;
+        HasPending = controller.RequestResult?.Phase == SponsorRequestPhase.Pending
+            || op is { Purpose: NativeAdmissionPurpose.Sponsor, Phase: SponsorOperationPhase.Pending or SponsorOperationPhase.SucceededUnobserved }
+            || controller.MuteLease is { Phase: PlaybackLeasePhase.Pending or PlaybackLeasePhase.SucceededUnobserved }
+            || controller.RateLease is { Phase: PlaybackLeasePhase.Pending or PlaybackLeasePhase.SucceededUnobserved }
+            || HasPendingSeek(Safe<SponsorSeekStatus>(controller.SeekClaims));
+        PendingText = !HasPending ? string.Empty : op?.Phase == SponsorOperationPhase.Pending ? "正在处理…" : "已执行，正在确认…";
     }
 
     private void ProjectRecovery(SponsorControllerResult controller)
     {
+        var claims = Safe<SponsorSeekStatus>(controller.SeekClaims);
+        var failedSeek = false;
+        foreach (var claim in claims)
+            if (claim.Phase is SponsorOperationPhase.Failed or SponsorOperationPhase.Unknown) { failedSeek = true; break; }
+        if (!failedSeek && controller.MuteLease is not { Phase: PlaybackLeasePhase.Failed or PlaybackLeasePhase.Unknown }
+            && controller.RateLease is not { Phase: PlaybackLeasePhase.Failed or PlaybackLeasePhase.Unknown })
+        {
+            if (Recoveries.Count > 0) Recoveries.Clear();
+            return;
+        }
         var items = new List<(string Key, string Title, string Detail, string Action, PlaybackLeaseField? Field, string Token)>();
         if (controller.MuteLease is { Phase: PlaybackLeasePhase.Failed or PlaybackLeasePhase.Unknown } mute)
         {
@@ -439,10 +476,12 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
             items.Add(("rate|" + rate.Token, "播放速度未能确认", "为避免误改你的速度，已停止自动加速。确认后会按播放器的实际状态恢复。", "检查并恢复", PlaybackLeaseField.Rate, rate.Token));
         }
 
-        foreach (var seek in Safe<SponsorSeekStatus>(controller.SeekClaims)
-            .Where(s => s.Phase is SponsorOperationPhase.Failed or SponsorOperationPhase.Unknown).Take(4))
+        var seekCount = 0;
+        foreach (var seek in claims)
         {
+            if (seek.Phase is not (SponsorOperationPhase.Failed or SponsorOperationPhase.Unknown)) continue;
             items.Add(("seek|" + seek.Token, "跳转结果未知", "不会自动重试。确认后以当前位置为准（不计为已跳过）。", "以当前位置为准", null, seek.Token));
+            if (++seekCount == 4) break;
         }
 
         SponsorKeyedSync.Sync(Recoveries, items.Select(i => i.Key).ToList(), key => new SponsorRecoveryItem(key, RunRecoveryAsync), (item, i) =>
@@ -460,7 +499,12 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         var raw = Safe<SponsorSegment>(player.RawSegments);
         var plan = controller.Plan?.OrdinaryPlan;
         var markers = Safe(plan?.Markers);
-        var diagnostics = Safe(plan?.Diagnostics);
+        var diagnostics = plan?.Selection?.Diagnostics ?? Safe(plan?.Diagnostics);
+        var duration = controller.Actual?.Duration;
+        if (_segmentProjection is { } previous && previous.Owner == owner && previous.Raw.Equals(raw)
+            && ReferenceEquals(previous.Settings, _settings) && ReferenceEquals(previous.Selection, plan?.Selection)
+            && SameItems(previous.Markers, markers) && SameItems(previous.Diagnostics, diagnostics)
+            && Nullable.Equals(previous.Duration, duration) && previous.Availability.Equals(_availability)) return;
         var facts = _settings.FactsFor(owner.Media);
         var remote = _availability.FirstOrDefault(a => a.Feature == SponsorFeature.VoteUpDown);
         var remoteOk = remote?.Available == true && _settings.NetworkEnabled;
@@ -502,7 +546,6 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
             item.IsDimmed = marker is null;
         });
 
-        var duration = controller.Actual?.Duration;
         var built = new List<SponsorTimelineMarkerItem>();
         if (duration is double total && double.IsFinite(total) && total > 0)
         {
@@ -523,13 +566,20 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         }
 
         SetMarkers(built, duration ?? 0);
+        _segmentProjection = new(owner, raw, _settings, plan?.Selection, markers, diagnostics, duration, _availability);
     }
 
     private void SetMarkers(IReadOnlyList<SponsorTimelineMarkerItem> markers, double duration)
     {
-        var changed = markers.Count != Markers.Count || duration != TimelineDuration
-            || markers.Where((m, i) => m.StartRatio != Markers[i].StartRatio || m.EndRatio != Markers[i].EndRatio
-                || m.CategoryColor != Markers[i].CategoryColor || m.IsDimmed != Markers[i].IsDimmed).Any();
+        var changed = markers.Count != Markers.Count || duration != TimelineDuration;
+        for (var i = 0; !changed && i < markers.Count; i++)
+        {
+            var marker = markers[i];
+            var previous = Markers[i];
+            changed = marker.StartRatio != previous.StartRatio || marker.EndRatio != previous.EndRatio
+                || marker.CategoryColor != previous.CategoryColor || marker.IsDimmed != previous.IsDimmed
+                || marker.IsPoint != previous.IsPoint || marker.ToolTip != previous.ToolTip;
+        }
         if (!changed)
         {
             return;
@@ -688,27 +738,129 @@ public sealed partial class SponsorPlaybackViewModel : ObservableObject
         }
     }
 
-    private void Feedback(string text)
+    private void ResetNotices()
     {
+        StopAppliedNoticeTimer();
+        StopFeedbackTimer();
+        _appliedNoticeReceipt = null;
+        _dismissedAppliedId = _dismissedRateId = 0;
+        _admittedBaseline = null;
+        _requestFeedbackId = null;
+        HasAppliedNotice = false;
+        HasPending = false;
+        PendingText = string.Empty;
+        FeedbackText = string.Empty;
+        HasFeedback = false;
+    }
+
+    private void ArmAppliedNotice(PlaybackOwner owner, long id, bool isRate)
+    {
+        var receipt = (owner, id, isRate);
+        if (_appliedNoticeReceipt == receipt || _queue is not { } queue) return;
+        StopAppliedNoticeTimer();
+        _appliedNoticeReceipt = receipt;
+        var timer = _appliedNoticeTimer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(4);
+        timer.IsRepeating = false;
+        timer.Tick += OnAppliedNoticeTimerTick;
+        timer.Start();
+    }
+
+    private void StopAppliedNoticeTimer()
+    {
+        if (_appliedNoticeTimer is not { } timer) return;
+        _appliedNoticeTimer = null;
+        timer.Stop();
+        timer.Tick -= OnAppliedNoticeTimerTick;
+    }
+
+    private void OnAppliedNoticeTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        // A queued tick from the old timer must never dismiss a newer receipt or media owner.
+        if (!ReferenceEquals(sender, _appliedNoticeTimer) || _appliedNoticeReceipt is not { } receipt) return;
+        StopAppliedNoticeTimer();
+        if (receipt.Owner != _owner) return;
+        if (receipt.IsRate) _dismissedRateId = receipt.Id;
+        else _dismissedAppliedId = receipt.Id;
+        HasAppliedNotice = false;
+        RaiseOverlay();
+    }
+
+    private void ProjectRequestFeedback(SponsorControllerResult controller)
+    {
+        if (_requestFeedbackId is { } feedbackId && controller.RequestResult is { Phase: SponsorRequestPhase.Completed } completed
+            && completed.Id == feedbackId) DismissFeedback();
+        if (_admittedBaseline is not { } baseline) return;
+        if (baseline.RequestId is { } id)
+        {
+            if (controller.RequestResult is not { } result || result.Id != id || result.Phase == SponsorRequestPhase.Pending) return;
+            _admittedBaseline = null;
+            if (result.Phase != SponsorRequestPhase.Completed) Feedback(result.Reason switch
+            {
+                "TargetNotCurrentInterval" => "已不在该片段中，未跳过",
+                "PlaybackRequestExpired" or "PlaybackRequestSuperseded" or "SponsorAdmissionClosed" => "播放状态已变化，请再试一次",
+                "PlaybackRequestReconciled" => "已以当前位置为准（不计为已跳过）",
+                _ => "播放请求未能完成，请稍后再试",
+            }, transient: true, requestId: result.Id);
+        }
+        else if (controller.AppliedId > baseline.Applied || controller.RateReceiptId > baseline.Rate)
+        {
+            _admittedBaseline = null;
+            DismissFeedback();
+        }
+    }
+
+    private void Feedback(string text, bool transient = false, string? requestId = null)
+    {
+        StopFeedbackTimer();
+        _requestFeedbackId = requestId;
         FeedbackText = text;
         HasFeedback = !string.IsNullOrEmpty(text);
+        if (transient && HasFeedback && _queue is { } queue)
+        {
+            var timer = _feedbackTimer = queue.CreateTimer();
+            timer.Interval = TimeSpan.FromSeconds(4);
+            timer.IsRepeating = false;
+            timer.Tick += OnFeedbackTimerTick;
+            timer.Start();
+        }
+    }
+
+    private void StopFeedbackTimer()
+    {
+        if (_feedbackTimer is not { } timer) return;
+        _feedbackTimer = null;
+        timer.Stop();
+        timer.Tick -= OnFeedbackTimerTick;
+    }
+
+    private void OnFeedbackTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        if (ReferenceEquals(sender, _feedbackTimer)) DismissFeedback();
     }
 
     [RelayCommand]
-    private void DismissFeedback() => HasFeedback = false;
+    private void DismissFeedback()
+    {
+        StopFeedbackTimer();
+        _requestFeedbackId = null;
+        FeedbackText = string.Empty;
+        HasFeedback = false;
+    }
 
     partial void OnHasFeedbackChanged(bool value) => RaiseOverlay();
 
     [RelayCommand]
     private void DismissApplied()
     {
+        StopAppliedNoticeTimer();
         if (_player?.Controller is { } controller)
         {
             _dismissedAppliedId = controller.AppliedId;
             _dismissedRateId = controller.RateReceiptId;
         }
 
-        HasApplied = false;
+        HasAppliedNotice = false;
         RaiseOverlay();
     }
 }

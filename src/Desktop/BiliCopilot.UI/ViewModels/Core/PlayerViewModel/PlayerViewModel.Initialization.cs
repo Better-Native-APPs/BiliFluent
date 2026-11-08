@@ -98,6 +98,7 @@ public sealed partial class PlayerViewModel
                 if (!IsCurrentPlayback(version)) return;
                 // Cancellation cannot retract native Play/Resume already started by Replay.
                 // Keep the gate until the real operation finishes; never join _ownedWork here.
+                if (nativeReplay) await SuspendMpvDanmakuAsync();
                 if (nativeReplay || intent is null) await operation();
                 else await _sponsor!.OpaqueControlAsync(intent, operation);
                 if (IsCurrentPlayback(version))
@@ -171,6 +172,7 @@ public sealed partial class PlayerViewModel
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _closeTask = completion.Task;
         _isClosing = true;
+        HideMpvDanmaku();
         StartSponsorApplicationCleanup();
         _closeWorker = CompleteCloseAsync(completion, cancelOpening);
         return _closeTask;
@@ -207,6 +209,7 @@ public sealed partial class PlayerViewModel
         await Task.Yield(); // Publish the actual close worker before any cleanup callbacks.
         try
         {
+            if (Window is MainPlayerHost host) await host.PrepareForCloseAsync();
             await AwaitSponsorApplicationCleanupAsync();
             RetireSponsorBinding(RetirementReason.Closing);
             var media = _mediaCancellation;
@@ -290,6 +293,7 @@ public sealed partial class PlayerViewModel
             IsConnecting = true;
             RetireSponsorBinding(RetirementReason.Replacement);
             await DrainInputAndSponsorAsync(seal: true);
+            await SuspendMpvDanmakuAsync();
             request.Token.ThrowIfCancellationRequested();
             _activeMediaToken = request.Token;
             Interlocked.Increment(ref _mediaVersion);

@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Forms;
+using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
@@ -26,10 +27,13 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task DisposeCoreAsync()
     {
+        if (Window is MainPlayerHost host) await host.PrepareForCloseAsync();
         await DrainPlayerWorkAsync();
         // Decide cancellation failure before any native/host teardown, registry release or CTS disposal.
         if (_closeCancellationErrors.Count > 0)
             throw new AggregateException("Player cancellation failed; ownership retained.", _closeCancellationErrors);
+
+        await DisposeMpvDanmakuAsync();
 
         if (_playerOverlay is not null)
         {
@@ -75,11 +79,29 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         if (Player is not null)
         {
             Player.PropertyChanged -= OnPlayerPropertyChanged;
+            if (_historyResolver is not null && Player.Duration > 0)
+            {
+                // Shutdown resets these properties before MpvPlayer can save the final progress.
+                var position = Player.Position;
+                var duration = Player.Duration;
+                var state = Player.PlaybackState;
+                try
+                {
+                    await _historyResolver.SaveHistoryAsync(position, duration, state, isExiting: true);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "保存播放器退出进度失败");
+                }
+            }
+
+            await MpvShutdownHelper.QuitCoreAsync(Player.Client, logger, TimeSpan.FromSeconds(3));
             await Player.DisposeAsync();
         }
         else if (Client?.IsDisposed == false)
         {
             // MpvPlayer owns Client whenever it exists. Only partial initialization owns it here.
+            await MpvShutdownHelper.QuitCoreAsync(Client, logger, TimeSpan.FromSeconds(3));
             await Client.DisposeAsync();
         }
 

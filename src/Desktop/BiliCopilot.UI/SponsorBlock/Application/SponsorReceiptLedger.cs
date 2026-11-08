@@ -89,7 +89,6 @@ internal sealed class SponsorReceiptLedger
     }
     private bool MarkCapacity()
     {
-        if (CapacityReached) return false;
         touched = CapacityReached = true; Totals = Totals with { CapacityReached = true }; return true;
     }
     internal SponsorStatisticsArchive Export() => new(1, Totals, watermarks.Values.ToImmutableArray());

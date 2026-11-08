@@ -22,7 +22,13 @@ public sealed record PlaybackOwner(MediaIdentity Media, long Generation);
 
 /// <summary>Observation changes invalidate plans, not the visit's admitted-operation ledger.</summary>
 public sealed record PlaybackStamp(PlaybackOwner Owner, long PolicyRevision, long ObservationRevision,
-    long VisitRevision, long MuteUserEpoch, long RateUserEpoch);
+    long VisitRevision, long MuteUserEpoch, long RateUserEpoch)
+{
+    // Clicks are re-evaluated on a fresh read; progress prompts alone do not revoke their context.
+    internal bool HasSameContext(PlaybackStamp? other) => other is not null && Owner == other.Owner
+        && PolicyRevision == other.PolicyRevision && VisitRevision == other.VisitRevision
+        && MuteUserEpoch == other.MuteUserEpoch && RateUserEpoch == other.RateUserEpoch;
+}
 
 public sealed record PlaybackObservation(double Position, double? Duration, double Rate,
     SponsorPlaybackState State, SponsorMediaKind MediaKind);
@@ -127,4 +133,7 @@ public sealed record PlaybackBoundary(double Position, double DelaySeconds);
 /// <summary>IsCurrent only compares snapshot ownership/revisions, not native liveness. Invalid current input revokes mute desire.</summary>
 public sealed record PlaybackPlan(PlaybackStamp Stamp, bool IsCurrent, ImmutableArray<PlaybackEffect> Effects,
     ImmutableArray<PlaybackNotice> Notices, ImmutableArray<PlaybackMarker> Markers,
-    ImmutableArray<PlaybackDiagnostic> Diagnostics, PlaybackBoundary? NextBoundary, PlaybackChannel Channel);
+    ImmutableArray<PlaybackDiagnostic> Diagnostics, PlaybackBoundary? NextBoundary, PlaybackChannel Channel)
+{
+    internal SponsorPlaybackRules.PreparedSelection? Selection { get; init; }
+}

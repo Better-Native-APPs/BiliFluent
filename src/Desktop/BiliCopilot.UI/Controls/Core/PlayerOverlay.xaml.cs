@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Hosting;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.Controls.Player.StoreIsland;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
@@ -10,6 +11,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Richasy.MpvKernel.Core.Enums;
+using Richasy.MpvKernel.Player;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using System.ComponentModel;
@@ -18,6 +20,7 @@ using System.Windows.Input;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml.Hosting;
 using WinUIEx;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace BiliCopilot.UI.Controls.Core;
 
@@ -26,6 +29,13 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private readonly DispatcherQueueTimer _controlTimer;
     private readonly DispatcherQueueTimer _cursorTimer;
     private PlayerViewModel? _subscribedViewModel;
+    private MpvPlayer? _bottomProgressPlayer;
+    private PropertyChangedEventHandler? _bottomProgressPlayerPropertyChanged;
+    private readonly List<(UIElement Element, long VisibilityToken, long OpacityToken)> _bottomProgressVisibilitySubscriptions = [];
+    private double _lastBottomProgressPosition;
+    private bool _isBottomProgressVisible;
+    private bool _bottomProgressSynchronizationPending;
+    private bool _bottomProgressSeekPending;
     private bool _isTouch;
     private bool _isTransportInteracting;
     private bool _loaded;
@@ -116,8 +126,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         AddHandler(PointerMovedEvent, new PointerEventHandler(OnObservedPointerMoved), true);
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnObservedPointerPressed), true);
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnObservedPointerWheelChanged), true);
+        PreviewKeyDown += OnPlayerPreviewKeyDown;
         Loaded += OnLocalLoaded;
         Unloaded += OnLocalUnloaded;
+        BottomProgressBar.SizeChanged += OnBottomProgressSizeChanged;
+        BottomProgressBar.RegisterPropertyChangedCallback(ProgressBar.MaximumProperty, OnBottomProgressMaximumChanged);
     }
 
     public void ShowTip(string text, InfoType type = InfoType.Error)
@@ -211,14 +224,24 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (_loaded) return;
         _loaded = true;
         _lastPresentation = ViewModel?.Presentation ?? PlayerPresentationMode.Normal;
+        for (DependencyObject? element = BottomProgressBar; element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is not UIElement visual) continue;
+            _bottomProgressVisibilitySubscriptions.Add((visual,
+                visual.RegisterPropertyChangedCallback(VisibilityProperty, OnBottomProgressVisibilityChanged),
+                visual.RegisterPropertyChangedCallback(OpacityProperty, OnBottomProgressVisibilityChanged)));
+        }
+        OnBottomProgressVisibilityChanged(BottomProgressBar, VisibilityProperty);
         SubscribeViewModel(ViewModel);
         if (IslandTransport is not null)
         {
+            IslandTransport.InteractionStateChanged -= OnTransportInteractionChanged;
             IslandTransport.InteractionStateChanged += OnTransportInteractionChanged;
         }
 
         if (TransportControls is not null)
         {
+            TransportControls.InteractionStateChanged -= OnTransportInteractionChanged;
             TransportControls.InteractionStateChanged += OnTransportInteractionChanged;
         }
 
@@ -238,6 +261,13 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     {
         if (!_loaded) return;
         _loaded = false;
+        _isBottomProgressVisible = false;
+        foreach (var (element, visibilityToken, opacityToken) in _bottomProgressVisibilitySubscriptions)
+        {
+            element.UnregisterPropertyChangedCallback(VisibilityProperty, visibilityToken);
+            element.UnregisterPropertyChangedCallback(OpacityProperty, opacityToken);
+        }
+        _bottomProgressVisibilitySubscriptions.Clear();
         RequestHostChromeRegionUpdate();
         CancelTransportRelocation();
         CancelPendingInput();
@@ -263,6 +293,51 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         ClearTips(_ => true);
     }
 
+    private void OnTransportLoaded(object sender, RoutedEventArgs args)
+    {
+        if (!_loaded) return;
+        switch (sender)
+        {
+            case IslandTransportControls island:
+                island.InteractionStateChanged -= OnTransportInteractionChanged;
+                island.InteractionStateChanged += OnTransportInteractionChanged;
+                break;
+            case OverlayTransportControls overlay:
+                overlay.InteractionStateChanged -= OnTransportInteractionChanged;
+                overlay.InteractionStateChanged += OnTransportInteractionChanged;
+                break;
+        }
+        // The inactive bar did not exist when the overlay/SponsorBlock views were first bound.
+        if (sender is FrameworkElement bar)
+        {
+            bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+            if (_sponsorLayoutHooked) bar.SizeChanged += OnSponsorLayoutSizeChanged;
+        }
+        ApplySponsorViews();
+        OnTransportInteractionChanged(sender, false);
+    }
+
+    private void OnTransportUnloaded(object sender, RoutedEventArgs args)
+    {
+        switch (sender)
+        {
+            case IslandTransportControls island:
+                island.InteractionStateChanged -= OnTransportInteractionChanged;
+                island.CancelPendingInput();
+                island.SetSponsorTimeline(null);
+                break;
+            case OverlayTransportControls overlay:
+                overlay.InteractionStateChanged -= OnTransportInteractionChanged;
+                overlay.CancelPendingInput();
+                overlay.SetSponsorTimeline(null);
+                break;
+        }
+        // Use the sender: x:Load can already have cleared the generated named field.
+        if (sender is FrameworkElement bar) bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+        OnTransportInteractionChanged(sender, false);
+        if (_loaded) QueueSponsorChrome();
+    }
+
     protected override void OnViewModelChanged(PlayerViewModel? oldValue, PlayerViewModel? newValue)
     {
         // SponsorBlock views belong to the old player's attachment; the composer rebinds for the new one.
@@ -283,9 +358,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
     private void SubscribeViewModel(PlayerViewModel? viewModel)
     {
+        SubscribeBottomProgressPlayer(null);
         if (_subscribedViewModel is not null)
         {
             _subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _subscribedViewModel.ProgressChanged -= OnBottomProgressChanged;
             _subscribedViewModel.WarningOccurred -= OnWarningOccurred;
             _subscribedViewModel.RequestShowNextTip -= OnRequestShowNextTip;
             _subscribedViewModel.RequestHideNextTip -= OnRequestHideNextTip;
@@ -295,10 +372,90 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (viewModel is not null)
         {
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            viewModel.ProgressChanged += OnBottomProgressChanged;
             viewModel.WarningOccurred += OnWarningOccurred;
             viewModel.RequestShowNextTip += OnRequestShowNextTip;
             viewModel.RequestHideNextTip += OnRequestHideNextTip;
         }
+        SubscribeBottomProgressPlayer(viewModel);
+        SynchronizeBottomProgress(viewModel?.Player?.Position ?? 0, true);
+    }
+
+    private void SubscribeBottomProgressPlayer(PlayerViewModel? owner)
+    {
+        if (_bottomProgressPlayer is not null && _bottomProgressPlayerPropertyChanged is not null)
+        {
+            _bottomProgressPlayer.PropertyChanged -= _bottomProgressPlayerPropertyChanged;
+        }
+
+        _bottomProgressPlayer = owner?.Player;
+        _bottomProgressPlayerPropertyChanged = null;
+        _lastBottomProgressPosition = _bottomProgressPlayer?.Position ?? 0;
+        _bottomProgressSynchronizationPending = true;
+        _bottomProgressSeekPending = false;
+        if (owner is null || _bottomProgressPlayer is not { } player) return;
+
+        PropertyChangedEventHandler? handler = null;
+        handler = (sender, args) =>
+        {
+            if (!ReferenceEquals(sender, player)
+                || args.PropertyName is not (null or "" or nameof(MpvPlayer.Duration) or nameof(MpvPlayer.PlaybackState)
+                    or nameof(MpvPlayer.IsPlaybackInitialized))) return;
+            var generation = owner.MediaGeneration;
+            void SynchronizePlayer()
+            {
+                if (!_loaded || !ReferenceEquals(handler, _bottomProgressPlayerPropertyChanged)
+                    || !ReferenceEquals(owner, _subscribedViewModel) || !ReferenceEquals(owner, ViewModel)
+                    || !ReferenceEquals(player, _bottomProgressPlayer) || !ReferenceEquals(player, owner.Player)
+                    || generation != owner.MediaGeneration) return;
+                if (args.PropertyName is null or "" or nameof(MpvPlayer.PlaybackState)) _bottomProgressSeekPending = true;
+                SynchronizeBottomProgress(player.Position, true);
+            }
+
+            if (DispatcherQueue.HasThreadAccess) SynchronizePlayer();
+            else DispatcherQueue.TryEnqueue(SynchronizePlayer);
+        };
+        _bottomProgressPlayerPropertyChanged = handler;
+        player.PropertyChanged += handler;
+    }
+
+    private void OnBottomProgressVisibilityChanged(DependencyObject sender, DependencyProperty property)
+    {
+        var visible = _loaded && _bottomProgressVisibilitySubscriptions.All(subscription =>
+            subscription.Element.Visibility == Visibility.Visible && subscription.Element.Opacity > 0);
+        var becameVisible = visible && !_isBottomProgressVisible;
+        _isBottomProgressVisible = visible;
+        if (becameVisible) SynchronizeBottomProgress(ViewModel?.Player?.Position ?? 0, true);
+    }
+
+    private void OnBottomProgressMaximumChanged(DependencyObject sender, DependencyProperty property)
+        => SynchronizeBottomProgress(ViewModel?.Player?.Position ?? 0, true);
+
+    private void OnBottomProgressSizeChanged(object sender, SizeChangedEventArgs args)
+        => SynchronizeBottomProgress(ViewModel?.Player?.Position ?? 0, true);
+
+    private void OnBottomProgressChanged(object? sender, double position)
+    {
+        if (!ReferenceEquals(sender, _subscribedViewModel) || !double.IsFinite(position)) return;
+        var seekedBackwards = position < _lastBottomProgressPosition;
+        var positionChanged = position != _lastBottomProgressPosition;
+        _lastBottomProgressPosition = position;
+        var force = seekedBackwards || _bottomProgressSeekPending || _bottomProgressPlayer?.PlaybackState == MpvPlayerState.Seeking;
+        if (positionChanged) _bottomProgressSeekPending = false;
+        SynchronizeBottomProgress(position, force);
+    }
+
+    private void SynchronizeBottomProgress(double position, bool force)
+    {
+        if (force) _bottomProgressSynchronizationPending = true;
+        if (!_loaded || !_isBottomProgressVisible || !double.IsFinite(position)) return;
+        var duration = ViewModel?.Player?.Duration ?? 0;
+        // 普通播放至少移动一个像素才更新；以 0.1 秒的最小进度步长避免短视频逐帧更新.
+        var pixelStep = Math.Max(duration / Math.Max(1, BottomProgressBar.ActualWidth), 0.1);
+        if (!_bottomProgressSynchronizationPending && position > 0 && position < duration
+            && Math.Abs(BottomProgressBar.Value - position) < pixelStep) return;
+        if (BottomProgressBar.Value != position) BottomProgressBar.Value = position;
+        _bottomProgressSynchronizationPending = false;
     }
 
     /// <summary>Notify on each accepted player key, including repeat activity.</summary>
@@ -330,7 +487,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         CancelCompactHeaderDrag();
         ++_inputEpoch;
         _popups.Cancel();
-        CancelSurfaceInput();
+        CancelSurfaceInput(preserveMouseTap: false);
 
         // 取消两条传输条尚未触发的延迟调度/浮出；供关闭、失活、换媒体与模式切换复用.
         IslandTransport?.CancelPendingInput();
@@ -339,12 +496,16 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
     /// <summary>Restore physical surface input without retiring transport-owned flyouts.</summary>
     public void CancelSurfaceInput()
+        => CancelSurfaceInput(preserveMouseTap: true);
+
+    private void CancelSurfaceInput(bool preserveMouseTap)
     {
         if (RootGrid is { } root)
         {
             foreach (var panel in root.Children.OfType<PlayerInteractivePanel>())
             {
-                panel.CancelPendingInput();
+                if (preserveMouseTap) panel.CancelSurfaceInput();
+                else panel.CancelPendingInput();
             }
         }
 
@@ -353,7 +514,40 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private void RestartControlTimer()
     {
         _controlTimer.Stop();
+        _controlTimer.Interval = TimeSpan.FromMilliseconds(ViewModel?.Presentation == PlayerPresentationMode.FullScreen ? 2500 : 1500);
         if (_loaded && ViewModel?.IsControlsVisible == true && !ViewModel.IsWindowDeactivated) _controlTimer.Start();
+    }
+
+    private async void OnPlayerPreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.Handled || !_loaded || ViewModel is not { } owner || owner.IsPlaybackClosing || owner.IsConnecting
+            || owner.IsWindowDeactivated || owner.IsPlayerInputCancellationPending || owner.Client?.IsDisposed != false
+            || owner.Player?.IsPlaybackInitialized != true || owner.IsPopupVisible || owner.IsSubtitleSettingsVisible
+            || !AppToolkit.NotModifierKeyPressed() || IsEditingText(args.OriginalSource)) return;
+        IAsyncRelayCommand? command = args.Key switch
+        {
+            VirtualKey.Space => owner.PlayPauseCommand,
+            VirtualKey.F or VirtualKey.F11 => owner.ToggleFullScreenCommand,
+            VirtualKey.Escape => owner.BackToDefaultModeCommand,
+            _ => null,
+        };
+        if (command is null || (owner.IsExtraPanelVisible && args.Key != VirtualKey.Escape) || !command.CanExecute(null)) return;
+        // A focused fullscreen/volume button must not consume Space as its own activation.
+        args.Handled = true;
+        ShowControlsForInput();
+        if (args.KeyStatus.WasKeyDown) return;
+        try { await command.ExecuteAsync(null); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Player shortcut failed: {ex.Message}"); }
+    }
+
+    private bool IsEditingText(object source)
+    {
+        for (var node = source as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is TextBox or PasswordBox or RichEditBox) return true;
+            if (ReferenceEquals(node, this)) break;
+        }
+        return false;
     }
 
     private void OnTransportInteractionChanged(object? sender, bool isInteracting)
@@ -444,6 +638,17 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
+        if (e.PropertyName is null or "" or nameof(PlayerViewModel.Player))
+        {
+            SubscribeBottomProgressPlayer(_subscribedViewModel);
+            SynchronizeBottomProgress(ViewModel?.Player?.Position ?? 0, true);
+        }
+        if (e.PropertyName == nameof(PlayerViewModel.MediaGeneration))
+        {
+            _lastBottomProgressPosition = 0;
+            _bottomProgressSeekPending = false;
+            SynchronizeBottomProgress(0, true);
+        }
         if (e.PropertyName is null or "" or nameof(PlayerViewModel.Presentation)
             or nameof(PlayerViewModel.IsEmbedded) or nameof(PlayerViewModel.IsPlaybackClosing))
         {
@@ -471,6 +676,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
                 CancelPendingInput();
                 ViewModel.IsTouchControlsVisible = false;
                 _controlTimer.Stop();
+                _cursorTimer.Stop();
             }
         }
         else if (e.PropertyName == nameof(ViewModel.CurrentVolume))
@@ -493,7 +699,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
             // 模式切换：取消旧传输条的待处理调度与浮出，并按新可见性恢复计时.
             CancelPendingInput();
-            if (ViewModel.IsControlsVisible)
+            if (ViewModel.Presentation == PlayerPresentationMode.FullScreen) ShowControlsForInput(_isTouch);
+            else if (ViewModel.IsControlsVisible)
             {
                 RestartControlTimer();
             }
@@ -659,12 +866,14 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (!_isTouch)
         {
             ViewModel.Window?.HideCursor();
+            _cursorTimer.Stop();
         }
     }
 
     private void OnCursorTimerTick(DispatcherQueueTimer sender, object args)
     {
-        if (!_loaded || ViewModel is null || ViewModel.IsWindowDeactivated || ViewModel.IsPlaybackClosing)
+        if (!_loaded || ViewModel is null || ViewModel.IsWindowDeactivated || ViewModel.IsPlaybackClosing
+            || !ViewModel.IsControlsVisible)
         {
             _cursorTimer.Stop();
             return;
@@ -1139,6 +1348,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private static bool UsesOverlayTransport(PlayerPresentationMode mode)
         => mode is PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay;
 
+    // Keep the selected bar loaded during ordinary auto-hide; only mode changes swap the control tree.
+    internal static bool IsOverlayTransportLoaded(PlayerPresentationMode mode) => UsesOverlayTransport(mode);
+
+    internal static bool IsIslandTransportLoaded(PlayerPresentationMode mode) => !UsesOverlayTransport(mode);
+
     internal static bool IsFullScreenActive(bool visible, bool deactivated, bool connecting, bool closing, PlayerPresentationMode mode)
         => visible && !deactivated && !connecting && !closing && UsesOverlayTransport(mode);
 
@@ -1191,6 +1405,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
 
         _popups.Open(sender, ViewModel, _inputEpoch);
+    }
+
+    private async void OnSubtitleFontDropDownOpened(object sender, object e)
+    {
+        await ViewModel.ReloadFontsCommand.ExecuteAsync(default);
+        SubtitleFontComboBox.SelectedItem = ViewModel.Fonts.FirstOrDefault(p => p.LocalName == ViewModel.SubtitleFontFamily);
     }
 
     private void OnSubtitleFontComboLoaded(object sender, RoutedEventArgs e)

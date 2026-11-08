@@ -55,7 +55,7 @@
                     HorizontalAlignment="Left"
                     Text="空降助手"
                     Visibility="Collapsed" />
-                <sponsor:SponsorSettingsSection x:Name="SponsorSettings" Visibility="Collapsed" />
+                <sponsor:SponsorSettingsSection x:Name="SponsorSettings" x:Load="False" Visibility="Collapsed" />
                 <TextBlock
                     Margin="0,16,0,8"
                     HorizontalAlignment="Left"

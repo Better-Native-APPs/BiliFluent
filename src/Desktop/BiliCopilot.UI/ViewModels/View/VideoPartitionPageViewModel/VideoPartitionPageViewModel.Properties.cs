@@ -18,6 +18,7 @@ public sealed partial class VideoPartitionPageViewModel
     private readonly IVideoDiscoveryService _service;
     private readonly ILogger<VideoPartitionPageViewModel> _logger;
     private readonly Dictionary<Partition, VideoPartitionDetailViewModel> _partitionCache = new();
+    private readonly LinkedList<Partition> _recentPartitions = new();
 
     [ObservableProperty]
     private bool _isPartitionLoading;

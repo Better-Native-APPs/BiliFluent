@@ -19,13 +19,14 @@ public static class BilibiliDanmakuParser
     /// 从 protobuf 弹幕列表中获取弹幕.
     /// </summary>
     /// <returns>弹幕条目列表.</returns>
-    public static List<DanmakuItem> GetDanmakuList(IEnumerable<DanmakuInformation> danmakuElems, bool mergeDuplicate)
+    public static List<DanmakuItem> GetDanmakuList(IEnumerable<DanmakuInformation> danmakuElems, bool mergeDuplicate, CancellationToken cancellationToken = default)
     {
         var list = new List<DanmakuItem>();
         var duplicatedDanmakuDict = new Dictionary<string, List<DuplicatedDanmakuItem>>();
 
         foreach (var danmakuElem in danmakuElems)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var mode = DanmakuMode.Unknown;
             if (mergeDuplicate)
             {
@@ -43,6 +44,7 @@ public static class BilibiliDanmakuParser
                         var merged = false;
                         foreach (var duplicatedDanmaku in duplicatedDanmakuList)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             if (Math.Abs((int)(startMs - duplicatedDanmaku.StartMs)) <= 20000) // Merge duplicate danmaku in timeframe of 20s
                             {
                                 merged = true;
@@ -78,12 +80,14 @@ public static class BilibiliDanmakuParser
         {
             foreach (var item in list)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (item.Mode == DanmakuMode.Rolling || item.Mode == DanmakuMode.Top || item.Mode == DanmakuMode.Bottom)
                 {
                     if (duplicatedDanmakuDict.TryGetValue(item.Text, out var value))
                     {
                         foreach (var duplicatedDanmaku in value)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             if (duplicatedDanmaku.Count > 1 && item.StartMs == duplicatedDanmaku.StartMs)
                             {
                                 item.Text = $"{item.Text}\u00D7{duplicatedDanmaku.Count}";
@@ -95,7 +99,7 @@ public static class BilibiliDanmakuParser
             }
         }
 
-        BilibiliDanmakuSorter.Sort(list);
+        BilibiliDanmakuSorter.Sort(list, cancellationToken);
         return list;
     }
 
@@ -265,16 +269,17 @@ public static class BilibiliDanmakuParser
 
     private static class BilibiliDanmakuSorter
     {
-        public static void Sort(IList<DanmakuItem> list)
-            => Merge(list, 0, list.Count - 1);
+        public static void Sort(IList<DanmakuItem> list, CancellationToken cancellationToken)
+            => Merge(list, 0, list.Count - 1, cancellationToken);
 
-        private static void Merge(IList<DanmakuItem> list, int p, int r)
+        private static void Merge(IList<DanmakuItem> list, int p, int r, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (p < r)
             {
                 var mid = (p + r) / 2;
-                Merge(list, p, mid);
-                Merge(list, mid + 1, r);
+                Merge(list, p, mid, cancellationToken);
+                Merge(list, mid + 1, r, cancellationToken);
                 MergeArray(list, p, mid, r);
             }
         }

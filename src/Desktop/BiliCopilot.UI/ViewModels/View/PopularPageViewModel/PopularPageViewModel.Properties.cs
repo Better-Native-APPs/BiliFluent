@@ -14,9 +14,11 @@ namespace BiliCopilot.UI.ViewModels.View;
 /// </summary>
 public sealed partial class PopularPageViewModel
 {
+    private const int VideoCacheLimit = 120;
     private readonly IVideoDiscoveryService _service;
     private readonly ILogger<PopularPageViewModel> _logger;
-    private readonly Dictionary<IPopularSectionItemViewModel, List<VideoItemViewModel>> _videoCache = new();
+    private readonly Dictionary<IPopularSectionItemViewModel, (List<VideoItemViewModel> Videos, long Offset)> _videoCache = new();
+    private readonly HashSet<string> _videoIds = new(StringComparer.Ordinal);
 
     private long _recommendOffset;
     private long _hotOffset;

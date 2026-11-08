@@ -16,7 +16,7 @@ public sealed partial class UserSpaceService
     public async Task<MomentInformation?> GetPinnedDynamicAsync(string mid, CancellationToken token)
     {
         using var json = await GetAsync("/x/polymer/web-dynamic/v1/feed/space", mid,
-            new() { ["host_mid"] = Id(mid) }, false, token);
+            new() { ["host_mid"] = Id(mid) }, false, token).ConfigureAwait(false);
         foreach (var item in ArrayItems(Required(Data(json), "items")))
         {
             if (Text(Get(Required(item, "modules"), "module_tag"), "text") == "置顶")
@@ -77,7 +77,7 @@ public sealed partial class UserSpaceService
             if (pictures.ValueKind == JsonValueKind.Array)
             {
                 var images = ArrayItems(pictures).Select(picture => ImageUrl(Text(picture, "url") ?? Text(picture, "src")))
-                    .OfType<Uri>().Select(uri => new BiliImage(uri)).ToArray();
+                    .OfType<Uri>().Select(uri => uri.AbsoluteUri.ToImage(240, 240)).ToArray();
                 if (images.Length > 0) { data = images; type = MomentItemType.Image; }
             }
         }

@@ -76,6 +76,14 @@ public sealed partial class VideoPartitionPageViewModel : LayoutPageViewModelBas
             vm.InitializeCommand.Execute(default);
         }
 
+        _recentPartitions.Remove(partition.Data);
+        _recentPartitions.AddFirst(partition.Data);
+        if (_recentPartitions.Count > 4)
+        {
+            _partitionCache.Remove(_recentPartitions.Last!.Value);
+            _recentPartitions.RemoveLast();
+        }
+
         SettingsToolkit.WriteLocalSetting(SettingNames.VideoPartitionPageLastSelectedPartitionId, partition.Data.Id);
     }
 }

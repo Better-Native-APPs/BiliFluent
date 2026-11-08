@@ -15,6 +15,7 @@ internal sealed record ApplicationResult(ApplicationStatus Status, string? Reaso
 {
     // Command is the native mutation record, not Snapshot.Operation (which may already be Read).
     internal SponsorEditorReply? EditorReply { get; init; }
+    internal string? PlaybackRequestId { get; init; }
 }
 internal sealed record PlayerTicket(Guid Attachment, PlaybackStamp Stamp, long DraftRevision);
 internal sealed record DraftSelection(string LocalDraftId, string Revision);

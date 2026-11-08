@@ -32,6 +32,7 @@ public sealed partial class NotificationViewModel : ViewModelBase
         var isNotifyEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsNotificationEnabled, true);
         if (!isNotifyEnabled)
         {
+            _timer?.Stop();
             return;
         }
 
@@ -49,6 +50,24 @@ public sealed partial class NotificationViewModel : ViewModelBase
 
         await InitializeCommand.ExecuteAsync(default);
         TrySendVideoMomentNotificationsCommand.Execute(default);
+    }
+
+    [RelayCommand]
+    private void SetPollingEnabled(bool isEnabled)
+    {
+        if (_timer is null || _timer.IsEnabled == isEnabled)
+        {
+            return;
+        }
+
+        if (isEnabled)
+        {
+            _timer.Start();
+        }
+        else
+        {
+            _timer.Stop();
+        }
     }
 
     [RelayCommand]

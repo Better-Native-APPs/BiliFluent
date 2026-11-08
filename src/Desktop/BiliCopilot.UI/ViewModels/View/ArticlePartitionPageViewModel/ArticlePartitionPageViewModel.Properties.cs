@@ -18,6 +18,7 @@ public sealed partial class ArticlePartitionPageViewModel
     private readonly IArticleDiscoveryService _service;
     private readonly ILogger<ArticlePartitionPageViewModel> _logger;
     private readonly Dictionary<Partition, ArticlePartitionDetailViewModel> _partitionCache = new();
+    private readonly LinkedList<Partition> _recentPartitions = new();
 
     [ObservableProperty]
     private bool _isPartitionLoading;

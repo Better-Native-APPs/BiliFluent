@@ -194,6 +194,7 @@ public sealed partial class AppViewModel
             EmbeddedPlayer = null;
         }
         Players.Remove(vm);
+        NotifyPlaybackActivityChanged();
     }
 
     /// <summary>Explicit new independent session, never a fullscreen transfer.</summary>

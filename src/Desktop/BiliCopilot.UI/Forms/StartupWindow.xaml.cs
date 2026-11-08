@@ -48,6 +48,9 @@ public sealed partial class StartupWindow : WindowBase
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        this.Get<AppViewModel>().Windows.Remove(this);
+        Activated -= OnActivated;
+        Closed -= OnClosed;
         this.Get<StartupPageViewModel>().ExitCommand.Execute(false);
     }
 

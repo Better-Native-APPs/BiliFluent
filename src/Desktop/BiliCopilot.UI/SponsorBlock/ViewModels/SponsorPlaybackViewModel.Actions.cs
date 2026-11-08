@@ -12,7 +12,8 @@ namespace BiliCopilot.UI.SponsorBlock.ViewModels;
 /// <summary>播放动作、显式恢复、本机排除与需确认的远程操作.</summary>
 public sealed partial class SponsorPlaybackViewModel
 {
-    private (long Applied, long Rate)? _admittedBaseline;
+    private (string? RequestId, long Applied, long Rate)? _admittedBaseline;
+    private string? _requestFeedbackId;
     private RemoteRequest? _remote;
 
     [ObservableProperty]
@@ -97,9 +98,10 @@ public sealed partial class SponsorPlaybackViewModel
 
     private async Task RequestWorkAsync(PlaybackOwner? owner, PlaybackUiCommand command)
     {
-        var baseline = _player?.Controller is { } c ? (c.AppliedId, c.RateReceiptId) : (0L, 0L);
+        var epoch = _epoch;
+        var baseline = _player?.Controller is { } c ? (Applied: c.AppliedId, Rate: c.RateReceiptId) : (Applied: 0L, Rate: 0L);
         var result = await RunTicketedAsync(owner, (app, ticket) => app.RequestPlaybackAsync(ticket, command));
-        if (result is null)
+        if (result is null || epoch != _epoch || owner != _owner)
         {
             return;
         }
@@ -107,12 +109,15 @@ public sealed partial class SponsorPlaybackViewModel
         if (result.Status is ApplicationStatus.Success or ApplicationStatus.Pending)
         {
             // Admitted/pending only. The applied card appears when N3 publishes an actual receipt.
-            _admittedBaseline = baseline;
-            Feedback("已发出请求，等待播放器确认");
+            _admittedBaseline = (result.PlaybackRequestId, baseline.Applied, baseline.Rate);
+            Feedback("已发出请求，等待播放器确认", transient: result.PlaybackRequestId is null, requestId: result.PlaybackRequestId);
+            // The receipt/rejection may have reached the feed before admission returned.
+            if (_player?.Controller is { } current) ProjectRequestFeedback(current);
         }
         else
         {
-            Feedback(SponsorUiText.Result(result));
+            _admittedBaseline = null;
+            Feedback(SponsorUiText.Result(result), transient: true);
         }
     }
 

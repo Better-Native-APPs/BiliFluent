@@ -166,7 +166,7 @@ public partial class App : Application
             _ = Directory.CreateDirectory(fullPath);
 
             instance.Activated += OnInstanceActivated;
-            Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = false;
+            Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = false; // true 会为每张图新建 CanvasDevice 并做 GPU→CPU→GPU 拷贝，在弱核显上更费；false 时 LoadAsync 本身已是异步。
             GlobalDependencies.Initialize();
             InitializeNotificationRouting();
             if (activatedArgs is not null) CaptureActivation(activatedArgs, initial: true);

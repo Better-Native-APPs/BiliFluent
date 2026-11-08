@@ -18,6 +18,7 @@ public sealed partial class FollowsPageViewModel
     private readonly ILogger<FollowsPageViewModel> _logger;
     private readonly Dictionary<UserGroup, List<UserItemViewModel>> _userCache = new();
     private readonly Dictionary<UserGroup, int> _offsetCache = new();
+    private readonly LinkedList<UserGroup> _recentGroups = new();
 
     [ObservableProperty]
     private bool _isGroupLoading;

@@ -118,234 +118,242 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="LayoutGrid">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition />
-            <!--
-                Row 2: SponsorBlock close-recovery space. Auto: zero height while the bar is collapsed, and only as tall
-                as the bar while it is visible. It sits OUTSIDE NavigationView (Row 1), so the embedded video slot
-                and the native render window that MainPlayerHost positions to it can never overlap it.
-            -->
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
-        <!--
-            App-owned main title bar. It keeps the shared bar's layout (48 high, system caption-button insets,
-            back | icon | title | top nav | search | footer | 20px drag strip) but publishes no native region by
-            itself: RootLayout's RootChromeRegionAuthority is the one writer, and only while this row is shown.
-        -->
+    <Grid x:Name="WindowLayout">
         <Grid
-            x:Name="MainTitleBar"
-            Height="48"
-            Background="Transparent"
-            SizeChanged="OnChromeSizeChanged">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="ChromeLeftInsetColumn" Width="0" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="ChromeRightInsetColumn" Width="0" />
-            </Grid.ColumnDefinitions>
-            <Grid Grid.Column="1">
+            x:Name="LayoutGrid"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition />
+                <!--
+                    Row 2: SponsorBlock close-recovery space. Auto: zero height while the bar is collapsed, and only as tall
+                    as the bar while it is visible. It sits OUTSIDE NavigationView (Row 1), so normal embedded playback
+                    cannot overlap it. Fullscreen covers the client area; close preparation removes that layer first.
+                -->
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--
+                App-owned main title bar. It keeps the shared bar's layout (48 high, system caption-button insets,
+                back | icon | title | top nav | search | footer | 20px drag strip) but publishes no native region by
+                itself: RootLayout's RootChromeRegionAuthority is the one writer, and only while this row is shown.
+            -->
+            <Grid
+                x:Name="MainTitleBar"
+                Height="48"
+                Background="Transparent"
+                SizeChanged="OnChromeSizeChanged">
                 <Grid.ColumnDefinitions>
-                    <!--  0: Back  -->
-                    <ColumnDefinition Width="Auto" />
-                    <!--  1: Icon  -->
-                    <ColumnDefinition Width="Auto" />
-                    <!--  2: Title  -->
-                    <ColumnDefinition Width="Auto" />
-                    <!--  3: Top navigation  -->
-                    <ColumnDefinition Width="Auto" />
-                    <!--  4: Search  -->
-                    <ColumnDefinition x:Name="ChromeSearchColumn" Width="*" />
-                    <!--  5: Footer  -->
-                    <ColumnDefinition Width="Auto" />
-                    <!--  6: Minimum drag strip  -->
-                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition x:Name="ChromeLeftInsetColumn" Width="0" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="ChromeRightInsetColumn" Width="0" />
                 </Grid.ColumnDefinitions>
+                <Grid Grid.Column="1">
+                    <Grid.ColumnDefinitions>
+                        <!--  0: Back  -->
+                        <ColumnDefinition Width="Auto" />
+                        <!--  1: Icon  -->
+                        <ColumnDefinition Width="Auto" />
+                        <!--  2: Title  -->
+                        <ColumnDefinition Width="Auto" />
+                        <!--  3: Top navigation  -->
+                        <ColumnDefinition Width="Auto" />
+                        <!--  4: Search  -->
+                        <ColumnDefinition x:Name="ChromeSearchColumn" Width="*" />
+                        <!--  5: Footer  -->
+                        <ColumnDefinition Width="Auto" />
+                        <!--  6: Minimum drag strip  -->
+                        <ColumnDefinition Width="20" />
+                    </Grid.ColumnDefinitions>
 
-                <!--  Same native reposition motion the Store title bar used when Back appears or the title collapses.  -->
-                <Grid.ChildrenTransitions>
-                    <RepositionThemeTransition IsStaggeringEnabled="False" />
-                </Grid.ChildrenTransitions>
+                    <!--  Same native reposition motion the Store title bar used when Back appears or the title collapses.  -->
+                    <Grid.ChildrenTransitions>
+                        <RepositionThemeTransition IsStaggeringEnabled="False" />
+                    </Grid.ChildrenTransitions>
 
-                <Button
-                    x:Name="ChromeBackButton"
-                    AccessKey="B"
-                    AutomationProperties.Name="{ext:Locale Name=Back}"
-                    Click="OnBackRequested"
-                    SizeChanged="OnChromePartSizeChanged"
-                    Style="{StaticResource RootChromeBackButtonStyle}"
-                    ToolTipService.ToolTip="{ext:Locale Name=Back}"
-                    Visibility="Collapsed">
-                    <Button.KeyboardAccelerators>
-                        <!--  Same accelerator as the replaced bar (Backspace while the back button is shown).  -->
-                        <KeyboardAccelerator Key="Back" />
-                    </Button.KeyboardAccelerators>
-                </Button>
+                    <Button
+                        x:Name="ChromeBackButton"
+                        AccessKey="B"
+                        AutomationProperties.Name="{ext:Locale Name=Back}"
+                        Click="OnBackRequested"
+                        SizeChanged="OnChromePartSizeChanged"
+                        Style="{StaticResource RootChromeBackButtonStyle}"
+                        ToolTipService.ToolTip="{ext:Locale Name=Back}"
+                        Visibility="Collapsed">
+                        <Button.KeyboardAccelerators>
+                            <!--  Same accelerator as the replaced bar (Backspace while the back button is shown).  -->
+                            <KeyboardAccelerator Key="Back" />
+                        </Button.KeyboardAccelerators>
+                    </Button>
 
-                <Viewbox
-                    Grid.Column="1"
-                    MaxWidth="20"
-                    MaxHeight="20"
-                    Margin="16,0,0,0"
-                    VerticalAlignment="Center"
-                    IsHitTestVisible="False">
-                    <ImageIcon Source="ms-appx:///Assets/StoreLogo.png" />
-                </Viewbox>
-
-                <base:TrimTextBlock
-                    x:Name="ChromeTitle"
-                    Grid.Column="2"
-                    MinWidth="48"
-                    Margin="12,0,8,0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                    IsHitTestVisible="False"
-                    MaxLines="1"
-                    Text="{ext:Locale Name=AppName}" />
-
-                <StackPanel
-                    x:Name="HeaderHost"
-                    Grid.Column="3"
-                    Margin="8,0,0,0"
-                    VerticalAlignment="Center"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    CornerRadius="{StaticResource ControlCornerRadius}"
-                    Orientation="Horizontal"
-                    SizeChanged="OnChromePartSizeChanged"
-                    Spacing="2">
-                    <components:TopNavigationItem
-                        Click="OnFavoriteButtonClick"
-                        IsSelected="{x:Bind ViewModel.IsFavoritesPage, Mode=OneWay}"
-                        Symbol="StarLineHorizontal3"
-                        ToolTipService.ToolTip="{ext:Locale Name=MyFavorite}" />
-                    <components:TopNavigationItem
-                        Click="OnViewLaterButtonClick"
-                        IsSelected="{x:Bind ViewModel.IsViewLaterPage, Mode=OneWay}"
-                        Symbol="CalendarClock"
-                        ToolTipService.ToolTip="{ext:Locale Name=ViewLater}" />
-                    <components:TopNavigationItem
-                        Click="OnHistoryButtonClick"
-                        IsSelected="{x:Bind ViewModel.IsHistoryPage, Mode=OneWay}"
-                        Symbol="History"
-                        ToolTipService.ToolTip="{ext:Locale Name=ViewHistory}" />
-                </StackPanel>
-
-                <Grid
-                    x:Name="ChromeSearchArea"
-                    Grid.Column="4"
-                    SizeChanged="OnChromePartSizeChanged">
-                    <components:AppSearchBox
-                        x:Name="SearchBox"
-                        MinWidth="320"
-                        MaxWidth="500"
-                        Margin="20,0"
-                        HorizontalAlignment="Stretch"
+                    <Viewbox
+                        Grid.Column="1"
+                        MaxWidth="20"
+                        MaxHeight="20"
+                        Margin="16,0,0,0"
                         VerticalAlignment="Center"
-                        SizeChanged="OnChromePartSizeChanged" />
-                </Grid>
+                        IsHitTestVisible="False">
+                        <ImageIcon Source="ms-appx:///Assets/StoreLogo.png" />
+                    </Viewbox>
 
-                <StackPanel
-                    x:Name="FooterHost"
-                    Grid.Column="5"
-                    Orientation="Horizontal"
-                    SizeChanged="OnChromePartSizeChanged">
-                    <local:Pinner Margin="0,0,16,0" VerticalAlignment="Center" />
-                    <components:HeaderAccountControl />
-                </StackPanel>
+                    <base:TrimTextBlock
+                        x:Name="ChromeTitle"
+                        Grid.Column="2"
+                        MinWidth="48"
+                        Margin="12,0,8,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        IsHitTestVisible="False"
+                        MaxLines="1"
+                        Text="{ext:Locale Name=AppName}" />
+
+                    <StackPanel
+                        x:Name="HeaderHost"
+                        Grid.Column="3"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="{StaticResource ControlCornerRadius}"
+                        Orientation="Horizontal"
+                        SizeChanged="OnChromePartSizeChanged"
+                        Spacing="2">
+                        <components:TopNavigationItem
+                            Click="OnFavoriteButtonClick"
+                            IsSelected="{x:Bind ViewModel.IsFavoritesPage, Mode=OneWay}"
+                            Symbol="StarLineHorizontal3"
+                            ToolTipService.ToolTip="{ext:Locale Name=MyFavorite}" />
+                        <components:TopNavigationItem
+                            Click="OnViewLaterButtonClick"
+                            IsSelected="{x:Bind ViewModel.IsViewLaterPage, Mode=OneWay}"
+                            Symbol="CalendarClock"
+                            ToolTipService.ToolTip="{ext:Locale Name=ViewLater}" />
+                        <components:TopNavigationItem
+                            Click="OnHistoryButtonClick"
+                            IsSelected="{x:Bind ViewModel.IsHistoryPage, Mode=OneWay}"
+                            Symbol="History"
+                            ToolTipService.ToolTip="{ext:Locale Name=ViewHistory}" />
+                    </StackPanel>
+
+                    <Grid
+                        x:Name="ChromeSearchArea"
+                        Grid.Column="4"
+                        SizeChanged="OnChromePartSizeChanged">
+                        <components:AppSearchBox
+                            x:Name="SearchBox"
+                            MinWidth="320"
+                            MaxWidth="500"
+                            Margin="20,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            SizeChanged="OnChromePartSizeChanged" />
+                    </Grid>
+
+                    <StackPanel
+                        x:Name="FooterHost"
+                        Grid.Column="5"
+                        Orientation="Horizontal"
+                        SizeChanged="OnChromePartSizeChanged">
+                        <local:Pinner Margin="0,0,16,0" VerticalAlignment="Center" />
+                        <components:HeaderAccountControl />
+                    </StackPanel>
+                </Grid>
             </Grid>
+
+            <NavigationView
+                x:Name="NavView"
+                Grid.Row="1"
+                FooterMenuItemsSource="{x:Bind ViewModel.FooterItems, Mode=OneWay}"
+                ItemInvoked="OnNavViewItemInvoked"
+                MenuItemTemplate="{StaticResource AppNavItemTemplate}"
+                MenuItemsSource="{x:Bind ViewModel.MenuItems, Mode=OneWay}"
+                SelectionFollowsFocus="Disabled"
+                Style="{StaticResource MainNavigationViewStyle}">
+                <Grid x:Name="MainGrid">
+                    <Grid Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                        <Grid x:Name="NavigationContentHost">
+                            <local:MainFrame x:Name="MainFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+                            <local:OverlayFrame x:Name="OverlayFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay}" />
+                        </Grid>
+                        <animations:Implicit.ShowAnimations>
+                            <animations:OpacityAnimation
+                                From="0"
+                                To="1"
+                                Duration="0:0:0.26" />
+                        </animations:Implicit.ShowAnimations>
+                    </Grid>
+                    <components:ShimmerLayout
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        IsActive="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}"
+                        Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}">
+                        <animations:Implicit.HideAnimations>
+                            <animations:OpacityAnimation
+                                From="1"
+                                To="0"
+                                Duration="0:0:0.26" />
+                        </animations:Implicit.HideAnimations>
+                    </components:ShimmerLayout>
+                </Grid>
+            </NavigationView>
+
+            <TeachingTip
+                Title="{ext:Locale Name=HasUpdate}"
+                Grid.Row="1"
+                MinWidth="320"
+                ActionButtonClick="OnUpdateActionButtonClick"
+                ActionButtonContent="{ext:Locale Name=OpenUpdate}"
+                CloseButtonClick="OnUpdateCloseButtonClick"
+                IsLightDismissEnabled="False"
+                IsOpen="{x:Bind _appViewModel.IsUpdateShown, Mode=OneWay}"
+                PlacementMargin="0,20,0,0"
+                PreferredPlacement="RightTop"
+                Subtitle="{ext:Locale Name=HasUpdateDescription}">
+                <TeachingTip.IconSource>
+                    <ic:SymbolIconSource
+                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                        IconVariant="Filled"
+                        Symbol="CheckmarkCircle" />
+                </TeachingTip.IconSource>
+            </TeachingTip>
+
+            <!--
+                SponsorBlock local-save recovery during quit (app-wide, reachable without opening settings). Collapsed
+                until there is an actual close result. It has its own Auto row (Row 2) beneath the content, so it does not
+                overlay any page or the embedded video. Only that row resizes, and only while the bar is shown. The title
+                row, native caption region, transitions and navigation are unchanged. It associates itself with the runtime
+                on load; RootLayout code is unchanged.
+            -->
+            <sponsor:SponsorCloseRecoveryBar
+                x:Name="SponsorCloseRecovery"
+                Grid.Row="2"
+                Margin="12,6,12,8"
+                Visibility="Collapsed" />
         </Grid>
 
-        <NavigationView
-            x:Name="NavView"
-            Grid.Row="1"
-            FooterMenuItemsSource="{x:Bind ViewModel.FooterItems, Mode=OneWay}"
-            ItemInvoked="OnNavViewItemInvoked"
-            MenuItemTemplate="{StaticResource AppNavItemTemplate}"
-            MenuItemsSource="{x:Bind ViewModel.MenuItems, Mode=OneWay}"
-            SelectionFollowsFocus="Disabled"
-            Style="{StaticResource MainNavigationViewStyle}">
-            <Grid x:Name="MainGrid">
-                <Grid Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
-                    <Grid x:Name="NavigationContentHost">
-                        <local:MainFrame x:Name="MainFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
-                        <local:OverlayFrame x:Name="OverlayFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay}" />
-                    </Grid>
-                    <player:EmbeddedPlayerView x:Name="EmbeddedPlayerHost" Visibility="Collapsed" />
-                    <Border x:Name="EmbeddedLiveHost" Visibility="Collapsed" />
-                    <animations:Implicit.ShowAnimations>
-                        <animations:OpacityAnimation
-                            From="0"
-                            To="1"
-                            Duration="0:0:0.26" />
-                    </animations:Implicit.ShowAnimations>
-                </Grid>
-                <components:ShimmerLayout
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    IsActive="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}"
-                    Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}">
-                    <animations:Implicit.HideAnimations>
-                        <animations:OpacityAnimation
-                            From="1"
-                            To="0"
-                            Duration="0:0:0.26" />
-                    </animations:Implicit.HideAnimations>
-                </components:ShimmerLayout>
+        <!--  One permanent layer; its normal bounds come from MainGrid, not the current cached page.  -->
+        <Canvas
+            Canvas.ZIndex="1"
+            Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+            <Grid
+                x:Name="EmbeddedPresentationLayer"
+                Visibility="Collapsed">
+                <player:EmbeddedPlayerView x:Name="EmbeddedPlayerHost" Visibility="Collapsed" />
+                <Border x:Name="EmbeddedLiveHost" Visibility="Collapsed" />
             </Grid>
-        </NavigationView>
-
-        <TeachingTip
-            Title="{ext:Locale Name=HasUpdate}"
-            Grid.Row="1"
-            MinWidth="320"
-            ActionButtonClick="OnUpdateActionButtonClick"
-            ActionButtonContent="{ext:Locale Name=OpenUpdate}"
-            CloseButtonClick="OnUpdateCloseButtonClick"
-            IsLightDismissEnabled="False"
-            IsOpen="{x:Bind _appViewModel.IsUpdateShown, Mode=OneWay}"
-            PlacementMargin="0,20,0,0"
-            PreferredPlacement="RightTop"
-            Subtitle="{ext:Locale Name=HasUpdateDescription}">
-            <TeachingTip.IconSource>
-                <ic:SymbolIconSource
-                    Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                    IconVariant="Filled"
-                    Symbol="CheckmarkCircle" />
-            </TeachingTip.IconSource>
-        </TeachingTip>
-
-        <!--
-            SponsorBlock local-save recovery during quit (app-wide, reachable without opening settings). Collapsed
-            until there is an actual close result. It has its own Auto row (Row 2) beneath the content, so it does not
-            overlay any page or the embedded video. Only that row resizes, and only while the bar is shown. The title
-            row, native caption region, transitions and navigation are unchanged. It associates itself with the runtime
-            on load; RootLayout code is unchanged.
-        -->
-        <sponsor:SponsorCloseRecoveryBar
-            x:Name="SponsorCloseRecovery"
-            Grid.Row="2"
-            Margin="12,6,12,8"
-            Visibility="Collapsed" />
+        </Canvas>
 
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="CommonStates">
-                <VisualState x:Name="WideState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="{StaticResource WindowNarrowMinWidth}" />
-                    </VisualState.StateTriggers>
-                </VisualState>
+                <VisualState x:Name="WideState" />
                 <VisualState x:Name="NarrowState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="0" />
-                    </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <!--
                             Title visibility is applied in code (RootLayout.ApplyChromeTitle).
-                            FullScreen/CompactOverlay collapse this whole title row; the player overlay
-                            draws its own visual-only header there.
+                            FullScreen/CompactOverlay cover this unchanged row with the top-level player layer;
+                            the player overlay draws its own visual-only header.
                         -->
                         <Setter Target="SearchBox.Margin" Value="40,0,20,0" />
                         <Setter Target="SearchBox.MinWidth" Value="100" />

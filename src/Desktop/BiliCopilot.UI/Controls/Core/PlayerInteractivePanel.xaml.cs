@@ -30,6 +30,15 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     private bool _isTouch;
     private bool _isRightButton;
     private bool _isHolding;
+    private MouseClickPlayback? _mouseClick;
+
+    private sealed class MouseClickPlayback(PlayerTapContext context, bool wasPlaying)
+    {
+        internal readonly PlayerTapContext Context = context;
+        internal readonly bool WasPlaying = wasPlaying;
+        internal bool Starting;
+        internal Task? Work;
+    }
 
     public PlayerInteractivePanel()
     {
@@ -147,10 +156,16 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
             var scale = _contactContext.Scale;
             var position = TransformToVisual(null).TransformPoint(point.Position);
             var dpi = (uint)Math.Max(1, Math.Round(96 * scale));
-            ExecuteTap(_taps.Press(_contactContext, position.X * scale, position.Y * scale, TapNow,
+            var tap = _taps.Press(_contactContext, position.X * scale, position.Y * scale, TapNow,
                 PInvoke.GetDoubleClickTime(),
                 PInvoke.GetSystemMetricsForDpi(Windows.Win32.UI.WindowsAndMessaging.SYSTEM_METRICS_INDEX.SM_CXDOUBLECLK, dpi),
-                PInvoke.GetSystemMetricsForDpi(Windows.Win32.UI.WindowsAndMessaging.SYSTEM_METRICS_INDEX.SM_CYDOUBLECLK, dpi)));
+                PInvoke.GetSystemMetricsForDpi(Windows.Win32.UI.WindowsAndMessaging.SYSTEM_METRICS_INDEX.SM_CYDOUBLECLK, dpi));
+            ExecuteTap(tap);
+            if (tap.Intent == PlayerTapIntent.Double && !_isTouch)
+            {
+                e.Handled = true;
+                return; // The double-click owns no second contact after its fullscreen command cancels surface input.
+            }
         }
         _gesture.Begin(point.Position.X, point.Position.Y, _isTouch);
         _pointerId = e.Pointer.PointerId;
@@ -297,6 +312,15 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     internal void CancelPendingInput()
         => CleanupInteractionState();
 
+    internal void CancelSurfaceInput()
+    {
+        // The first click's own canonical pause restores physical input. Keep only its double-click eligibility;
+        // focus/media/mode/close cancellation still takes the ordinary, fully retiring path above.
+        var preserve = _mouseClick is { } click && click.Context == TapContext()
+            && (click.Starting || click.Work?.IsCompleted == false);
+        CleanupInteractionState(preserveMouseTap: preserve);
+    }
+
     private void OnInputRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => CleanupInteractionState();
     private void OnSurfaceSizeChanged(object sender, SizeChangedEventArgs args) => CleanupInteractionState();
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -307,6 +331,7 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     {
         _taps.Cancel();
         _tapTimer.Stop();
+        _mouseClick = null;
     }
 
     private void SubscribeViewModel(PlayerViewModel? viewModel)
@@ -498,10 +523,37 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
             owner.IsControlsVisible = !owner.IsControlsVisible;
             return;
         }
-        var command = owner.PlayPauseCommand; // Fullscreen remains a keyboard/button action, not a mouse double click.
+        if (action.Intent == PlayerTapIntent.Double && !action.Context.Touch)
+        {
+            var click = _mouseClick;
+            _mouseClick = null;
+            var fullScreen = owner.ToggleFullScreenCommand;
+            if (!fullScreen.CanExecute(null) || !TapCurrent(action.Context)) return;
+            try
+            {
+                var presentation = fullScreen.ExecuteAsync(null);
+                var restoration = click is not null && click.Context == action.Context
+                    ? owner.RestoreMouseClickPlaybackAsync(action.Context.Generation, click.WasPlaying) : Task.CompletedTask;
+                try { await presentation; }
+                finally { await restoration; }
+            }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Player double-click failed: {ex.Message}"); }
+            return;
+        }
+        var command = owner.PlayPauseCommand;
+        if (!action.Context.Touch) _mouseClick = null;
         if (!command.CanExecute(null) || !TapCurrent(action.Context)) return;
-        try { await command.ExecuteAsync(null); }
+        var mouse = action.Context.Touch ? null : new MouseClickPlayback(action.Context, owner.Player?.IsPlaying == true);
+        if (mouse is not null) _mouseClick = mouse;
+        try
+        {
+            if (mouse is not null) mouse.Starting = true;
+            var work = command.ExecuteAsync(null);
+            if (mouse is not null) { mouse.Work = work; mouse.Starting = false; }
+            await work;
+        }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Player tap failed: {ex.Message}"); }
+        finally { if (mouse is not null) mouse.Starting = false; }
     }
 
     private bool CanSeek()
@@ -538,7 +590,7 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         }
     }
 
-    private void CleanupInteractionState(PlayerViewModel? owner = null)
+    private void CleanupInteractionState(PlayerViewModel? owner = null, bool preserveMouseTap = false)
     {
         _holdTimer.Stop();
         _tapTimer.Stop();
@@ -549,13 +601,22 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
             owner.IsPreviewProgressChanging = false;
         }
 
-        _inputEpoch++;
-        _taps.Cancel();
+        if (!preserveMouseTap)
+        {
+            _inputEpoch++;
+            _taps.Cancel();
+            _mouseClick = null;
+        }
         _pointerId = null;
         _isRightButton = false;
         _isTouch = false;
         _gesture.Reset();
         ReleasePointerCaptures();
+        if (preserveMouseTap && _taps.Pending)
+        {
+            _tapTimer.Interval = TimeSpan.FromMilliseconds(_taps.Remaining(TapNow));
+            _tapTimer.Start();
+        }
     }
 
     private void OnFlyoutOpened(object sender, object e)

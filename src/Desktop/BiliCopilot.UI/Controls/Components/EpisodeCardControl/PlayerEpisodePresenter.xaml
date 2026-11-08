@@ -21,7 +21,7 @@
             Margin="6"
             VerticalAlignment="Stretch"
             CornerRadius="4"
-            DecodeWidth="600"
+            DecodeWidth="400"
             Source="{x:Bind ViewModel.Cover, Mode=OneWay}" />
         <Border
             Margin="8"

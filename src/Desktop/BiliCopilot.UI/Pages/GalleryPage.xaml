@@ -49,12 +49,13 @@
             HorizontalScrollMode="Enabled"
             MaxZoomFactor="1.5"
             MinZoomFactor="0.2"
+            SizeChanged="OnGalleryViewportSizeChanged"
             Tapped="OnScrollViewTapped"
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Enabled"
             ViewChanged="OnScrollViewChanged"
             ZoomMode="Enabled">
-            <Image x:Name="Image" Source="{x:Bind ViewModel.SelectedImage.SourceUri, Mode=OneWay, Converter={StaticResource BitmapConverter}}" />
+            <Image x:Name="Image" Source="{x:Bind CreateGalleryBitmap(ViewModel.SelectedImage.SourceUri), Mode=OneWay}" />
         </ScrollView>
 
         <!--  用于进行图片操作  -->
@@ -209,7 +210,7 @@
                             <controls:BasicCoverImage
                                 Width="100"
                                 Height="80"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{x:Bind Uri}" />
                         </ItemContainer>
                     </DataTemplate>

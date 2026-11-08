@@ -83,7 +83,7 @@
                     Visibility="Collapsed">
                     <sponsor:SponsorTimelineBar
                         x:Name="SponsorTimeline"
-                        Height="6"
+                        Height="4"
                         Margin="9,0"
                         VerticalAlignment="Center"
                         IsHitTestVisible="False" />

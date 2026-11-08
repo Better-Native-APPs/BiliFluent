@@ -24,7 +24,7 @@
         </Grid.ColumnDefinitions>
         <controls:BasicCoverImage
             CornerRadius="{StaticResource ControlCornerRadius}"
-            DecodeWidth="600"
+            DecodeWidth="400"
             Source="{x:Bind ViewModel.Cover, Mode=OneWay}" />
         <Border
             Margin="8"

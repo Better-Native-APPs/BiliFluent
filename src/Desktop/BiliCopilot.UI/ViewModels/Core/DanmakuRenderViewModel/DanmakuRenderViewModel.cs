@@ -9,10 +9,19 @@ namespace BiliCopilot.UI.ViewModels.Core;
 
 public sealed partial class DanmakuRenderViewModel : ViewModelBase
 {
+    internal int Position => _position;
+
     public DanmakuRenderViewModel()
     {
-        Renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Win2D);
-        ReloadFontsCommand.Execute(default);
+        // The old view model persisted its Win2D default on startup, so switch once to the mpv renderer.
+        if (!SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRendererMpvMigrated, false))
+        {
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRendererMpvMigrated, true);
+        }
+
+        Renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
+        DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, "Segoe UI");
     }
 
     public void Initialize(IList<DanmakuInformation> danmakus)
@@ -42,6 +51,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     /// </summary>
     public void UpdatePosition(int position)
     {
+        if (_position == position) return;
         _position = position;
         ProgressChanged?.Invoke(this, position);
     }
@@ -85,6 +95,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     /// </summary>
     public void ClearDanmaku()
     {
+        _position = 0;
         _cachedDanmakus = default;
         ClearSponsorDanmakuData();
         RequestClearDanmaku?.Invoke(this, EventArgs.Empty);

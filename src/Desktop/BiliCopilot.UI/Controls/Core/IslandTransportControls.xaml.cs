@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Controls.Player.StoreIsland;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Player;
 using System.ComponentModel;
@@ -50,6 +51,11 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     private PlayerViewModel? _subscribedViewModel;
     private MpvPlayer? _subscribedPlayer;
     private PropertyChangedEventHandler? _playerPropertyChanged;
+    private readonly List<(UIElement Element, long VisibilityToken, long OpacityToken)> _progressVisibilitySubscriptions = [];
+    private double _lastProgressPosition;
+    private bool _isProgressVisible;
+    private bool _progressSynchronizationPending;
+    private bool _progressSeekPending;
     private PlayerViewModel? _pendingSeekOwner;
     private PlayerViewModel? _pendingSpeedOwner;
     private IslandPopupClaims.Claim? _pendingSpeedClaim;
@@ -75,6 +81,8 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         _progressChangeTimer.Tick += OnProgressChangeTick;
         Loaded += OnLocalLoaded;
         Unloaded += OnLocalUnloaded;
+        ProgressSlider.SizeChanged += OnProgressSliderSizeChanged;
+        ProgressSlider.RegisterPropertyChangedCallback(RangeBase.MaximumProperty, OnProgressMaximumChanged);
     }
 
     /// <summary>
@@ -162,6 +170,14 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     {
         if (_loaded) return;
         _loaded = true;
+        for (DependencyObject? element = ProgressSlider; element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is not UIElement visual) continue;
+            _progressVisibilitySubscriptions.Add((visual,
+                visual.RegisterPropertyChangedCallback(VisibilityProperty, OnProgressVisibilityChanged),
+                visual.RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged)));
+        }
+        OnProgressVisibilityChanged(ProgressSlider, VisibilityProperty);
         SubscribeViewModel(ViewModel);
         SynchronizeControls();
     }
@@ -171,6 +187,13 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     {
         if (!_loaded) return;
         _loaded = false;
+        _isProgressVisible = false;
+        foreach (var (element, visibilityToken, opacityToken) in _progressVisibilitySubscriptions)
+        {
+            element.UnregisterPropertyChangedCallback(VisibilityProperty, visibilityToken);
+            element.UnregisterPropertyChangedCallback(OpacityProperty, opacityToken);
+        }
+        _progressVisibilitySubscriptions.Clear();
         CancelPendingInput();
         _hasFocus = false;
         RefreshInteraction();
@@ -202,11 +225,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         try
         {
             Bindings.Update();
-            if (ViewModel?.Player is { } player)
-            {
-                ProgressSlider.Maximum = player.Duration;
-                ProgressSlider.Value = player.Position;
-            }
+            SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
         }
         finally { _synchronizingSliders = false; }
         RefreshInteraction();
@@ -291,28 +310,37 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
         _subscribedPlayer = owner?.Player;
         _playerPropertyChanged = null;
+        _lastProgressPosition = _subscribedPlayer?.Position ?? 0;
+        _progressSynchronizationPending = true;
+        _progressSeekPending = false;
         if (owner is null || _subscribedPlayer is not { } player) return;
 
         PropertyChangedEventHandler? handler = null;
         handler = (sender, args) =>
         {
             if (!ReferenceEquals(sender, player)
-                || args.PropertyName is not (null or "" or nameof(MpvPlayer.IsPlaybackInitialized))) return;
+                || args.PropertyName is not (null or "" or nameof(MpvPlayer.IsPlaybackInitialized)
+                    or nameof(MpvPlayer.Duration) or nameof(MpvPlayer.PlaybackState))) return;
             var generation = owner.MediaGeneration;
             var epoch = _inputEpoch;
-            void SynchronizeInitialization()
+            void SynchronizePlayer()
             {
                 // A queued notification belongs to this subscription, owner, media and input lifetime.
                 if (!_loaded || !ReferenceEquals(handler, _playerPropertyChanged)
                     || !ReferenceEquals(owner, _subscribedViewModel) || !ReferenceEquals(owner, ViewModel)
                     || !ReferenceEquals(player, _subscribedPlayer) || !ReferenceEquals(player, owner.Player)
                     || generation != owner.MediaGeneration || epoch != _inputEpoch) return;
-                if (!player.IsPlaybackInitialized) CancelPendingInput();
-                SynchronizeControls();
+                if (args.PropertyName is null or "" or nameof(MpvPlayer.PlaybackState)) _progressSeekPending = true;
+                if (args.PropertyName is null or "" or nameof(MpvPlayer.IsPlaybackInitialized))
+                {
+                    if (!player.IsPlaybackInitialized) CancelPendingInput();
+                    SynchronizeControls();
+                }
+                else SynchronizeProgress(player.Position, true);
             }
 
-            if (DispatcherQueue.HasThreadAccess) SynchronizeInitialization();
-            else DispatcherQueue.TryEnqueue(SynchronizeInitialization);
+            if (DispatcherQueue.HasThreadAccess) SynchronizePlayer();
+            else DispatcherQueue.TryEnqueue(SynchronizePlayer);
         };
         _playerPropertyChanged = handler;
         player.PropertyChanged += handler;
@@ -329,24 +357,65 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         }
         if (e.PropertyName == nameof(ViewModel.Player)) SubscribePlayer(_subscribedViewModel);
         if (e.PropertyName is nameof(ViewModel.IsWindowDeactivated) or nameof(ViewModel.IsConnecting)
-            or nameof(ViewModel.IsPlaybackClosing) or nameof(ViewModel.Player)) SynchronizeControls();
+            or nameof(ViewModel.IsPlaybackClosing) or nameof(ViewModel.IsControlsVisible) or nameof(ViewModel.Player)) SynchronizeControls();
+        if (e.PropertyName == nameof(ViewModel.MediaGeneration))
+        {
+            _lastProgressPosition = 0;
+            _progressSeekPending = false;
+            SynchronizeProgress(0, true);
+        }
     }
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (!ReferenceEquals(sender, _subscribedViewModel) || _progressChangeList.Count > 0 || IsInputBlocked)
-        {
-            return;
-        }
+        if (!IsActive || !_isProgressVisible || ViewModel?.IsControlsVisible != true
+            || !ReferenceEquals(sender, _subscribedViewModel) || !double.IsFinite(e)) return;
+        var seekedBackwards = e < _lastProgressPosition;
+        var positionChanged = e != _lastProgressPosition;
+        _lastProgressPosition = e;
+        var force = seekedBackwards || _progressSeekPending || _subscribedPlayer?.PlaybackState == MpvPlayerState.Seeking;
+        if (positionChanged) _progressSeekPending = false;
+        SynchronizeProgress(e, force);
+    }
 
+    private void SynchronizeProgress(double position, bool force)
+    {
+        if (force) _progressSynchronizationPending = true;
+        if (!_isProgressVisible || ViewModel?.IsControlsVisible != true || _progressChangeList.Count > 0
+            || IsInputBlocked || !double.IsFinite(position)) return;
+        var duration = ViewModel.Player.Duration;
+        var durationChanged = ProgressSlider.Maximum != duration;
+        // 与浮层底部进度条一致：至少移动一个像素，且保留 0.1 秒的最小步长.
+        var pixelStep = Math.Max(duration / Math.Max(1, ProgressSlider.ActualWidth), 0.1);
+        if (!_progressSynchronizationPending && !durationChanged && position > 0 && position < duration
+            && Math.Abs(ProgressSlider.Value - position) < pixelStep) return;
+        var wasSynchronizing = _synchronizingSliders;
         _synchronizingSliders = true;
         try
         {
-            if (ProgressSlider.Maximum != ViewModel.Player.Duration) ProgressSlider.Maximum = ViewModel.Player.Duration;
-            if (ProgressSlider.Value != e && double.IsFinite(e)) ProgressSlider.Value = e;
+            if (durationChanged) ProgressSlider.Maximum = duration;
+            if (ProgressSlider.Value != position) ProgressSlider.Value = position;
+            _progressSynchronizationPending = false;
         }
-        finally { _synchronizingSliders = false; }
+        finally { _synchronizingSliders = wasSynchronizing; }
     }
+
+    private void OnProgressVisibilityChanged(DependencyObject sender, DependencyProperty property)
+    {
+        var visible = _loaded && _progressVisibilitySubscriptions.All(subscription =>
+            subscription.Element.Visibility == Visibility.Visible && subscription.Element.Opacity > 0);
+        var becameVisible = visible && !_isProgressVisible;
+        _isProgressVisible = visible;
+        if (becameVisible) SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
+    }
+
+    private void OnProgressMaximumChanged(DependencyObject sender, DependencyProperty property)
+    {
+        if (!_synchronizingSliders) SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
+    }
+
+    private void OnProgressSliderSizeChanged(object sender, SizeChangedEventArgs args)
+        => SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
 
     private void OnProgressSliderValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {

@@ -47,7 +47,10 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private bool _hasFocus;
     private bool _cancelingInput;
     private PlayerViewModel? _subscribedViewModel;
+    private INotifyPropertyChanged? _subscribedPlayer;
+    private double _lastProgressPosition;
     private readonly HashSet<uint> _contacts = [];
+    private readonly HashSet<uint> _progressContacts = [];
     private readonly IslandPopupClaims _popups = new();
     private bool _isFirstChangeVolume = true;
 
@@ -63,6 +66,9 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         _speedRefreshTimer.Tick += OnSpeedRefreshTick;
         _volumeCorrectionTimer.Tick += OnVolumeCorrectionTick;
         InitializeComponent();
+        RegisterPropertyChangedCallback(VisibilityProperty, OnProgressVisibilityChanged);
+        RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
+        RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
         DanmakuOptionsTip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, OnDanmakuOptionsOpenChanged);
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnContactStarted), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler(OnContactEnded), true);
@@ -146,6 +152,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             old.PropertyChanged -= OnViewModelPropertyChanged;
         }
         _subscribedViewModel = viewModel;
+        SubscribePlayer(viewModel?.Player);
         if (viewModel is not null)
         {
             viewModel.ProgressChanged += OnViewModelProgressChanged;
@@ -156,7 +163,12 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
-        if (args.PropertyName == nameof(PlayerViewModel.MediaGeneration)
+        if (args.PropertyName == nameof(PlayerViewModel.Player))
+        {
+            SubscribePlayer(_subscribedViewModel?.Player);
+            SynchronizeControls();
+        }
+        else if (args.PropertyName == nameof(PlayerViewModel.MediaGeneration)
             || (args.PropertyName == nameof(PlayerViewModel.IsConnecting) && _subscribedViewModel!.IsConnecting))
         {
             CancelPendingInput();
@@ -169,6 +181,33 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             else SynchronizeControls();
         }
         IsEnabled = CaptureInput().HasValue;
+    }
+
+    private void SubscribePlayer(INotifyPropertyChanged? player)
+    {
+        if (ReferenceEquals(_subscribedPlayer, player)) return;
+        if (_subscribedPlayer is not null) _subscribedPlayer.PropertyChanged -= OnPlayerPropertyChanged;
+        _subscribedPlayer = player;
+        if (player is not null) player.PropertyChanged += OnPlayerPropertyChanged;
+    }
+
+    private void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is not (nameof(ViewModel.Player.PlaybackState)
+            or nameof(ViewModel.Player.Duration) or nameof(ViewModel.Player.IsPlaybackInitialized))) return;
+        // Kernel property notifications can arrive off the UI thread. State/seek changes bypass pixel filtering.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ReferenceEquals(sender, _subscribedPlayer) && CaptureInput() is { } owner)
+                SynchronizeProgress(owner.ViewModel.Player.Position, true);
+        });
+    }
+
+    private void OnProgressVisibilityChanged(DependencyObject sender, DependencyProperty property)
+    {
+        if (!_loaded) return;
+        if (Visibility != Visibility.Visible || Opacity <= 0) CancelPendingInput();
+        else if (CaptureInput() is { } owner) SynchronizeProgress(owner.ViewModel.Player.Position, true);
     }
 
     private InputOwner? CaptureInput()
@@ -192,8 +231,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             SubtitleRepeater.ItemsSource = ViewModel?.Subtitles;
             if (ViewModel?.Player is { } player)
             {
-                ProgressSlider.Maximum = player.Duration;
-                ProgressSlider.Value = player.Position;
+                SynchronizeProgress(player.Position, true);
             }
         }
         finally { _synchronizingSliders = false; }
@@ -221,6 +259,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             if (_volumeCorrectionOwner.HasValue) _isFirstChangeVolume = true;
             _pendingSpeedOwner = _pendingProgressOwner = _speedRefreshOwner = _volumeCorrectionOwner = null;
             _contacts.Clear();
+            _progressContacts.Clear();
             ResetProgressPreview();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
@@ -261,12 +300,21 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     {
         if (!_loaded || !IsActive) return;
         _contacts.Add(args.Pointer.PointerId);
+        for (var element = args.OriginalSource as DependencyObject; element is not null && !ReferenceEquals(element, this);
+            element = VisualTreeHelper.GetParent(element))
+        {
+            if (!ReferenceEquals(element, ProgressSlider)) continue;
+            _progressContacts.Add(args.Pointer.PointerId);
+            break;
+        }
         UpdateInteractionState();
     }
 
     private void OnContactEnded(object sender, PointerRoutedEventArgs args)
     {
         _contacts.Remove(args.Pointer.PointerId);
+        if (_progressContacts.Remove(args.Pointer.PointerId) && CaptureInput() is { } owner)
+            SynchronizeProgress(owner.ViewModel.Player.Position, true);
         UpdateInteractionState();
     }
 
@@ -333,16 +381,30 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (CaptureInput() is not { } owner || !ReferenceEquals(sender, owner.ViewModel)
-            || _pendingProgressOwner.HasValue || !double.IsFinite(e)) return;
+        if (!IsActive || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+            || ViewModel?.IsControlsVisible != true || !ReferenceEquals(sender, _subscribedViewModel)) return;
+        var seekedBackwards = e < _lastProgressPosition;
+        _lastProgressPosition = e;
+        SynchronizeProgress(e, seekedBackwards);
+    }
+
+    private void SynchronizeProgress(double position, bool force)
+    {
+        if (CaptureInput() is not { } owner || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+            || _pendingProgressOwner.HasValue || _progressContacts.Count > 0 || !double.IsFinite(position)) return;
+        var duration = owner.ViewModel.Player.Duration;
+        var durationChanged = ProgressSlider.Maximum != duration;
+        var pixelStep = duration / Math.Max(1, ProgressSlider.ActualWidth);
+        if (!force && !durationChanged && position > 0 && position < duration
+            && Math.Abs(ProgressSlider.Value - position) < pixelStep) return;
+        var wasSynchronizing = _synchronizingSliders;
         _synchronizingSliders = true;
         try
         {
-            if (ProgressSlider.Maximum != owner.ViewModel.Player.Duration)
-                ProgressSlider.Maximum = owner.ViewModel.Player.Duration;
-            if (ProgressSlider.Value != e) ProgressSlider.Value = e;
+            if (durationChanged) ProgressSlider.Maximum = duration;
+            if (ProgressSlider.Value != position) ProgressSlider.Value = position;
         }
-        finally { _synchronizingSliders = false; }
+        finally { _synchronizingSliders = wasSynchronizing; }
     }
 
     private async void OnPlayPauseButtonClick(object sender, RoutedEventArgs e)

@@ -6,6 +6,7 @@ using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Controls;
 using BiliCopilot.UI.Live.Playback;
 using BiliCopilot.UI.Toolkits;
+using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -161,6 +162,8 @@ public sealed partial class LiveWindow : ILivePresentation, IAsyncDisposable
     }
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(ILiveSession.PlaybackState))
+            this.Get<AppViewModel>().NotifyPlaybackActivityChanged();
         if (_session?.IsClosing == true && !IsClosing) _ = Observe(CloseAsync());
     }
     private void OnBackRequested(object? sender, object owner)

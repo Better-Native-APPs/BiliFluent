@@ -30,7 +30,7 @@
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             CornerRadius="{StaticResource ControlCornerRadius}"
-            DecodeWidth="600"
+            DecodeWidth="400"
             Source="{x:Bind ViewModel.VideoCover, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}" />
         <base:TrimTextBlock

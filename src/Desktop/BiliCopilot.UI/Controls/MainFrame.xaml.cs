@@ -8,7 +8,9 @@ namespace BiliCopilot.UI.Controls;
 
 public sealed partial class MainFrame : LayoutUserControlBase, IPageActivationHost
 {
+    private const int RecentPageCount = 3;
     private readonly PageArrivalTransition _transition = new();
+    private readonly List<UIElement> _recentPages = [];
     private bool _isSwitching;
 
     public MainFrame()
@@ -113,7 +115,7 @@ public sealed partial class MainFrame : LayoutUserControlBase, IPageActivationHo
 
         if (targetElement == null)
         {
-            // Not cached yet: create the page instance once.
+            // Not retained: recreate the view; main-page view models are DI singletons.
             var instance = Activator.CreateInstance(pageType);
             if (instance is UIElement element)
             {
@@ -143,6 +145,18 @@ public sealed partial class MainFrame : LayoutUserControlBase, IPageActivationHo
             {
                 cancelPageViewModel.CancelLoading();
             }
+        }
+
+        // Keep the selected page even when embedded playback hides its navigation ancestor.
+        // NavigationViewModel drains embedded VOD/Live before changing this selection.
+        _recentPages.Remove(targetElement);
+        _recentPages.Insert(0, targetElement);
+        while (_recentPages.Count > RecentPageCount + 1)
+        {
+            var evictedPage = _recentPages[^1];
+            _recentPages.RemoveAt(_recentPages.Count - 1);
+            // Removing the root runs page/control Unloaded cleanup, not singleton VM disposal.
+            RootGrid.Children.Remove(evictedPage);
         }
 
         return targetElement;

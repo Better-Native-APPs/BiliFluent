@@ -21,7 +21,7 @@ internal sealed partial class AppToolkit : SharedAppToolkit
     private const int VK_SHIFT = 0x10; // Shift键
     private const int VK_MENU = 0x12; // Alt键
 
-    private static readonly List<string> _gpuNames = [];
+    private static readonly Lazy<List<string>> _gpuNames = new(EnumerateGpuNames);
 
     public AppToolkit(ISettingsToolkit settings) : base(settings)
     {
@@ -205,30 +205,31 @@ internal sealed partial class AppToolkit : SharedAppToolkit
     }
 
     public static List<string> GetGpuNames()
-    {
-        if (_gpuNames.Count > 0)
-        {
-            return _gpuNames;
-        }
+        => _gpuNames.Value;
 
+    private static List<string> EnumerateGpuNames()
+    {
+        var gpuNames = new List<string>();
         try
         {
             // Use DXGI API to enumerate adapters, which is AOT-compatible
             var result = DXGI.CreateDXGIFactory1<IDXGIFactory1>(out var factory);
+            using var dxgiFactory = factory;
             if (!result.Success)
             {
-                return _gpuNames;
+                return gpuNames;
             }
 
             uint adapterIndex = 0;
             while (true)
             {
-                var enumResult = factory!.EnumAdapters1(adapterIndex, out var adapter);
+                var enumResult = dxgiFactory!.EnumAdapters1(adapterIndex, out var adapter);
+                using var currentAdapter = adapter;
                 if (enumResult.Failure)
                 {
                     break;
                 }
-                var desc = adapter.Description1;
+                var desc = currentAdapter.Description1;
                 var name = desc.Description;
                 if (!string.IsNullOrWhiteSpace(name))
                 {
@@ -237,24 +238,21 @@ internal sealed partial class AppToolkit : SharedAppToolkit
                         name.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
                         name.Contains("Virtual", StringComparison.OrdinalIgnoreCase))
                     {
-                        adapter.Dispose();
                         adapterIndex++;
                         continue;
                     }
                     // Skip software adapters (WARP, etc.)
                     if ((desc.Flags & AdapterFlags.Software) != 0)
                     {
-                        adapter.Dispose();
                         adapterIndex++;
                         continue;
                     }
                     name = name.Trim();
-                    if (!_gpuNames.Contains(name))
+                    if (!gpuNames.Contains(name))
                     {
-                        _gpuNames.Add(name);
+                        gpuNames.Add(name);
                     }
                 }
-                adapter.Dispose();
                 adapterIndex++;
             }
         }
@@ -263,6 +261,6 @@ internal sealed partial class AppToolkit : SharedAppToolkit
             GlobalDependencies.Kernel.GetRequiredService<ILogger<App>>().LogError(ex, "Failed to enumerate GPU adapters.");
         }
 
-        return _gpuNames;
+        return gpuNames;
     }
 }

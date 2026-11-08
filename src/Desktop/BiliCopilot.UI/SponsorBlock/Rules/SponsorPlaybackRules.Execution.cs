@@ -5,11 +5,15 @@ namespace BiliCopilot.UI.SponsorBlock.Rules;
 public static partial class SponsorPlaybackRules
 {
     public static PlaybackExecutionPlan EvaluateExecution(PlaybackInput input, PlaybackExecutionContext context)
+        => EvaluateExecution(input, context, null);
+
+    internal static PlaybackExecutionPlan EvaluateExecution(PlaybackInput input, PlaybackExecutionContext context,
+        PreparedSelection? prepared)
     {
         if (context.Stamp != input.Stamp) return RejectedExecution(input, PlaybackExecutionValidity.StaleContext);
         if (!ValidExecutionContext(input, context)) return RejectedExecution(input, PlaybackExecutionValidity.InvalidContext);
 
-        var common = EvaluateCore(input, context);
+        var common = EvaluateCore(input, context, prepared);
         var plan = common.Plan;
         if (!plan.IsCurrent)
             return new(plan with { NextBoundary = null }, PlaybackExecutionValidity.StaleContext,

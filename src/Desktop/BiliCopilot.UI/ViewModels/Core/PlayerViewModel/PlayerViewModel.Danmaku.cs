@@ -6,110 +6,202 @@ using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.BiliKernel.Models.Media;
+using System.ComponentModel;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
 public sealed partial class PlayerViewModel
 {
+    private long _danmakuCacheVersion = -1;
+    private long _danmakuLoadingVersion = -1;
+    private Dictionary<int, List<DanmakuInformation>> _danmakuSegments = [];
+    private Task _danmakuLoadingTask = Task.CompletedTask;
+    // The owned loading task disposes this source after all segment workers finish.
+#pragma warning disable CA2213
+    private CancellationTokenSource? _danmakuLoadingCancellation;
+#pragma warning restore CA2213
+
     [RelayCommand]
     private Task InitializeDanmakuAsync()
-        => IsPlaybackClosing ? Task.CompletedTask : OwnWork(InitializeDanmakuCoreAsync());
-
-    private async Task InitializeDanmakuCoreAsync()
     {
         var version = _mediaVersion;
-        var token = _activeMediaToken;
-        if (!IsCurrentPlayback(version)) return;
-        SettingsToolkit.DeleteLocalSetting(Models.Constants.SettingNames.IsDanmakuEnabled);
-        IsDanmakuEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsDanmakuEnabled, true);
-        IsDanmakuControlVisible = IsDanmakuEnabled;
-        if (!IsDanmakuEnabled)
+        if (!IsCurrentPlayback(version)) return Task.CompletedTask;
+        if (_danmakuCacheVersion != version)
         {
-            return;
+            // CancelAsync marks the token cancelled synchronously; only callbacks run later.
+            _ = _danmakuLoadingCancellation?.CancelAsync();
+            _danmakuSegments = [];
+            Danmaku.PropertyChanged -= OnDanmakuVisibilityChanged;
+            IsDanmakuEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsDanmakuEnabled, true);
+            IsDanmakuControlVisible = IsDanmakuEnabled;
+            Danmaku.ResetData();
+            _danmakuCacheVersion = version;
+            Danmaku.PropertyChanged += OnDanmakuVisibilityChanged;
         }
 
-        IsDanmakuLoading = true;
-        // 使用限流器，最多同时请求 6 个分段弹幕.
-        using var semaphore = new SemaphoreSlim(6, 6);
-        var danmakus = new List<DanmakuInformation>();
+        if (!IsDanmakuEnabled || !Danmaku.IsShowDanmaku) return Task.CompletedTask;
+        if (_danmakuLoadingVersion == version && !_danmakuLoadingTask.IsCompleted
+            && _danmakuLoadingCancellation is { IsCancellationRequested: false }) return _danmakuLoadingTask;
+
+        var previousTask = _danmakuLoadingTask;
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_activeMediaToken);
+        _danmakuLoadingCancellation = cancellation;
+        _danmakuLoadingVersion = version;
+        return _danmakuLoadingTask = OwnWork(InitializeDanmakuCoreAsync(version, cancellation, previousTask));
+    }
+
+    private async Task InitializeDanmakuCoreAsync(long version, CancellationTokenSource cancellation, Task previousTask)
+    {
+        using var loadingCancellation = cancellation;
+        var token = cancellation.Token;
+        var segments = _danmakuSegments;
         try
         {
-            if (_snapshot.Type == Models.Constants.BiliMediaType.Video)
-            {
-                var connector = Connector as VideoConnectorViewModel;
-                var aid = connector._view.Information.Identifier.Id;
-                var cid = connector._part.Identifier.Id;
-                Danmaku.Title = connector._view.Information.Identifier.Title;
-                var totalMinutes = Math.Ceiling(TimeSpan.FromSeconds(connector._view.Information.Duration ?? 0).TotalMinutes);
-                var tasks = new List<Task>();
-                var segmentCount = Convert.ToInt32(Math.Ceiling(totalMinutes / 6.0)); // 6 minutes per segment
-                for (var i = 0; i < segmentCount; i++)
-                {
-                    var index = i + 1;
-                    tasks.Add(Task.Run(async () => await GetDanmakuAsync(index, aid, cid)));
-                }
+            // A canceled visibility/media load must drain before its replacement starts requests.
+#pragma warning disable VSTHRD003
+            await previousTask;
+#pragma warning restore VSTHRD003
+            token.ThrowIfCancellationRequested();
+            if (!IsCurrentDanmaku()) return;
 
-                await Task.WhenAll(tasks);
+            string aid;
+            string cid;
+            double duration;
+            if (_snapshot.Type == Models.Constants.BiliMediaType.Video && Connector is VideoConnectorViewModel video)
+            {
+                aid = video._view.Information.Identifier.Id;
+                cid = video._part.Identifier.Id;
+                duration = video._view.Information.Duration ?? 0;
+                Danmaku.Title = video._view.Information.Identifier.Title;
             }
-            else if (_snapshot.Type == Models.Constants.BiliMediaType.Pgc)
+            else if (_snapshot.Type == Models.Constants.BiliMediaType.Pgc && Connector is PgcConnectorViewModel pgc)
             {
-                var connector = Connector as PgcConnectorViewModel;
-                var aid = connector._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Aid).ToString();
-                var cid = connector._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString();
-                var totalMinutes = Math.Ceiling(TimeSpan.FromSeconds(connector._episode.Duration ?? 0).TotalMinutes);
-                var tasks = new List<Task>();
-                var segmentCount = Convert.ToInt32(Math.Ceiling(totalMinutes / 6.0)); // 6 minutes per segment
-                for (var i = 0; i < segmentCount; i++)
-                {
-                    var index = i + 1;
-                    tasks.Add(Task.Run(async () => await GetDanmakuAsync(index, aid, cid)));
-                }
-
-                Danmaku.Title = $"{connector.SeasonTitle} - {connector.EpisodeTitle}";
-                await Task.WhenAll(tasks);
+                aid = pgc._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Aid).ToString();
+                cid = pgc._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString();
+                duration = pgc._episode.Duration ?? 0;
+                Danmaku.Title = $"{pgc.SeasonTitle} - {pgc.EpisodeTitle}";
+            }
+            else
+            {
+                return;
             }
 
-            if (!IsCurrentPlayback(version)) return;
-            Danmaku.DanmakuCountText = danmakus.Count > 0
-                ? string.Format(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuCountTemplate), danmakus.Count.ToString("N0"))
-                : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuEmpty);
-            Danmaku.Initialize(danmakus);
+            var service = this.Get<IDanmakuService>();
+            var segmentCount = Convert.ToInt32(Math.Ceiling(duration / 360));
+            if (segmentCount <= 0)
+            {
+                await PublishDanmakuAsync();
+                return;
+            }
+
+            IsDanmakuLoading = true;
+            var currentSegment = Math.Clamp(Convert.ToInt32(Math.Floor((Player?.Position ?? 0) / 360)) + 1, 1, segmentCount);
+            await Task.Run(() => GetDanmakuAsync(currentSegment, token), token);
+            if (!await PublishDanmakuAsync()) return;
+            // Enable the toggle after the current segment, not after the whole video's preload.
             IsDanmakuLoading = false;
+
+            int[] remainingSegments;
+            lock (segments)
+            {
+                remainingSegments = Enumerable.Range(1, segmentCount)
+                    .Where(index => index != currentSegment && !segments.ContainsKey(index)).ToArray();
+            }
+
+            // Parallel.ForEachAsync uses background workers without one task per segment.
+            await Parallel.ForEachAsync(remainingSegments,
+                new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = token },
+                async (index, workerToken) => await GetDanmakuAsync(index, workerToken));
+            if (remainingSegments.Length > 0) await PublishDanmakuAsync();
+
+            async Task GetDanmakuAsync(int index, CancellationToken segmentToken)
+            {
+                lock (segments)
+                {
+                    if (segments.ContainsKey(index)) return;
+                }
+
+                try
+                {
+                    segmentToken.ThrowIfCancellationRequested();
+                    var danmakus = await service.GetSegmentDanmakusWithGrpcAsync(aid, cid, index, segmentToken);
+                    segmentToken.ThrowIfCancellationRequested();
+                    lock (segments)
+                    {
+                        segments[index] = danmakus?.ToList() ?? [];
+                    }
+                }
+                catch (OperationCanceledException) when (segmentToken.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, $"获取弹幕分片失败： {index}");
+                }
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to initialize danmaku.");
-            if (!IsCurrentPlayback(version)) return;
-            IsDanmakuLoading = false;
-            IsDanmakuControlVisible = false;
+            if (IsCurrentDanmaku()) IsDanmakuControlVisible = false;
+        }
+        finally
+        {
+            if (ReferenceEquals(_danmakuLoadingCancellation, cancellation))
+            {
+                _danmakuLoadingCancellation = null;
+                if (IsCurrentPlayback(version)) IsDanmakuLoading = false;
+            }
         }
 
-        async Task GetDanmakuAsync(int index, string aid, string cid)
-        {
-            var entered = false;
-            try
-            {
-                await semaphore.WaitAsync(token);
-                entered = true;
-                token.ThrowIfCancellationRequested();
-                var danmaku = await this.Get<IDanmakuService>().GetSegmentDanmakusWithGrpcAsync(aid, cid, index, token);
-                token.ThrowIfCancellationRequested();
-                lock (danmakus)
-                {
-                    if (danmaku?.Count > 0)
-                    {
-                        danmakus.AddRange(danmaku);
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, $"获取弹幕分片失败： {index}");
-            }
+        bool IsCurrentDanmaku()
+            => IsCurrentPlayback(version) && ReferenceEquals(_danmakuSegments, segments)
+                && ReferenceEquals(_danmakuLoadingCancellation, cancellation) && IsDanmakuEnabled && Danmaku.IsShowDanmaku;
 
-            finally { if (entered) semaphore.Release(); }
+        async Task<bool> PublishDanmakuAsync()
+        {
+            var danmakus = await Task.Run(() =>
+            {
+                lock (segments)
+                {
+                    return segments.OrderBy(segment => segment.Key).SelectMany(segment => segment.Value).ToList();
+                }
+            }, token);
+            token.ThrowIfCancellationRequested();
+            if (!IsCurrentDanmaku()) return false;
+
+            Danmaku.DanmakuCountText = danmakus.Count > 0
+                ? string.Format(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuCountTemplate), danmakus.Count.ToString("N0"))
+                : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuEmpty);
+            Danmaku.Initialize(danmakus);
+            return true;
+        }
+    }
+
+    private void OnDanmakuVisibilityChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DanmakuRenderViewModel.IsShowDanmaku)) return;
+        if (Danmaku.IsShowDanmaku)
+        {
+            _ = InitializeDanmakuAsync();
+        }
+        else
+        {
+            _danmakuLoadingCancellation?.Cancel();
+            IsDanmakuLoading = false;
+        }
+    }
+
+    partial void OnIsDanmakuEnabledChanged(bool value)
+    {
+        IsDanmakuControlVisible = value;
+        if (!value)
+        {
+            _danmakuLoadingCancellation?.Cancel();
+            IsDanmakuLoading = false;
+        }
+        else if (_danmakuCacheVersion == _mediaVersion && Player?.IsPlaybackInitialized == true)
+        {
+            _ = InitializeDanmakuAsync();
         }
     }
 
@@ -121,6 +213,12 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        if (_danmakuLoadingCancellation is { } loadingCancellation)
+        {
+            await loadingCancellation.CancelAsync();
+        }
+
+        _danmakuSegments = [];
         Danmaku.ClearAll();
         await InitializeDanmakuAsync();
     }

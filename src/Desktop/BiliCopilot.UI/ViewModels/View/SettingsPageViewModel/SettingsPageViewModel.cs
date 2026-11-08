@@ -71,9 +71,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         PreferAudioChannelLayout = SettingsToolkit.ReadLocalSetting(SettingNames.PreferAudioChannelLayout, Richasy.MpvKernel.Core.Enums.AudioChannelLayoutType.Auto);
         MpvBuiltInProfile = SettingsToolkit.ReadLocalSetting(SettingNames.MpvBuiltInProfile, MpvBuiltInProfile.HighQuality);
         UseIntegrationWhenSinglePlayWindow = SettingsToolkit.ReadLocalSetting(SettingNames.UseIntegrationWhenSinglePlayWindow, true);
-        MaxCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 300d); // Default to 300 MB
+        MaxCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 64d); // Default to 64 MiB
         MaxBackCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d); // Default to 0 MB
-        MaxCacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 300d); // Default to 300 seconds
+        MaxCacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 60d); // Default to 60 seconds
         HrSeek = SettingsToolkit.ReadLocalSetting(SettingNames.HrSeek, HrSeekType.Default);
         MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
         AudioExclusiveEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AudioExclusiveEnabled, false);
@@ -395,7 +395,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideWhenCloseWindow, value);
 
     partial void OnIsNotificationEnabledChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.IsNotificationEnabled, value);
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.IsNotificationEnabled, value);
+        this.Get<NotificationViewModel>().SetPollingEnabledCommand.Execute(value);
+    }
 
     partial void OnIsVideoMomentNotificationEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, value);

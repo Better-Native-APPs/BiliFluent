@@ -27,7 +27,7 @@ internal sealed partial class SponsorApplicationCoordinator
             if (PreviewUnresolved(cleanup)) return Result(ApplicationStatus.Stale, "ExplicitPreviewCleanupTokenRequired");
             if (command.Action == EditorAction.KeepCurrentPreview) return Result(ApplicationStatus.Unavailable, "PreviewCleanupTokenRequired");
         }
-        if (!Current(ticket, out var state) || ticket.DraftRevision != draftRevision) return Result(ApplicationStatus.Stale);
+        if (!Current(ticket, out var state, allowObservationDrift: true) || ticket.DraftRevision != draftRevision) return Result(ApplicationStatus.Stale);
         if (command.Action is EditorAction.Split or EditorAction.Merge)
             return Result(ApplicationStatus.Unavailable, "Q4HasNoAtomicSplitMerge");
         if (editor is not null && editor != ticket.Attachment) return Result(ApplicationStatus.Busy, "AnotherPlayerOwnsEditor");
@@ -44,7 +44,7 @@ internal sealed partial class SponsorApplicationCoordinator
         try { observed = await state.Attachment.ObserveAsync(ticket.Stamp); }
         catch { return Result(ApplicationStatus.ControllerFailure); }
         if (observed?.Stamp is not { } stamp || observed.Actual is not { } actual
-            || state.Attachment.Latest?.Stamp != stamp) return Result(ApplicationStatus.Stale);
+            || !stamp.HasSameContext(state.Attachment.Latest?.Stamp)) return Result(ApplicationStatus.Stale);
         if (actual.Duration is not double duration || !double.IsFinite(duration) || duration <= 0
             || !double.IsFinite(actual.Position) || actual.Position < 0 || actual.Position > duration)
             return Result(ApplicationStatus.Unavailable, "ActualPositionDurationRequired");
@@ -99,7 +99,7 @@ internal sealed partial class SponsorApplicationCoordinator
         SponsorControllerResult? observed;
         try { observed = await state.Attachment.ObserveAsync(ticket.Stamp); }
         catch { return RecordEditorReply(state, new(SponsorEditorOutcome.NeedsReconciliation, null, Reason: "EditorObservationFailed")); }
-        if (observed?.Stamp is not { } observedStamp || state.Attachment.Latest?.Stamp != observedStamp)
+        if (observed?.Stamp is not { } observedStamp || !observedStamp.HasSameContext(state.Attachment.Latest?.Stamp))
             return Result(ApplicationStatus.Stale);
         if (observed.Actual is not { } actual || (start
             ? !actual.CanSeekExactly || actual.State is not (SponsorPlaybackState.Playing or SponsorPlaybackState.Paused)
@@ -119,7 +119,7 @@ internal sealed partial class SponsorApplicationCoordinator
         if (Stopping || state.Attachment.IsClosed || editor != ticket.Attachment || !state.Editing
             || ticket.DraftRevision != draftRevision || fresh?.Stamp is not { } stamp
             || stamp.Owner != observedStamp.Owner || stamp.PolicyRevision != policyRevision
-            || state.Attachment.Latest?.Stamp != stamp)
+            || !stamp.HasSameContext(state.Attachment.Latest?.Stamp))
         { Publish(); return Result(ApplicationStatus.Stale, "EditorContextChangedAfterPush"); }
         if (start && (selected is null || !queue.Entries.Any(e => e.LocalDraftId == selected.LocalDraftId && e.Draft.Revision == selected.Draft.Revision)
             || queue.Preview(selected.LocalDraftId, stamp.Owner.Media, stamp.Owner.Generation) != prepared || state.Preview != prepared))
@@ -225,7 +225,7 @@ internal sealed partial class SponsorApplicationCoordinator
 
     internal Task<ApplicationResult> RequestPlaybackAsync(PlayerTicket ticket, PlaybackUiCommand command) => OnOwner(async () =>
     {
-        if (!Current(ticket, out var state)) return Result(ApplicationStatus.Stale);
+        if (!Current(ticket, out var state, allowObservationDrift: true)) return Result(ApplicationStatus.Stale);
         if (!Enum.IsDefined(command.Action)) return Result(ApplicationStatus.Invalid);
         if (command.Target is { } key && (key.Media != ticket.Stamp.Owner.Media
             || !state.Raw.Any(s => s.Uuid == key.Uuid && s.Source == key.Source))) return Result(ApplicationStatus.Stale);
@@ -263,9 +263,10 @@ internal sealed partial class SponsorApplicationCoordinator
         try
         {
             var admitted = await state.Attachment.RequestAsync(request);
-            return Result(!admitted ? ApplicationStatus.Stale : command.Action == PlaybackUiAction.ReleaseMute
+            return new ApplicationResult(!admitted ? ApplicationStatus.Stale : command.Action == PlaybackUiAction.ReleaseMute
                 ? ApplicationStatus.Pending : ApplicationStatus.Success,
-                command.Action == PlaybackUiAction.ReleaseMute ? "LegacyReleaseIntentOnly" : null);
+                command.Action == PlaybackUiAction.ReleaseMute ? "LegacyReleaseIntentOnly" : null)
+                { PlaybackRequestId = admitted ? request.Id : null };
         }
         catch { return Result(ApplicationStatus.ControllerFailure); }
         // Success means intent admitted, not applied. Only subsequent N3 receipts establish effects.
@@ -273,14 +274,14 @@ internal sealed partial class SponsorApplicationCoordinator
 
     internal Task<ApplicationResult> ReconcileFieldAsync(PlayerTicket ticket, string leaseToken, PlaybackLeaseField field) => OnOwner(async () =>
     {
-        if (!Current(ticket, out var state) || !Enum.IsDefined(field)) return Result(ApplicationStatus.Stale);
+        if (!Current(ticket, out var state, allowObservationDrift: true) || !Enum.IsDefined(field)) return Result(ApplicationStatus.Stale);
         try { return Result(await state.Attachment.ReconcileFieldAsync(ticket.Stamp, new(ticket.Stamp.Owner, leaseToken, field))
             ? ApplicationStatus.Success : ApplicationStatus.Unavailable, "ExplicitReadbackOnly"); }
         catch { return Result(ApplicationStatus.ControllerFailure); }
     });
     internal Task<ApplicationResult> ReconcileSeekAsync(PlayerTicket ticket, string operationToken) => OnOwner(async () =>
     {
-        if (!Current(ticket, out var state)) return Result(ApplicationStatus.Stale);
+        if (!Current(ticket, out var state, allowObservationDrift: true)) return Result(ApplicationStatus.Stale);
         try { return Result(await state.Attachment.ReconcileSeekAsync(ticket.Stamp, new(ticket.Stamp.Owner, operationToken))
             ? ApplicationStatus.Success : ApplicationStatus.Unavailable, "ReconciledIsNotConfirmed"); }
         catch { return Result(ApplicationStatus.ControllerFailure); }

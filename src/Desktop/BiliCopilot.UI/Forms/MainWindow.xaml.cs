@@ -25,6 +25,8 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     private const int WindowMinHeight = 480;
     private bool _isFirstActivated = true;
     private readonly RenderingOcclusionState _playerOcclusion;
+    private readonly DispatcherQueueTimer _windowStatsTimer;
+    private bool _isEfficiencyModeEnabled;
     internal bool IsEmbeddedPlayerRenderingSuspended => _playerOcclusion.IsSuspended;
     internal bool SuppressPlayerBoundsPersistence { get; set; }
 
@@ -59,6 +61,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     internal FrameworkElement ShowEmbeddedPlayer(PlayerViewModel viewModel) => RootLayout.ShowEmbeddedPlayer(viewModel);
     internal void ApplyPlayerPresentation(PlayerPresentationMode mode) => RootLayout.ApplyPlayerPresentation(mode);
+    internal void HideEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.HideEmbeddedPlayer(expectedViewModel);
     internal void ClearEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.ClearEmbeddedPlayer(expectedViewModel);
 
     internal bool TryShowEmbeddedLive(object ownerKey, BiliCopilot.UI.Live.Controls.LiveView liveView)
@@ -122,6 +125,10 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     {
         _playerOcclusion = new RenderingOcclusionState(OnRenderingOcclusionChanged);
         InitializeComponent();
+        _windowStatsTimer = DispatcherQueue.CreateTimer();
+        _windowStatsTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _windowStatsTimer.IsRepeating = false;
+        _windowStatsTimer.Tick += OnWindowStatsTimerTick;
         RootLayout.SetEmbeddedPlayerRenderingSuspensionFactory(SuspendEmbeddedPlayerRendering);
         RootLayout.ActiveTitleBarChanged += OnActiveTitleBarChanged;
         ApplyActiveTitleBar();
@@ -130,6 +137,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         MinWidth = WindowMinWidth;
         MinHeight = WindowMinHeight;
         this.Get<AppViewModel>().Windows.Add(this);
+        this.Get<AppViewModel>().PlaybackActivityChanged += OnPlaybackActivityChanged;
         Activated += OnActivated;
         Closed += OnClosed;
         AppWindow.Closing += OnMainClosing;
@@ -177,7 +185,12 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     {
         if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
+            SetEfficiencyMode(false);
             this.Get<AppViewModel>().ActivatedWindow = this;
+        }
+        else
+        {
+            UpdateBackgroundPowerMode();
         }
 
         RootLayout.SetChromeWindowActivation(args.WindowActivationState != WindowActivationState.Deactivated);
@@ -207,6 +220,10 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     internal void UnregisterEventHandlers()
     {
+        _windowStatsTimer.Stop();
+        _windowStatsTimer.Tick -= OnWindowStatsTimerTick;
+        this.Get<AppViewModel>().PlaybackActivityChanged -= OnPlaybackActivityChanged;
+        SetEfficiencyMode(false);
         Activated -= OnActivated;
         Closed -= OnClosed;
         AppWindow.Changed -= OnWindowChanged;
@@ -253,6 +270,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     private void PerformFinalTeardown()
     {
+        _windowStatsTimer.Stop();
         // A save failure must reach the terminal owner before any irreversible retirement begins.
         if (!_windowStatsSaved)
         {
@@ -388,7 +406,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     private void SaveCurrentWindowStats()
     {
-        if (SuppressPlayerBoundsPersistence || AppWindow.Presenter.Kind != AppWindowPresenterKind.Overlapped) return;
+        if (!CanSaveWindowStats()) return;
         var left = AppWindow.Position.X;
         var top = AppWindow.Position.Y;
         var isMaximized = PInvoke.IsZoomed(new HWND(this.GetWindowHandle()));
@@ -409,10 +427,39 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     private void OnWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
+        UpdateBackgroundPowerMode();
         if (args.DidSizeChange || args.DidPositionChange)
         {
-            SaveCurrentWindowStats();
+            _windowStatsTimer.Stop();
+            if (!_windowStatsSaved && CanSaveWindowStats()) _windowStatsTimer.Start();
         }
+    }
+
+    private void OnPlaybackActivityChanged(object? sender, EventArgs args)
+        => UpdateBackgroundPowerMode();
+
+    private void UpdateBackgroundPowerMode()
+    {
+        var isBackground = !AppWindow.IsVisible
+            || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+        SetEfficiencyMode(isBackground && !this.Get<AppViewModel>().HasActivePlayback);
+    }
+
+    private void SetEfficiencyMode(bool enabled)
+    {
+        if (_isEfficiencyModeEnabled == enabled) return;
+        if (PowerThrottlingToolkit.TrySetEfficiencyMode(enabled, this.Get<ILogger<App>>()))
+            _isEfficiencyModeEnabled = enabled;
+    }
+
+    private bool CanSaveWindowStats()
+        => !SuppressPlayerBoundsPersistence && AppWindow.Presenter.Kind == AppWindowPresenterKind.Overlapped &&
+            RootLayout.TitleBarPresentation is not (PlayerPresentationMode.FullScreen or PlayerPresentationMode.CompactOverlay);
+
+    private void OnWindowStatsTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        if (!_windowStatsSaved) SaveCurrentWindowStats();
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)

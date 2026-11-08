@@ -21,6 +21,8 @@ internal sealed record SponsorCoordinatorInput(PlaybackOwner Owner, long Revisio
 }
 
 internal enum SponsorOperationPhase { Pending, SucceededUnobserved, Confirmed, Failed, Unknown, Reconciled }
+internal enum SponsorRequestPhase { Pending, Completed, Rejected, Failed }
+internal sealed record SponsorRequestResult(string Id, SponsorRequestPhase Phase, string? Reason = null);
 internal sealed record SponsorOperation(long Id, long Generation, NativeOperationKind? Kind,
     NativeAdmissionPurpose Purpose, PlaybackStamp? Stamp, SponsorOperationPhase Phase, string? Failure = null);
 internal sealed record SponsorControllerResult(long Sequence, PlaybackOwner? Owner, PlaybackStamp? Stamp,
@@ -31,8 +33,13 @@ internal sealed record SponsorControllerResult(long Sequence, PlaybackOwner? Own
     ImmutableArray<SponsorSeekStatus> SeekClaims, string? Failure)
 {
     internal SponsorPreviewStatus? PreviewPlayback { get; init; }
+    internal SponsorRequestResult? RequestResult { get; init; }
 }
-internal sealed record SponsorSeekStatus(string Token, PlaybackEffect Effect, PlaybackStamp Stamp, SponsorOperationPhase Phase);
+internal sealed record SponsorSeekStatus(string Token, PlaybackEffect Effect, PlaybackStamp Stamp, SponsorOperationPhase Phase)
+{
+    internal long OperationId { get; init; }
+    internal long PositionIntentId { get; init; }
+}
 internal sealed record PhysicalRateHandoff(long NativeGeneration, long Id, double Baseline);
 internal sealed record SponsorReconciliation(PlaybackOwner Owner, string LeaseToken, PlaybackLeaseField Field);
 internal sealed record SponsorSeekReconciliation(PlaybackOwner Owner, string OperationToken);
@@ -52,6 +59,10 @@ internal sealed partial class SponsorPlaybackController
     private readonly Dictionary<long, UserIntentTicket> _intents = [];
     private bool _running;
     private bool _observationQueued;
+    private bool _observing;
+    private bool _observationDirty;
+    private long _observationWorkVersion;
+    private Task<SponsorControllerResult>? _observationTask;
     private bool _sponsorOpen;
     private bool _retiring;
     private bool _sealed = true;
@@ -75,6 +86,7 @@ internal sealed partial class SponsorPlaybackController
     private SponsorCoordinatorInput? _input;
     private PlaybackInteraction? _interaction;
     private PlaybackRequest? _request;
+    private SponsorRequestResult? _requestResult;
     private long _requestRevision;
     private NativePlaybackSnapshot? _actual;
     private PlaybackExecutionPlan? _plan;
@@ -82,9 +94,6 @@ internal sealed partial class SponsorPlaybackController
     private Task? _actualCompletion;
     private string? _failure;
     private enum ObservedWorkFailureKind { Observation, Lane, Wake, WakeCallback, Subscriber }
-    private sealed record ObservedWorkFailure(long NativeGeneration, ObservedWorkFailureKind Kind);
-    private ObservedWorkFailure? _currentObservedWorkFailure;
-    private ObservedWorkFailure? _retiredObservedWorkFailure;
     private PlaybackAppliedEffect? _applied;
     private PlaybackRateReceipt? _rateReceipt;
     private long _receiptId;
@@ -103,7 +112,7 @@ internal sealed partial class SponsorPlaybackController
     internal event Action<SponsorControllerResult>? Updated;
     internal SponsorControllerResult Snapshot => new(_sequence, _owner, CurrentStamp, _actual, _plan,
         _operation, _mute, _rate, _rateClaims, _applied, _rateReceipt, _appliedId, _rateReceiptId, _seekClaims, _failure)
-        { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus };
+        { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus, RequestResult = _requestResult };
     internal bool HasBinding => _backend is not null && !_sealed;
     internal bool CanUseBinding => HasBinding && !_retiring && _bindingCurrent?.Invoke() == true;
     internal Task? ActualCompletion => _actualCompletion;
@@ -117,8 +126,6 @@ internal sealed partial class SponsorPlaybackController
             throw new InvalidOperationException("Previous native binding has not drained and sealed.");
         var issuer = new NativeAdmission.Issuer(++_generation);
         var backend = createBackend(issuer);
-        if (_currentObservedWorkFailure is { } previousFailure) _retiredObservedWorkFailure = previousFailure;
-        _currentObservedWorkFailure = null;
         _issuer = issuer;
         _backend = backend;
         _bindingCurrent = bindingCurrent;
@@ -132,7 +139,15 @@ internal sealed partial class SponsorPlaybackController
         _interaction = _owner is null ? null : new(_owner, _visit);
         _input = _owner is null ? null : new(_owner, 0, [], new(0), new());
         _request = null;
+        _requestResult = null;
+        _selectionFacts = null;
+        _selectionDuration = null;
+        _selection = null;
+        _observationQueued = _observing = _observationDirty = false;
+        _observationTask = null;
         _visitObservation = null;
+        _visitMarkers = default;
+        _visitIntervals = [];
         _visitRebasePending = false;
         _actual = null;
         _plan = null;
@@ -168,10 +183,13 @@ internal sealed partial class SponsorPlaybackController
     {
         VerifyAccess();
         ExpireRequest();
-        if (!_sponsorOpen || !CanUseBinding || _preview is not null || request.Stamp != CurrentStamp || _request is not null
+        var stamp = CurrentStamp;
+        if (!_sponsorOpen || !CanUseBinding || _preview is not null || stamp is null || !request.Stamp.HasSameContext(stamp)
+            || _request is not null || _requestResult?.Phase == SponsorRequestPhase.Pending || _intents.Count != 0
             || _interaction is null || _interaction.AdmittedRequestIds.Length >= SponsorPlaybackRules.MaximumRecords
             || _interaction.AdmittedRequestIds.Contains(request.Id)) return false;
-        _request = request;
+        _request = request with { Stamp = stamp };
+        _requestResult = new(request.Id, SponsorRequestPhase.Pending);
         _requestRevision = _input!.Revision;
         RequestObservation();
         return true;
@@ -211,6 +229,7 @@ internal sealed partial class SponsorPlaybackController
         await ReadAsync(NativeAdmissionPurpose.Cleanup);
         // Explicit acknowledgement of actual quiescent state, NOT a successful seek/undo/statistic.
         _seekClaims = _seekClaims.Replace(claim, claim with { Phase = SponsorOperationPhase.Reconciled });
+        ResolveRequest(claim.Effect.RequestId, SponsorRequestPhase.Rejected, "PlaybackRequestReconciled");
         Publish();
         return true;
     });
@@ -219,23 +238,57 @@ internal sealed partial class SponsorPlaybackController
     {
         VerifyAccess();
         ++_observationRevision;
-        if (_observationQueued || !CanUseBinding) return;
+        if (!CanUseBinding) return;
+        if (_observing)
+        {
+            _observationDirty = true;
+            return;
+        }
+        if (_observationQueued) return;
+        QueueObservation();
+    }
+
+    private void QueueObservation()
+    {
         _observationQueued = true;
-        var generation = _generation;
         var owner = _issuer;
-        Forget(Enqueue(async () =>
+        var version = ++_observationWorkVersion;
+        var task = Enqueue(async () =>
         {
             _observationQueued = false;
-            if (generation != _generation || !CanUseBinding) return;
-            await ObserveAsync();
-        }), owner, ObservedWorkFailureKind.Observation);
+            _observing = true;
+            try
+            {
+                if (CanUseBinding) await ObserveAsync();
+                return Snapshot;
+            }
+            finally
+            {
+                _observing = false;
+                if (_observationDirty)
+                {
+                    _observationDirty = false;
+                    if (CanUseBinding && !_observationQueued) QueueObservation();
+                }
+            }
+        });
+        // An injected synchronous/reentrant post may already have scheduled the follow-up.
+        if (version == _observationWorkVersion) _observationTask = task;
+        Forget(task, owner, ObservedWorkFailureKind.Observation);
     }
 
     // A bounded join for N4 capture/UI callers. It joins a reread, not a waiter-cancellable native task.
-    internal Task<SponsorControllerResult> ObserveCurrentAsync()
+    internal async Task<SponsorControllerResult> ObserveCurrentAsync()
     {
         RequestObservation();
-        return Enqueue(() => Task.FromResult(Snapshot));
+        var observation = _observationTask;
+        // Join the shared native work outside its lane. A prompt during an in-flight read owns
+        // one follow-up, and all callers share it rather than queueing waiter-specific reads.
+        #pragma warning disable VSTHRD003
+        if (observation is not null) await observation;
+        if (_observationTask is { } followUp && !ReferenceEquals(observation, followUp)) await followUp;
+        #pragma warning restore VSTHRD003
+        return Snapshot;
     }
 
     internal UserIntentTicket NoteUserIntent(PlayerIntentKind kind)
@@ -252,6 +305,8 @@ internal sealed partial class SponsorPlaybackController
             _interaction = _interaction with { MuteSuppressed = true, ManualMute = null };
         ++_observationRevision;
         if (_request is { } request) ConsumeRequest(request.Id);
+        if (_requestResult is { Phase: SponsorRequestPhase.Pending } pending)
+            ResolveRequest(pending.Id, SponsorRequestPhase.Rejected, "PlaybackRequestSuperseded");
         CancelWake();
         _rateSample = null;
         return ticket;
@@ -269,6 +324,8 @@ internal sealed partial class SponsorPlaybackController
         VerifyAccess();
         _sponsorOpen = false;
         if (_request is { } request) ConsumeRequest(request.Id);
+        if (_requestResult is { Phase: SponsorRequestPhase.Pending } pending)
+            ResolveRequest(pending.Id, SponsorRequestPhase.Rejected, "SponsorAdmissionClosed");
         ++_observationRevision;
         CancelWake();
         RetireLeases(reason);
@@ -467,7 +524,7 @@ internal sealed partial class SponsorPlaybackController
     private void CheckTicket(UserIntentTicket ticket)
     {
         VerifyAccess();
-        if (!CanUseBinding || ticket.NativeGeneration != _generation
+        if (!CanUseBinding
             || !_intents.TryGetValue(ticket.IntentId, out var admitted) || !ReferenceEquals(admitted, ticket)
             || (ticket.Kind is PlayerIntentKind.Seek or PlayerIntentKind.OpaqueControl) && ticket.IntentId != _positionIntentId
             || (ticket.Kind is PlayerIntentKind.Pause or PlayerIntentKind.OpaqueControl) && ticket.IntentId != _pauseIntentId
@@ -493,7 +550,15 @@ internal sealed partial class SponsorPlaybackController
         _jobs.Enqueue(async () =>
         {
             try { completion.SetResult(await action()); }
-            catch (Exception ex) { _failure = ex.Message; Publish(); completion.SetException(ex); }
+            catch (Exception ex)
+            {
+                if (_requestResult is { Phase: SponsorRequestPhase.Pending } pending)
+                {
+                    ConsumeRequest(pending.Id);
+                    ResolveRequest(pending.Id, SponsorRequestPhase.Failed, "PlaybackRequestFailed");
+                }
+                _failure = ex.Message; Publish(); completion.SetException(ex);
+            }
         });
         if (!_running)
         {
@@ -627,10 +692,8 @@ internal sealed partial class SponsorPlaybackController
 
     private void RecordObservedWorkFailure(NativeAdmission.Issuer? owner, ObservedWorkFailureKind kind)
     {
-        var failure = new ObservedWorkFailure(owner?.NativeGeneration ?? 0, kind);
         if (!_sealed && ReferenceEquals(owner, _issuer))
         {
-            _currentObservedWorkFailure = failure;
             _failure ??= kind switch
             {
                 ObservedWorkFailureKind.Observation => "ObservationWorkFailure",
@@ -640,11 +703,6 @@ internal sealed partial class SponsorPlaybackController
                 ObservedWorkFailureKind.Subscriber => "CoordinatorObserverFailure",
                 _ => "ObservedWorkFailure",
             };
-        }
-        else if (_retiredObservedWorkFailure != failure)
-        {
-            // One bounded, issuer-generation-tagged retired diagnostic. Never poison the new binding.
-            _retiredObservedWorkFailure = failure;
         }
         // No Publish/callbacks, exception payload retention, operation completion or ownership mutation.
     }

@@ -20,9 +20,10 @@
         Orientation="Horizontal"
         Spacing="12">
         <ProgressBar
+            x:Name="LoadingProgressBar"
             Width="20"
             VerticalAlignment="Center"
-            IsIndeterminate="True" />
+            IsIndeterminate="False" />
         <TextBlock
             VerticalAlignment="Center"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

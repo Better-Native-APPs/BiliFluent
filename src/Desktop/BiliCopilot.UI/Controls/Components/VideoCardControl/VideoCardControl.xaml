@@ -19,7 +19,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -123,7 +123,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -225,7 +225,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Button
                                 x:Name="UserButton"
@@ -353,7 +353,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -482,7 +482,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -597,7 +597,7 @@
                         </Grid.ColumnDefinitions>
                         <controls:BasicCoverImage
                             CornerRadius="{StaticResource ControlCornerRadius}"
-                            DecodeWidth="600"
+                            DecodeWidth="400"
                             Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                         <Border
                             Margin="8"
@@ -685,7 +685,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -796,7 +796,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Grid
                                 Grid.Row="1"
@@ -872,7 +872,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="4"
@@ -983,7 +983,7 @@
                             </Grid.RowDefinitions>
                             <controls:BasicCoverImage
                                 CornerRadius="4,4,0,0"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Grid
                                 Grid.Row="1"
@@ -1064,7 +1064,7 @@
                                 Margin="6"
                                 VerticalAlignment="Stretch"
                                 CornerRadius="4"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="8"
@@ -1176,7 +1176,7 @@
                                 Margin="6"
                                 VerticalAlignment="Stretch"
                                 CornerRadius="4"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="8"
@@ -1288,7 +1288,7 @@
                                 Margin="6"
                                 VerticalAlignment="Stretch"
                                 CornerRadius="4"
-                                DecodeWidth="600"
+                                DecodeWidth="400"
                                 Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
                             <Border
                                 Margin="8"

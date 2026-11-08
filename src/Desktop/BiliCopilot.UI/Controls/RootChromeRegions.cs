@@ -63,7 +63,7 @@ internal sealed class RootChromeRegionAuthority(
         internal RootChromeRect[]? Rects = rects;
     }
 
-    internal bool IsActive => _active && !_retired;
+    internal bool IsActive => _active;
 
     /// <summary>Become the writer for a new generation. Returns true only on an inactive → active transition.</summary>
     internal bool Activate()
@@ -180,7 +180,7 @@ internal sealed class RootChromeRegionAuthority(
                 sink.Set(kind, rects);
                 if (IsCurrent(generation))
                 {
-                    if (ReferenceEquals(_owned[index], entry)) entry.Rects = rects;
+                    entry.Rects = rects;
                     continue;
                 }
 

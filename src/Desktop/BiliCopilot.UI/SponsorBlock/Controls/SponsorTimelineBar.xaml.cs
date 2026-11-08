@@ -77,24 +77,24 @@ public sealed partial class SponsorTimelineBar : UserControl
 
         foreach (var marker in markers)
         {
+            // 与 4px 轨道同高、同圆角、同中心：看起来是轨道的一部分，而不是另一根贴上去的条。
+            // 本层位于 Slider 之下，已播放部分由白色进度填充自然盖住，Thumb 始终在最上。
+            var radius = height / 2;
             var left = marker.StartRatio * width;
-            var w = marker.IsPoint ? 3 : Math.Max(2, (marker.EndRatio - marker.StartRatio) * width);
-            if (marker.IsPoint)
-            {
-                left = Math.Clamp(left - 1.5, 0, Math.Max(0, width - w));
-            }
+            var w = marker.IsPoint ? height : Math.Max(height, (marker.EndRatio - marker.StartRatio) * width);
+            left = Math.Clamp(marker.IsPoint ? left - (w / 2) : left, 0, Math.Max(0, width - w));
 
             var rect = new Rectangle
             {
                 Width = w,
-                Height = marker.IsPoint ? height + 4 : height,
-                RadiusX = 1,
-                RadiusY = 1,
+                Height = height,
+                RadiusX = radius,
+                RadiusY = radius,
                 Fill = new SolidColorBrush(marker.CategoryColor),
-                Opacity = marker.IsDimmed ? 0.45 : 0.95,
+                Opacity = marker.IsDimmed ? 0.35 : 0.8,
             };
             Canvas.SetLeft(rect, left);
-            Canvas.SetTop(rect, marker.IsPoint ? -2 : 0);
+            Canvas.SetTop(rect, 0);
             MarkerCanvas.Children.Add(rect);
         }
     }

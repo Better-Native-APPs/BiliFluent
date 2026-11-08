@@ -71,7 +71,7 @@
             </Grid>
 
             <!--  最近一次实际效果（来自回执，不是请求）  -->
-            <Grid ColumnSpacing="10" Visibility="{x:Bind local:SponsorXaml.Show(ViewModel.HasApplied), Mode=OneWay, FallbackValue=Collapsed}">
+            <Grid ColumnSpacing="10" Visibility="{x:Bind local:SponsorXaml.Show(ViewModel.HasAppliedNotice), Mode=OneWay, FallbackValue=Collapsed}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />

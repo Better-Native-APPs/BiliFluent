@@ -11,7 +11,7 @@ internal sealed class PlayerTapAggregationState
 {
     private PlayerTapContext _context;
     private double _x, _y, _pressedAt, _window, _halfWidth, _halfHeight;
-    private bool _pressed, _pending, _reserved;
+    private bool _pressed, _pending, _reserved, _mouseSingle;
     internal bool Pending => _pending;
     internal double Remaining(double now) => Math.Max(1, _pressedAt + _window - now);
 
@@ -24,9 +24,11 @@ internal sealed class PlayerTapAggregationState
         var elapsed = now - _pressedAt;
         var match = _pending && same && elapsed > 0 && elapsed <= _window
             && Math.Abs(x - _x) <= _halfWidth && Math.Abs(y - _y) <= _halfHeight;
-        var previous = _pending && same && !match
+        var previous = _pending && same && !match && !_mouseSingle
             ? new PlayerTapAction(PlayerTapIntent.Single, _context) : default;
+        var mouseDouble = match && !context.Touch && _mouseSingle;
         Cancel();
+        if (mouseDouble) return new PlayerTapAction(PlayerTapIntent.Double, context);
         _context = context;
         _x = x; _y = y; _pressedAt = now;
         _window = Math.Max(1, window);
@@ -46,10 +48,9 @@ internal sealed class PlayerTapAggregationState
         if (elapsed < 0 || (context.Touch && elapsed > _window)) { Cancel(); return default; }
         if (!context.Touch)
         {
-            // Mouse clicks complete on release; only touch waits for a possible second tap.
-            var action = new PlayerTapAction(PlayerTapIntent.Single, _context);
-            Cancel();
-            return action;
+            // Keep the first click immediate, but retain its OS time/rectangle for a second mouse down.
+            _pending = _mouseSingle = true;
+            return new PlayerTapAction(PlayerTapIntent.Single, _context);
         }
         if (_reserved)
         {
@@ -64,10 +65,11 @@ internal sealed class PlayerTapAggregationState
     internal PlayerTapAction Expire(double now)
     {
         if (!_pending || _pressed || now - _pressedAt < _window) return default;
+        if (_mouseSingle) { Cancel(); return default; } // It already fired; the timer only expires double-click eligibility.
         var action = new PlayerTapAction(PlayerTapIntent.Single, _context);
         Cancel();
         return action;
     }
 
-    internal void Cancel() { _pending = false; _pressed = false; _reserved = false; _context = default; }
+    internal void Cancel() { _pending = false; _pressed = false; _reserved = false; _mouseSingle = false; _context = default; }
 }

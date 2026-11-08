@@ -38,7 +38,7 @@ public sealed partial class UserSpaceService : IDisposable
     public async Task<IReadOnlyList<UserSpaceVideoRow>> GetFeaturedAsync(string mid, bool followed, CancellationToken token)
     {
         using var json = await GetAsync(followed ? "/x/space/top/arc" : "/x/space/masterpiece", mid,
-            new() { ["vmid"] = Id(mid) }, false, token);
+            new() { ["vmid"] = Id(mid) }, false, token).ConfigureAwait(false);
         if (followed && Code(json.RootElement) == 53016) return Array.Empty<UserSpaceVideoRow>();
         var data = Data(json);
         if (followed) return new[] { Video(data) with { FeaturedKind = UserSpaceFeaturedKind.Top } };
@@ -55,7 +55,7 @@ public sealed partial class UserSpaceService : IDisposable
                 _ => throw Schema(),
             },
             ["pn"] = Page(page), ["ps"] = PageSize.ToString(CultureInfo.InvariantCulture),
-        }, true, token);
+        }, true, token).ConfigureAwait(false);
         if (Code(json.RootElement) != 0) _wbiKey = null; // Only an explicit later retry obtains fresh keys.
         var data = Data(json);
         var rows = ArrayItems(Required(Required(data, "list"), "vlist")).Select(Video).ToArray();
@@ -71,7 +71,7 @@ public sealed partial class UserSpaceService : IDisposable
             UserOpusFilter.All => "all", UserOpusFilter.Article => "article", UserOpusFilter.Dynamic => "dynamic", _ => throw Schema(),
         } };
         if (!string.IsNullOrEmpty(offset)) query["offset"] = Id(offset);
-        using var json = await GetAsync("/x/polymer/web-dynamic/v1/opus/feed/space", mid, query, false, token);
+        using var json = await GetAsync("/x/polymer/web-dynamic/v1/opus/feed/space", mid, query, false, token).ConfigureAwait(false);
         var data = Data(json);
         var rows = ArrayItems(Required(data, "items")).Select(item =>
         {
@@ -96,7 +96,7 @@ public sealed partial class UserSpaceService : IDisposable
         using var json = await GetAsync("/audio/music-service/web/song/upper", mid, new()
         {
             ["uid"] = Id(mid), ["pn"] = Page(page), ["ps"] = "30", ["order"] = "1", ["jsonp"] = "jsonp",
-        }, false, token);
+        }, false, token).ConfigureAwait(false);
         var data = Data(json);
         var count = RequiredLong(data, "pageCount");
         if (RequiredLong(data, "pageSize") <= 0) throw Schema();
@@ -119,7 +119,7 @@ public sealed partial class UserSpaceService : IDisposable
         using var json = await GetAsync("/x/polymer/web-space/seasons_series_list", mid, new()
         {
             ["mid"] = Id(mid), ["page_num"] = Page(page), ["page_size"] = "20", ["web_location"] = "333.1387",
-        }, true, token);
+        }, true, token).ConfigureAwait(false);
         if (Code(json.RootElement) != 0) _wbiKey = null;
         var lists = Required(Data(json), "items_lists");
         var groups = new List<UserSpaceCollection>();
@@ -144,7 +144,7 @@ public sealed partial class UserSpaceService : IDisposable
         var season = group.Kind == UserCollectionKind.Season;
         using var json = await GetAsync(season ? "/x/polymer/web-space/seasons_archives_list" : "/x/series/archives", group.OwnerId,
             new() { ["mid"] = Id(group.OwnerId), [season ? "season_id" : "series_id"] = Id(group.Id),
-                [season ? "page_num" : "pn"] = Page(page), [season ? "page_size" : "ps"] = "30" }, false, token);
+                [season ? "page_num" : "pn"] = Page(page), [season ? "page_size" : "ps"] = "30" }, false, token).ConfigureAwait(false);
         var data = Data(json);
         var pageInfo = Required(data, "page");
         var more = HasMore(pageInfo, page, season ? "page_num" : "num", season ? "page_size" : "size", "total");
@@ -159,7 +159,7 @@ public sealed partial class UserSpaceService : IDisposable
     private async Task<JsonDocument> GetAsync(string path, string mid, Dictionary<string, string> query, bool wbi, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (wbi && _wbiKey is null) await InitializeWbiAsync(mid, token);
+        if (wbi && _wbiKey is null) await InitializeWbiAsync(mid, token).ConfigureAwait(false);
         using var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri("https://api.bilibili.com" + path));
         request.Headers.Referrer = new Uri("https://space.bilibili.com/" + Id(mid));
         // Do not also supply mobi_app/build: the Web authorizer owns its generated parameters.
@@ -178,21 +178,21 @@ public sealed partial class UserSpaceService : IDisposable
         }
         if (request.RequestUri is not { Scheme: "https", Host: "api.bilibili.com", Port: 443 } uri || uri.UserInfo.Length != 0)
             throw Schema();
-        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             if (wbi) _wbiKey = null;
             throw new UserSpaceDataException(UserSpaceLoadState.Error, $"主页请求失败（HTTP {(int)response.StatusCode}）。");
         }
-        using var stream = await response.Content.ReadAsStreamAsync(token);
+        using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         using var body = new MemoryStream();
         var buffer = new byte[16 * 1024];
         while (true)
         {
-            var count = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, MaximumBodyBytes - (int)body.Length + 1)), token);
+            var count = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, MaximumBodyBytes - (int)body.Length + 1)), token).ConfigureAwait(false);
             if (count == 0) break;
             if (body.Length + count > MaximumBodyBytes) throw Schema();
-            await body.WriteAsync(buffer.AsMemory(0, count), token);
+            await body.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
         }
         token.ThrowIfCancellationRequested();
         try { return JsonDocument.Parse(body.GetBuffer().AsMemory(0, (int)body.Length), new JsonDocumentOptions { MaxDepth = 64 }); }
@@ -201,7 +201,7 @@ public sealed partial class UserSpaceService : IDisposable
 
     private async Task InitializeWbiAsync(string mid, CancellationToken token)
     {
-        using var json = await GetAsync("/x/web-interface/nav", mid, new(), false, token);
+        using var json = await GetAsync("/x/web-interface/nav", mid, new(), false, token).ConfigureAwait(false);
         var code = Code(json.RootElement);
         // Public signing keys are documented even in the not-logged-in nav response.
         if (code is not (0 or -101)) throw new UserSpaceDataException(UserSpaceLoadState.Error, $"WBI 信息不可用（{code}）。");

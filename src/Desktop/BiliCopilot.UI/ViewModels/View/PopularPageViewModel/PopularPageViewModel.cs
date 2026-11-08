@@ -84,7 +84,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 
         if (_cacheAccountGeneration == _account.AccountGeneration && _displayedSection is not null && Videos.Count > 0)
         {
-            _videoCache[_displayedSection] = Videos.ToList();
+            CacheVideos(_displayedSection);
         }
 
         var generation = ++_videoGeneration;
@@ -109,16 +109,20 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 #pragma warning restore VSTHRD003
             if (generation != _videoGeneration) return;
             ResetAccountCacheIfNeeded();
+            _videoIds.Clear();
             Videos.Clear();
             _displayedSection = vm;
             HasAppendError = false;
             IsPrefetchExhausted = false;
-            if (_videoCache.TryGetValue(vm, out var cacheVideos))
+            var hasCache = _videoCache.TryGetValue(vm, out var cache);
+            if (vm is PopularSectionItemViewModel { Type: PopularSectionType.Recommend }) _recommendOffset = cache.Offset;
+            else if (vm is PopularSectionItemViewModel { Type: PopularSectionType.Hot }) _hotOffset = cache.Offset;
+            if (hasCache)
             {
-                foreach (var video in cacheVideos)
+                foreach (var video in cache.Videos)
                 {
                     if (generation != _videoGeneration || _cacheAccountGeneration != _account.AccountGeneration) return;
-                    Videos.Add(video);
+                    if (_videoIds.Add(video.Data.Identifier.Id)) Videos.Add(video);
                 }
 
                 if (generation != _videoGeneration || _cacheAccountGeneration != _account.AccountGeneration) return;
@@ -169,7 +173,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
                 await LoadPartitionRankVideosAsync(partition.Data, generation, accountGeneration, cancellation.Token);
 
             if (!IsCurrentVideoRequest(generation, accountGeneration, cancellation.Token)) return;
-            _videoCache[selected] = Videos.ToList();
+            CacheVideos(selected);
             if (!HasAppendError && (selected is PopularRankPartitionViewModel
                 || selected is PopularSectionItemViewModel { Type: PopularSectionType.Rank })) IsPrefetchExhausted = true;
             VideoListUpdated?.Invoke(this, EventArgs.Empty);
@@ -200,6 +204,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 #pragma warning restore VSTHRD003
             if (generation != _videoGeneration) return;
             ResetAccountCacheIfNeeded();
+            _videoIds.Clear();
             Videos.Clear();
             _videoCache.Remove(SelectedSection);
             _displayedSection = SelectedSection;
@@ -221,10 +226,26 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
     private bool IsCurrentVideoRequest(long generation, long accountGeneration, CancellationToken token)
         => !token.IsCancellationRequested && generation == _videoGeneration && accountGeneration == _account.AccountGeneration;
 
+    private void CacheVideos(IPopularSectionItemViewModel section)
+    {
+        // Keep complete paged responses so the cached list and SDK cursor stay aligned.
+        if (section is PopularSectionItemViewModel { Type: PopularSectionType.Recommend or PopularSectionType.Hot }
+            && Videos.Count > VideoCacheLimit) return;
+
+        var offset = section switch
+        {
+            PopularSectionItemViewModel { Type: PopularSectionType.Recommend } => _recommendOffset,
+            PopularSectionItemViewModel { Type: PopularSectionType.Hot } => _hotOffset,
+            _ => 0L,
+        };
+        _videoCache[section] = (Videos.Take(VideoCacheLimit).ToList(), offset);
+    }
+
     private void ResetAccountCacheIfNeeded()
     {
         if (_cacheAccountGeneration == _account.AccountGeneration) return;
         _videoCache.Clear();
+        _videoIds.Clear();
         Videos.Clear();
         _recommendOffset = 0;
         _hotOffset = 0;

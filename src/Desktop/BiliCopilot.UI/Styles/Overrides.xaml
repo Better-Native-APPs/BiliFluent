@@ -471,6 +471,8 @@
     </Style>
 
     <Style x:Key="BasicPlayerIconButtonStyle" TargetType="Button">
+        <!--  鼠标点击不抢键盘焦点，空格/方向键始终交给播放器快捷键（Tab 仍可聚焦）  -->
+        <Setter Property="AllowFocusOnInteraction" Value="False" />
         <Setter Property="Background" Value="{ThemeResource BasicPlayerButtonBackground}" />
         <Setter Property="BackgroundSizing" Value="InnerBorderEdge" />
         <Setter Property="Foreground" Value="{ThemeResource BasicPlayerButtonForeground}" />
@@ -563,6 +565,8 @@
     </Style>
 
     <Style x:Key="TogglePlayerIconButtonStyle" TargetType="ToggleButton">
+        <!--  鼠标点击不抢键盘焦点，空格/方向键始终交给播放器快捷键（Tab 仍可聚焦）  -->
+        <Setter Property="AllowFocusOnInteraction" Value="False" />
         <Setter Property="Background" Value="{ThemeResource BasicPlayerButtonBackground}" />
         <Setter Property="BackgroundSizing" Value="InnerBorderEdge" />
         <Setter Property="Foreground" Value="{ThemeResource BasicPlayerButtonForeground}" />

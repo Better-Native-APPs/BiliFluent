@@ -19,7 +19,7 @@
         </Grid.RowDefinitions>
         <controls:BasicCoverImage
             CornerRadius="4,4,0,0"
-            DecodeWidth="600"
+            DecodeWidth="400"
             Source="{x:Bind ViewModel.Cover, Mode=OneWay}" />
         <Ellipse
             Width="8"

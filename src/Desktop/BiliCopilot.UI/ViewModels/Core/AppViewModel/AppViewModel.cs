@@ -87,8 +87,6 @@ public sealed partial class AppViewModel : ViewModelBase
         var identifier = architecture == Architecture.Arm64 ? "arm64" : "x64";
         var ffmpegFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri($"ms-appx:///Assets/ffmpeg/{identifier}/ffmpeg.exe")).AsTask();
         FFmpegPath = ffmpegFile.Path;
-
-        _ = await this.Get<IFontToolkit>().GetFontsAsync();
     }
 
     [RelayCommand]

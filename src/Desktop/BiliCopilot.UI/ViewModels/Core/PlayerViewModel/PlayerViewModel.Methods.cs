@@ -19,6 +19,7 @@ using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Core.Models;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Windows.Media;
@@ -31,13 +32,42 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// </summary>
 public sealed partial class PlayerViewModel
 {
+    private static readonly PropertyChangedEventArgs _positionChangedEventArgs = new(nameof(Player.Position));
+    private static readonly TimeSpan _sponsorPositionObservationInterval = TimeSpan.FromMilliseconds(150);
     private bool _clientConfigured;
+    private int _positionUpdateQueued;
+    private object? _pendingPositionSender;
+    private long _pendingPositionMediaVersion;
+    private int _forceSponsorPositionObservation = 1;
+    private long _lastSponsorPositionObservation;
+    private long _lastPositionFanOut;
+    private double _lastObservedPosition;
+    private double? _pendingFanOutPosition;
+    private long _lastCacheSpeedTextUpdate;
+    private bool _playNextWithoutTip;
+    private bool _isHardwareDecodeChecked;
+    private long _positionTextSecond = -1;
+    private int _chapterFlagsCount = -1;
+    private double _chapterFlagsPosition = double.NaN;
+    private double _chapterFlagsLowerBound = double.NegativeInfinity;
+    private double _chapterFlagsUpperBound = double.PositiveInfinity;
+
     /// <summary>
     /// 初始化播放器.
     /// </summary>
     /// <returns><see cref="Task"/>.</returns>
     private async Task InitializeInternalAsync()
     {
+        _playNextWithoutTip = SettingsToolkit.ReadLocalSetting(SettingNames.PlayNextWithoutTip, false);
+        _isHardwareDecodeChecked = false;
+        _positionTextSecond = -1;
+        _chapterFlagsCount = -1;
+        _lastSponsorPositionObservation = 0;
+        _lastPositionFanOut = 0;
+        _lastObservedPosition = 0;
+        _pendingFanOutPosition = null;
+        _lastCacheSpeedTextUpdate = 0;
+        Volatile.Write(ref _forceSponsorPositionObservation, 1);
         if (Connector is not null && !(_snapshot.Type == BiliMediaType.Video && Connector is VideoConnectorViewModel)
             && !(_snapshot.Type == BiliMediaType.Pgc && Connector is PgcConnectorViewModel))
         {
@@ -73,6 +103,7 @@ public sealed partial class PlayerViewModel
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
+            await MpvShutdownHelper.QuitCoreAsync(Client, logger, TimeSpan.FromSeconds(3));
             await Client.DisposeAsync();
             Client = null;
             _nativeMp?.Dispose();
@@ -91,7 +122,8 @@ public sealed partial class PlayerViewModel
             _smtc.IsPlayEnabled = true;
             _smtc.IsPauseEnabled = true;
             _smtc.ButtonPressed += OnSmtcButtonPressed;
-            var gpuNames = AppToolkit.GetGpuNames();
+            var gpuNames = await Task.Run(AppToolkit.GetGpuNames);
+            CheckMediaAdmission();
             HasNvidiaGpu = gpuNames.Any(p => p.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
             var mpvPath = SettingsToolkit.ReadLocalSetting(SettingNames.CustomLibmpvPath, string.Empty);
             if (string.IsNullOrEmpty(mpvPath) || !File.Exists(mpvPath))
@@ -117,6 +149,26 @@ public sealed partial class PlayerViewModel
             var client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
             Client = client;
             CheckMediaAdmission();
+            if (options.UseConfig != true && string.IsNullOrEmpty(configPath))
+            {
+                // MpvKernel exposes these options only after initialization; keep stats and user scripts enabled.
+                string[] scriptOptions = ["load-console", "load-select", "load-positioning", "load-commands"];
+                foreach (var scriptOption in scriptOptions)
+                {
+                    await AwaitInitializationStepAsync(async () =>
+                    {
+                        var errorCode = await Task.Run(() => MpvNative.SetOptionString(client.Handle, scriptOption, "no"));
+                        if (errorCode != MpvError.Success)
+                        {
+                            if (logger.IsEnabled(LogLevel.Debug))
+                            {
+                                logger.LogDebug("Unable to disable MPV built-in script via {Option}: {Error}.", scriptOption, errorCode);
+                            }
+                        }
+                    });
+                }
+            }
+
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
             SetSubtitleDelaySecondsCommand.Execute(SubtitleDelaySeconds);
@@ -203,15 +255,12 @@ public sealed partial class PlayerViewModel
                     }
                 }
 
-                var cacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 300d);
-                var cacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 360d);
+                var cacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 64d);
+                var cacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 60d);
                 var backCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d);
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBytesAsync($"{Convert.ToInt32(cacheSize)}MiB"));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerReadheadSecondsAsync(Convert.ToInt32(cacheSeconds)));
-                if (Convert.ToInt32(backCacheSize) > 0)
-                {
-                    await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB"));
-                }
+                await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB"));
 
                 var useCacheOnDisk = SettingsToolkit.ReadLocalSetting(SettingNames.CacheOnDisk, false);
                 await AwaitInitializationStepAsync(() => Client.SetCacheOnDiskAsync(useCacheOnDisk));
@@ -238,7 +287,6 @@ public sealed partial class PlayerViewModel
                 var profile = SettingsToolkit.ReadLocalSetting(SettingNames.MpvBuiltInProfile, MpvBuiltInProfile.HighQuality);
                 if (profile != MpvBuiltInProfile.HighQuality)
                 {
-                    await AwaitInitializationStepAsync(() => Client.SetLoadAutoProfilesAsync(true));
                     await AwaitInitializationStepAsync(() => Client.SetBuiltInProfileAsync(profile.ToString().ToLowerInvariant()));
                 }
 
@@ -339,10 +387,38 @@ public sealed partial class PlayerViewModel
         });
     }
 
+    private readonly object _cacheStateUpdateLock = new();
+    private MpvCacheStateEventArgs? _pendingCacheState;
+    private long _pendingCacheStateMediaVersion;
+    private bool _cacheStateUpdateQueued;
+
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
     {
-        var version = _mediaVersion;
-        queue.TryEnqueue(() => { if (IsCurrentPlayback(version)) CacheStateChanged?.Invoke(this, e); });
+        lock (_cacheStateUpdateLock)
+        {
+            _pendingCacheState = e;
+            _pendingCacheStateMediaVersion = _mediaVersion;
+            if (_cacheStateUpdateQueued) return;
+            _cacheStateUpdateQueued = true;
+        }
+        if (!queue.TryEnqueue(ProcessCacheStateUpdate))
+        {
+            lock (_cacheStateUpdateLock) _cacheStateUpdateQueued = false;
+        }
+    }
+
+    private void ProcessCacheStateUpdate()
+    {
+        MpvCacheStateEventArgs? state;
+        long version;
+        lock (_cacheStateUpdateLock)
+        {
+            state = _pendingCacheState;
+            version = _pendingCacheStateMediaVersion;
+            _pendingCacheState = null;
+            _cacheStateUpdateQueued = false;
+        }
+        if (state is not null && IsCurrentPlayback(version)) CacheStateChanged?.Invoke(this, state);
     }
 
     private async void OnClientErrorOccurred(object? sender, MpvError e)
@@ -464,8 +540,14 @@ public sealed partial class PlayerViewModel
     {
         if (!queue.HasThreadAccess)
         {
-            var version = _mediaVersion;
-            queue.TryEnqueue(() => { if (IsCurrentPlayback(version)) OnPlayerPropertyChanged(sender, e); });
+            if (e.PropertyName == nameof(Player.Position))
+            {
+                QueuePlayerPositionUpdate(sender);
+            }
+            else
+            {
+                QueuePlayerPropertyChanged(sender, e);
+            }
             return;
         }
         if (!IsCurrentPlayback(_mediaVersion) || !ReferenceEquals(sender, Player))
@@ -474,13 +556,44 @@ public sealed partial class PlayerViewModel
         }
 
         // Notifications are reread prompts only; never feed this event's old payload into Sponsor.
-        if (e.PropertyName is nameof(Player.Position) or nameof(Player.Duration) or nameof(Player.PlaybackRate)
-            or nameof(Player.PlaybackState) or nameof(Player.IsPlaybackInitialized))
+        if (e.PropertyName == nameof(Player.Position))
+        {
+            var timestamp = Stopwatch.GetTimestamp();
+            if (Interlocked.Exchange(ref _forceSponsorPositionObservation, 0) != 0
+                || _lastSponsorPositionObservation == 0
+                || Stopwatch.GetElapsedTime(_lastSponsorPositionObservation, timestamp) >= _sponsorPositionObservationInterval)
+            {
+                _lastSponsorPositionObservation = timestamp;
+                _sponsor?.RequestObservation();
+            }
+        }
+        else if (RequiresImmediateSponsorObservation(e.PropertyName))
+        {
+            Volatile.Write(ref _forceSponsorPositionObservation, 1);
             _sponsor?.RequestObservation();
+        }
+
+        if (e.PropertyName == nameof(Player.Position) && !ShouldFanOutPlayerPosition())
+        {
+            return;
+        }
+
+        var flushPendingPosition = e.PropertyName is nameof(Player.Duration)
+            or nameof(Player.PlaybackState) or nameof(Player.IsPlaybackInitialized);
+        if (flushPendingPosition)
+        {
+            _lastPositionFanOut = 0;
+        }
+
         var mediaVersion = _mediaVersion;
         try
         {
             await OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
+            if (flushPendingPosition && _pendingFanOutPosition.HasValue && IsCurrentPlayback(mediaVersion))
+            {
+                ShouldFanOutPlayerPosition(force: true);
+                await OwnWork(HandlePlayerPropertyChangedAsync(_positionChangedEventArgs, mediaVersion));
+            }
         }
         catch (Exception ex)
         {
@@ -495,24 +608,155 @@ public sealed partial class PlayerViewModel
         }
     }
 
+    private bool ShouldFanOutPlayerPosition(bool force = false)
+    {
+        var position = Player.Position;
+        var delta = position - _lastObservedPosition;
+        _lastObservedPosition = position;
+        _pendingFanOutPosition = position;
+        var timestamp = Environment.TickCount64;
+        if (!force && _lastPositionFanOut != 0 && delta >= 0 && delta <= 1.5
+            && Player.PlaybackState == MpvPlayerState.Playing
+            && (Player.Duration <= 0 || position < Player.Duration - 1)
+            && timestamp - _lastPositionFanOut < 250)
+        {
+            return false;
+        }
+
+        // State changes flush a skipped value even if playback stops producing positions.
+        _lastPositionFanOut = timestamp;
+        return true;
+    }
+
+    private void QueuePlayerPositionUpdate(object? sender)
+    {
+        // One queued reread uses the current player's latest position, not an old event payload.
+        Volatile.Write(ref _pendingPositionSender, sender);
+        Volatile.Write(ref _pendingPositionMediaVersion, _mediaVersion);
+        if (Interlocked.Exchange(ref _positionUpdateQueued, 1) != 0)
+        {
+            return;
+        }
+
+        if (!queue.TryEnqueue(ProcessPlayerPositionUpdate))
+        {
+            Interlocked.Exchange(ref _positionUpdateQueued, 0);
+        }
+    }
+
+    private void ProcessPlayerPositionUpdate()
+    {
+        Interlocked.Exchange(ref _positionUpdateQueued, 0);
+        var version = Volatile.Read(ref _pendingPositionMediaVersion);
+        if (IsCurrentPlayback(version))
+        {
+            OnPlayerPropertyChanged(Volatile.Read(ref _pendingPositionSender), _positionChangedEventArgs);
+        }
+    }
+
+    private void QueuePlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (RequiresImmediateSponsorObservation(e.PropertyName))
+        {
+            // A queued position may run before this state/seek notification reaches the UI.
+            Volatile.Write(ref _forceSponsorPositionObservation, 1);
+        }
+
+        var version = _mediaVersion;
+        queue.TryEnqueue(() => { if (IsCurrentPlayback(version)) OnPlayerPropertyChanged(sender, e); });
+    }
+
+    private static bool RequiresImmediateSponsorObservation(string? propertyName)
+        => propertyName is nameof(Player.Duration) or nameof(Player.PlaybackRate)
+            or nameof(Player.PlaybackState) or nameof(Player.IsPlaybackInitialized);
+
+    private void UpdateChapterFlags(double position)
+    {
+        if (_chapterFlagsCount == Chapters.Count && (_chapterFlagsPosition == position
+            || (position > _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
+        {
+            return;
+        }
+
+        _chapterFlagsCount = Chapters.Count;
+        _chapterFlagsPosition = position;
+        _chapterFlagsLowerBound = double.NegativeInfinity;
+        _chapterFlagsUpperBound = double.PositiveInfinity;
+        foreach (var chapter in Chapters)
+        {
+            chapter.IsPlayed = chapter.Position <= position;
+            chapter.IsPlaying = Math.Abs(chapter.Position - position) < 2;
+            // Preserve the ±2s start window used by previous/next chapter commands.
+            UpdateChapterBoundary(chapter.Position - 2, position);
+            UpdateChapterBoundary(chapter.Position, position);
+            UpdateChapterBoundary(chapter.Position + 2, position);
+        }
+    }
+
+    private void UpdateChapterBoundary(double boundary, double position)
+    {
+        if (boundary <= position)
+        {
+            _chapterFlagsLowerBound = Math.Max(_chapterFlagsLowerBound, boundary);
+        }
+
+        if (boundary >= position)
+        {
+            _chapterFlagsUpperBound = Math.Min(_chapterFlagsUpperBound, boundary);
+        }
+    }
+
+    private void CheckHardwareDecode()
+    {
+        // Source setup owns native access before binding; never bypass a live Sponsor lane.
+        if (_isHardwareDecodeChecked || Player?.IsPlaybackInitialized != true
+            || Player.PlaybackState != MpvPlayerState.Playing || Client is not { IsDisposed: false } client
+            || _sponsor?.HasBinding == true)
+        {
+            return;
+        }
+
+        var hwdec = MpvNative.GetPropertyString(client.Handle, "hwdec-current");
+        if (string.IsNullOrEmpty(hwdec))
+        {
+            return;
+        }
+
+        _isHardwareDecodeChecked = true;
+        if (string.Equals(hwdec, "no", StringComparison.OrdinalIgnoreCase))
+        {
+            var codec = MpvNative.GetPropertyString(client.Handle, "video-codec");
+            if (codec is not null && (codec.Contains("av1", StringComparison.OrdinalIgnoreCase)
+                || codec.Contains("hevc", StringComparison.OrdinalIgnoreCase) || codec.Contains("h265", StringComparison.OrdinalIgnoreCase)))
+            {
+                logger.LogWarning("MPV is software decoding {Codec}; prefer H.264 to reduce CPU usage.", codec);
+            }
+        }
+    }
+
     private async Task HandlePlayerPropertyChangedAsync(PropertyChangedEventArgs e, long mediaVersion)
     {
         if (e.PropertyName == nameof(Player.Position))
         {
             IsPreviewProgressChanging = false;
-            PositionText = TimeSpan.FromSeconds(Player.Position).ToString(@"hh\:mm\:ss");
-            ProgressChanged?.Invoke(this, Player.Position);
-            Danmaku.UpdatePosition(Convert.ToInt32(Player.Position));
-            foreach (var chapter in Chapters)
+            var position = _pendingFanOutPosition ?? Player.Position;
+            _pendingFanOutPosition = null;
+            var positionTime = TimeSpan.FromSeconds(position);
+            var positionSecond = positionTime.Ticks / TimeSpan.TicksPerSecond;
+            if (_positionTextSecond != positionSecond)
             {
-                chapter.IsPlayed = chapter.Position <= Player.Position;
-                chapter.IsPlaying = Math.Abs(chapter.Position - Player.Position) < 2;
+                _positionTextSecond = positionSecond;
+                PositionText = positionTime.ToString(@"hh\:mm\:ss");
             }
+
+            ProgressChanged?.Invoke(this, position);
+            Danmaku.UpdatePosition(Convert.ToInt32(position));
+            UpdateChapterFlags(position);
 
             if (Player.Duration > 5)
             {
                 IsEnd = false;
-                var isShowTip = !SettingsToolkit.ReadLocalSetting(SettingNames.PlayNextWithoutTip, false);
+                var isShowTip = !_playNextWithoutTip;
                 var endSec = isShowTip ? 2 : 0.1;
                 if (Math.Abs(Player.Position - Player.Duration) < endSec)
                 {
@@ -610,12 +854,17 @@ public sealed partial class PlayerViewModel
         }
         else if (e.PropertyName == nameof(Player.IsPlaybackInitialized) && Player.IsPlaybackInitialized && !(Window?.IsClosed ?? true))
         {
+            _playNextWithoutTip = SettingsToolkit.ReadLocalSetting(SettingNames.PlayNextWithoutTip, false);
+            _isHardwareDecodeChecked = false;
+            _positionTextSecond = -1;
+            _chapterFlagsCount = -1;
+            CheckHardwareDecode();
             ErrorMessage = default;
             _prevPosition = 0;
             CheckBlackBackgroundVisible();
             CheckBottomProgressBarVisible();
             ResetSubtitlePositionCommand.Execute(default);
-            ReloadFontsCommand.Execute(default);
+            ChangeSubtitleFontFamilyCommand.Execute(SettingsToolkit.ReadLocalSetting(SettingNames.SubtitleFontFamily, "Segoe UI"));
             var subtitleFontSize = SettingsToolkit.ReadLocalSetting(SettingNames.SubtitleFontSize, 32d);
             ChangeSubtitleFontSizeCommand.Execute(Math.Max(1, subtitleFontSize));
             // 强制关闭可能开启的统计信息覆盖层.
@@ -653,10 +902,24 @@ public sealed partial class PlayerViewModel
         }
         else if (e.PropertyName == nameof(Player.CacheSpeed))
         {
-            CacheSpeedText = Player.CacheSpeed < 1 ? default : Player.CacheSpeed.Bytes().Humanize() + "/s";
+            var timestamp = Environment.TickCount64;
+            if (_lastCacheSpeedTextUpdate != 0 && timestamp - _lastCacheSpeedTextUpdate < 1000)
+            {
+                return;
+            }
+
+            _lastCacheSpeedTextUpdate = timestamp;
+            var cacheSpeed = Player.CacheSpeed;
+            var cacheSpeedText = cacheSpeed < 1 ? default : cacheSpeed.Bytes().Humanize() + "/s";
+            if (CacheSpeedText != cacheSpeedText)
+            {
+                CacheSpeedText = cacheSpeedText;
+            }
         }
         else if (e.PropertyName == nameof(Player.PlaybackState))
         {
+            this.Get<AppViewModel>().NotifyPlaybackActivityChanged();
+            CheckHardwareDecode();
             if (IsDanmakuControlVisible && Danmaku.IsShowDanmaku)
             {
                 if (Player.PlaybackState == MpvPlayerState.Playing)

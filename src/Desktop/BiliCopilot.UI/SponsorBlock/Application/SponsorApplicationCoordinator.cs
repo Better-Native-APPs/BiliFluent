@@ -99,10 +99,11 @@ internal sealed partial class SponsorApplicationCoordinator
     });
     private Task<T> OnOwner<T>(Func<T> action) => OnOwner(() => Task.FromResult(action()));
     private static ApplicationResult Result(ApplicationStatus status, string? reason = null) => new(status, reason);
-    private bool Current(PlayerTicket ticket, out PlayerState state)
+    private bool Current(PlayerTicket ticket, out PlayerState state, bool allowObservationDrift = false)
     {
         if (players.TryGetValue(ticket.Attachment, out state!) && !Stopping && !state.Attachment.IsClosed
-            && state.Attachment.Latest?.Stamp == ticket.Stamp && state.Result?.Owner == ticket.Stamp.Owner
+            && (allowObservationDrift ? ticket.Stamp.HasSameContext(state.Attachment.Latest?.Stamp)
+                : state.Attachment.Latest?.Stamp == ticket.Stamp) && state.Result?.Owner == ticket.Stamp.Owner
             && ticket.Stamp.PolicyRevision == policyRevision) return true;
         return false;
     }
@@ -303,7 +304,7 @@ internal sealed partial class SponsorApplicationCoordinator
 
     private ClientEpoch AcquireClient()
     {
-        if (!settings.NetworkEnabled || Stopping || requests.Count >= 16) throw new InvalidOperationException("SponsorNetworkAdmissionClosed");
+        if (Stopping) throw new InvalidOperationException("SponsorNetworkAdmissionClosed");
         client ??= new(clients.Create(new(true, settings.ViewedTelemetryEnabled)));
         ++client.Users; return client;
     }

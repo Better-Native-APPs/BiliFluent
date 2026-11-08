@@ -45,6 +45,9 @@ internal sealed class LiveApplicationBridge : ILivePlaybackAdmission, ILiveWindo
     internal bool HasWork => _owners.Count != 0 || _launcher.HasWork || _routes.HasWork
         || _chatFactory.HasWork || _shutdown is { IsCompleted: false };
 
+    internal bool HasActivePlayback
+        => _owners.Any(owner => owner.Session?.PlaybackState is LivePlaybackState.Playing or LivePlaybackState.Opening or LivePlaybackState.Closing);
+
     private MainWindow GetMainWindow()
     {
         CheckAccess();
