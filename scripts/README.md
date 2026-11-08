@@ -57,7 +57,7 @@ SDK 位于 `src/Libs/BiliKernel` 子模块，源为 <https://github.com/Better-N
 
 重新构建前如果已有旧的产物目录，请先删除 `artifacts/release/`。
 
-构建成功后，生成的 MSIX 包保存在 `artifacts/release/BiliCopilot_2.2611.3.0_x64.msix`。
+构建成功后，生成的 MSIX 包保存在 `artifacts/release/BiliCopilot_2.2611.6.0_x64.msix`。
 
 #### 脚本可用参数
 
@@ -90,7 +90,7 @@ $cert = New-SelfSignedCertificate -Type Custom `
 已签名的安装包需要系统信任其签名证书：
 
 1. **导出公钥并信任**：将签名证书的公钥（.cer）导出并导入到本地计算机的“受信任的人”（`TrustedPeople`）存储区。
-2. **安装应用**：双击 MSIX 安装，或在 PowerShell 中运行 `Add-AppxPackage -Path artifacts\release\BiliCopilot_2.2611.3.0_x64.msix`。
+2. **安装应用**：双击 MSIX 安装，或在 PowerShell 中运行 `Add-AppxPackage -Path artifacts\release\BiliCopilot_2.2611.6.0_x64.msix`。
 
 如果使用的是正式分发结构（包含 `Install.ps1` 和 `Trust-Certificate.ps1` 的发布包），普通用户直接在解压目录下运行即可：
 

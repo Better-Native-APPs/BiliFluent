@@ -23,7 +23,7 @@
         "sha256": { "$ref": "#/$defs/sha256" },
         "name": { "const": "BiliCopilot.LocalRelease" },
         "publisher": { "const": "CN=BiliCopilot Local Release" },
-        "version": { "const": "2.2611.3.0" },
+        "version": { "const": "2.2611.6.0" },
         "architecture": { "const": "x64" },
         "packageFamilyName": { "type": "string", "pattern": "^BiliCopilot\\.LocalRelease_[0-9a-hjkmnp-tv-z]{13}$" },
         "packageFullName": { "type": "string", "pattern": "^BiliCopilot\\.LocalRelease_2\\.2611\\.3\\.0_x64__[0-9a-hjkmnp-tv-z]{13}$" },

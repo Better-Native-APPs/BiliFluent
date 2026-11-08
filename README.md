@@ -24,7 +24,7 @@
 
 - **BiliKernel SDK 定制与维护**：以 Git Submodule 形式引入了 fork 后的 [Better-Native-APPs/BiliKernel](https://github.com/Better-Native-APPs/BiliKernel)（位于 `src/Libs/BiliKernel`），修改并适配了 `Abstractions`、`Services.Comment`、`Services.Media` 和 `Services.Moment` 四个核心模块（版本号 `0.0.3-bilicopilot.1`）。通过本地包源与 `nuget.config` 源映射，确保优先使用本地定制包，未修改模块继续使用公开源。
 - **本地发布与测试通道支持**：
-  - **LocalRelease 通道**：正式发布版本（当前版本为 `2.2611.3.0`），启用 ReadyToRun 编译优化，提供配套的本地证书信任与侧加载安装脚本。
+  - **LocalRelease 通道**：正式发布版本（当前版本为 `2.2611.6.0`），启用 ReadyToRun 编译优化，提供配套的本地证书信任与侧加载安装脚本。
   - **LocalTest 通道**：日常开发测试通道，使用独立包身份（`BiliCopilot.LocalTest`，显示为“哔哩助理（测试）”），与正式版本完全隔离，支持并存安装与升级验证。
 - **原生依赖解耦**：将 `libmpv`、`ffmpeg` 和 `BiliCopilot.Visor` 原生可执行文件解耦为构建前按需放入的独立资产，并提供明确的版本说明。
 
@@ -70,7 +70,7 @@
    ```powershell
    .\scripts\Build-Release.ps1
    ```
-   产物输出于 `artifacts/release/BiliCopilot_2.2611.3.0_x64.msix`。如需签名，可传入 `-CertificateThumbprint <证书指纹>`。
+   产物输出于 `artifacts/release/BiliCopilot_2.2611.6.0_x64.msix`。如需签名，可传入 `-CertificateThumbprint <证书指纹>`。
 
 ## 文档与链接
 
