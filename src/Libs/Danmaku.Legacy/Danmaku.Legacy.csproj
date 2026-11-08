@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="RunAnalyzers;RunAnalyzersDuringBuild;RunAnalyzersDuringLiveAnalysis;EnableNETAnalyzers;EnforceCodeStyleInBuild;TreatWarningsAsErrors;GenerateDocumentationFile;Nullable">
+	<PropertyGroup>
+		<TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+		<TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+		<AssemblyName>Danmaku.Legacy</AssemblyName>
+		<RootNamespace>Richasy.Danmaku.Legacy</RootNamespace>
+		<Platforms>x86;x64;ARM64</Platforms>
+		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<UseWinUI>true</UseWinUI>
+		<IsPackable>false</IsPackable>
+		<NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+	</PropertyGroup>
+
+	<!-- Keep upstream source unchanged without inheriting the application's analyzer policy. -->
+	<PropertyGroup>
+		<RunAnalyzers>false</RunAnalyzers>
+		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+		<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+		<EnableNETAnalyzers>false</EnableNETAnalyzers>
+		<EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+		<Nullable>disable</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<!-- NuGet Package Settings -->
+		<Title>Danmaku Kernel - Legacy</Title>
+		<Description>Danmaku renderer (Use Win2D)</Description>
+	</PropertyGroup>
+	
+	<ItemGroup>
+		<PackageReference Include="Danmaku.Share" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+		<PackageReference Include="Microsoft.Graphics.Win2D" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" />
+	</ItemGroup>
+</Project>

@@ -15,7 +15,6 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Media" Version="8.0.240109" />
     <PackageVersion Include="ComputeSharp.D2D1.WinUI" Version="3.2.0" />
     <PackageVersion Include="Danmaku.Core" Version="0.0.1-preview6" />
-    <PackageVersion Include="Danmaku.Legacy" Version="0.0.1-preview6" />
     <PackageVersion Include="Danmaku.Share" Version="0.0.1-preview6" />
     <PackageVersion Include="FluentIcons.WinUI" Version="1.2.315" />
     <PackageVersion Include="Flurl.Http" Version="4.0.2" />
