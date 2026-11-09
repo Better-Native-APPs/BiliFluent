@@ -3,7 +3,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $source = Join-Path $root 'src/Libs/BiliKernel'
-if (-not (Test-Path (Join-Path $source '.git'))) { throw 'Initialize the pinned SDK: git submodule update --init --recursive' }
+if (-not (Test-Path (Join-Path $source 'src/BiliKernel.Abstractions/BiliKernel.Abstractions.csproj'))) { throw "BiliKernel sources not found under $source." }
 $feed = Join-Path $root 'artifacts/bilikernel-feed'
 $logs = Join-Path $root 'artifacts/bilikernel-logs'
 New-Item -ItemType Directory -Force -Path $feed, $logs | Out-Null
