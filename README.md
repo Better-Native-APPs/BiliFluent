@@ -1,8 +1,40 @@
-# BiliFluent
+<p align="center">
+  <img src="assets/StoreLogo.png" width="48" height="48" alt="BiliFluent" />
+</p>
 
-BiliFluent 是采用 Fluent UI 与 WinUI 3 原生控件、专为 Windows 优化的哔哩哔哩第三方桌面客户端。无广告，注重流畅播放、低资源占用与低配置设备体验。
+<h1 align="center">BiliFluent</h1>
 
-项目基于 Richasy 的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 [GPL-3.0](LICENSE) 许可协议。
+<p align="center">
+  <a href="https://github.com/Better-Native-APPs/BiliFluent/releases"><img src="https://img.shields.io/github/v/release/Better-Native-APPs/BiliFluent" alt="Release" /></a>
+  <a href="https://github.com/Better-Native-APPs/BiliFluent/releases"><img src="https://img.shields.io/github/release-date/Better-Native-APPs/BiliFluent" alt="Release Date" /></a>
+  <a href="https://github.com/Better-Native-APPs/BiliFluent/releases"><img src="https://img.shields.io/github/downloads/Better-Native-APPs/BiliFluent/total" alt="Downloads" /></a>
+  <a href="https://github.com/Better-Native-APPs/BiliFluent/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Better-Native-APPs/BiliFluent/release.yml?branch=main" alt="CI Status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Better-Native-APPs/BiliFluent" alt="License" /></a>
+  <a href="#安装"><img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue" alt="Platform" /></a>
+  <a href="https://github.com/Better-Native-APPs/BiliFluent/stargazers"><img src="https://img.shields.io/github/stars/Better-Native-APPs/BiliFluent" alt="Stars" /></a>
+</p>
+
+<p align="center">
+  专为 Windows 优化的哔哩哔哩第三方桌面客户端，采用 Fluent UI 与 WinUI 3 原生控件，流畅省电无广告。
+</p>
+
+<p align="center">
+  <a href="#特性">特性</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#安装">安装</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#从源码构建">从源码构建</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#更新日志">更新日志</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#参与贡献">参与贡献</a>
+</p>
+
+<p align="center">
+  项目基于 Richasy 的「哔哩助理」（<a href="https://github.com/Richasy/Bili.Copilot">Bili Copilot</a>）二次开发，遵循 <a href="LICENSE">GPL-3.0</a> 许可协议。
+</p>
+
+---
 
 ## 特性
 
@@ -59,10 +91,13 @@ cd BiliFluent
 - **正式发布**：推送 `v*` 标签时构建并发布 GitHub Release。
 - **代码签名**：由仓库 Secrets（`SIGNING_PFX_BASE64`、`SIGNING_PFX_PASSWORD`、`SIGNING_CERT_THUMBPRINT`）提供。
 
-## 参与开发与贡献
+## 更新日志
 
-- **贡献指南**：分支管理、提交规范（Conventional Commits）与发版清单见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-- **变更日志**：版本更新历史记录见 [CHANGELOG.md](CHANGELOG.md)。
+版本更新历史记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 参与贡献
+
+分支管理、提交规范（Conventional Commits）与发版清单见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 致谢
 
