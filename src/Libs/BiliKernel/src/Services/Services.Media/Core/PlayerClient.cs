@@ -464,7 +464,7 @@ internal sealed class PlayerClient
         }
         else if (operation == 3)
         {
-            body.Reverse();
+            Array.Reverse(body);
             var online = BitConverter.ToInt32(body, 0);
             return [new LiveMessage(LiveMessageType.Online, online)];
         }
@@ -613,27 +613,27 @@ internal sealed class PlayerClient
 
         // 数据包长度
         var b = BitConverter.GetBytes(buffer.Length).ToArray();
-        b.Reverse();
+        Array.Reverse(b);
         ms.Write(b, 0, 4);
 
         // 数据包头部长度,固定16
         b = BitConverter.GetBytes(16);
-        b.Reverse();
+        Array.Reverse(b);
         ms.Write(b, 2, 2);
 
         // 协议版本，0=JSON,1=Int32,2=Buffer
         b = BitConverter.GetBytes(0);
-        b.Reverse();
+        Array.Reverse(b);
         ms.Write(b, 0, 2);
 
         // 操作类型
         b = BitConverter.GetBytes(action);
-        b.Reverse();
+        Array.Reverse(b);
         ms.Write(b, 0, 4);
 
         // 数据包头部长度,固定1
         b = BitConverter.GetBytes(1);
-        b.Reverse();
+        Array.Reverse(b);
         ms.Write(b, 0, 4);
 
         // 数据

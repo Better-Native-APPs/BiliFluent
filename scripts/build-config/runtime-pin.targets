@@ -1,18 +1,18 @@
 <Project>
   <ItemGroup>
     <KnownFrameworkReference Update="@(KnownFrameworkReference)">
-      <LatestRuntimeFrameworkVersion Condition="'%(KnownFrameworkReference.TargetFramework)' == 'net9.0'">9.0.20</LatestRuntimeFrameworkVersion>
+      <LatestRuntimeFrameworkVersion Condition="'%(KnownFrameworkReference.TargetFramework)' == 'net10.0'">10.0.14</LatestRuntimeFrameworkVersion>
     </KnownFrameworkReference>
     <KnownILLinkPack Update="@(KnownILLinkPack)">
-      <ILLinkPackVersion Condition="'%(KnownILLinkPack.TargetFramework)' == 'net9.0'">9.0.20</ILLinkPackVersion>
+      <ILLinkPackVersion Condition="'%(KnownILLinkPack.TargetFramework)' == 'net10.0'">10.0.14</ILLinkPackVersion>
     </KnownILLinkPack>
     <KnownCrossgen2Pack Update="@(KnownCrossgen2Pack)">
-      <Crossgen2PackVersion Condition="'%(KnownCrossgen2Pack.TargetFramework)' == 'net9.0'">9.0.20</Crossgen2PackVersion>
+      <Crossgen2PackVersion Condition="'%(KnownCrossgen2Pack.TargetFramework)' == 'net10.0'">10.0.14</Crossgen2PackVersion>
     </KnownCrossgen2Pack>
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' And '$(TargetFrameworkVersion)' == 'v9.0'">
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' And '$(TargetFrameworkVersion)' == 'v10.0'">
     <FrameworkReference Update="Microsoft.NETCore.App">
-      <RuntimeFrameworkVersion>9.0.20</RuntimeFrameworkVersion>
+      <RuntimeFrameworkVersion>10.0.14</RuntimeFrameworkVersion>
     </FrameworkReference>
   </ItemGroup>
   <Target Name="RecordReleaseSettings" BeforeTargets="CoreCompile" Condition="'$(MSBuildProjectName)' == 'BiliCopilot.UI'">
