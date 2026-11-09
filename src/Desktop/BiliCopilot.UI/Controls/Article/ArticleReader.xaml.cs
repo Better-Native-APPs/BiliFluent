@@ -817,7 +817,9 @@ public sealed partial class ArticleReader : LayoutUserControlBase
         /// </summary>
         public bool IsAwaitingStart => NavigationId is null && !_source.Task.IsCompleted;
 
+        #pragma warning disable VSTHRD003 // Exposes this owner's own completion source; callers observe it and it never depends on their context.
         public Task<ArticleReaderRenderResult> Completion => _source.Task;
+        #pragma warning restore VSTHRD003
 
         public void Claim(ulong navigationId) => NavigationId ??= navigationId;
 

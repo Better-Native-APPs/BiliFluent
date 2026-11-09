@@ -6,7 +6,9 @@ namespace BiliCopilot.UI.ViewModels.View;
 internal sealed class MessageRequestOwner(long generation, long accountGeneration, string? accountId, Task previous, bool refresh = false)
 {
     private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    #pragma warning disable VSTHRD003 // Exposes the slot's own completion source to its awaiters.
     internal Task<bool> Task => _completion.Task;
+    #pragma warning restore VSTHRD003
     internal Task Previous { get; } = previous;
     internal bool Refresh { get; } = refresh;
     internal bool IsCurrent(MessageRequestOwner? slot, long currentGeneration, long currentAccountGeneration, string? currentAccountId)

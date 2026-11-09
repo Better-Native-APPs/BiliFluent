@@ -50,7 +50,9 @@ public sealed partial class AppViewModel
     {
         _sponsorApplicationRuntime ??= this.Get<SponsorRuntime>();
         _sponsorApplicationRuntime.BindMainWindow(window, () =>
+#pragma warning disable VSTHRD114 // null is the BindMainWindow contract for "do not exit"; it is not awaited.
             SponsorMainWindowExitEligible || IsPlaybackStopping ? App.Current.RequestExitAsync() : null);
+#pragma warning restore VSTHRD114
     }
 
     /// <summary>Only the explicit Live user route; failures stay in-app and never open a browser.</summary>

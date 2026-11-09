@@ -115,7 +115,9 @@ internal sealed partial class SponsorPlaybackController
         { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus, RequestResult = _requestResult };
     internal bool HasBinding => _backend is not null && !_sealed;
     internal bool CanUseBinding => HasBinding && !_retiring && _bindingCurrent?.Invoke() == true;
+    #pragma warning disable VSTHRD003 // Read-only view of the actual-completion task owned by this controller.
     internal Task? ActualCompletion => _actualCompletion;
+    #pragma warning restore VSTHRD003
     internal double? UserRateBaseline => _physical?.Baseline ?? _rate?.Baseline;
 
     internal void Bind(Func<NativeAdmission.Issuer, ISponsorPlaybackBackend> createBackend,
