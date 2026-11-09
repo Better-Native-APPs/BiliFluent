@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 变更
+- 运行时迁移至 .NET 10，Windows App SDK 升级至 2.6，并同步更新其余 NuGet 依赖与 CI Actions。
+- 内置 libmpv 升级至 mpv v0.42.0（shinchiro 20261109 构建）。
+
 ### 移除
 - 移除未被使用的内置 `ffmpeg.exe`（约 102 MiB），安装包体积相应减小；libmpv 保持不变。
 

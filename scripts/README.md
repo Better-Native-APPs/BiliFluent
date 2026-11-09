@@ -28,15 +28,15 @@ BiliKernel SDK 源码已作为 Monorepo 纳入仓库目录 `src/Libs/BiliKernel`
 
 ## 2. 准备固定的原生运行时依赖
 
-CI 流程与发布脚本固定从 [shinchiro/mpv-winbuild-cmake 20261006 Release](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261006) 下载并核验以下原生资产。手工编译时请务必使用哈希完全一致的输入，严禁随意替换为其他版本。
+CI 流程与发布脚本固定从 [shinchiro/mpv-winbuild-cmake 20261109 Release](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261109) 下载并核验以下原生资产。手工编译时请务必使用哈希完全一致的输入，严禁随意替换为其他版本。
 
 ### libmpv 运行时
-- **归档名称**：`mpv-dev-x86_64-20261006-git-6c092d978b.7z`
-- **归档 SHA-256**：`bc0e016bdf6573bada824873d4746ab58d9bfac0ddd59c046f160312f81f9548`
+- **归档名称**：`mpv-dev-x86_64-20261109-git-8bc468896e.7z`
+- **归档 SHA-256**：`4e888424015f7146893d03c4d40e2aaf9474d8d47e761bcc6a97489008a7e425`
 - **提取目标**：`libmpv-2.dll`
-- **文件 SHA-256**：`d10d0994bd1398813da87fdb299961b378c71561bae1d135cb2b641b5864d7eb`
+- **文件 SHA-256**：`4598835ced121fd7acbe0f4bdadfee19bf3de28b1b96867e5aa829e0bbedb637`
 - **放置路径**：`src/Desktop/BiliCopilot.UI/Assets/libmpv/x64/libmpv-2.dll`
-- **版本标识**：`v0.41.0-1102-g6c092d978`
+- **版本标识**：`v0.42.0-11-g8bc468896`
 
 ### Visor 原生二进制
 Visor 直接基于仓库源码通过 NativeAOT 编译，保证纯原生无外部运行时依赖：

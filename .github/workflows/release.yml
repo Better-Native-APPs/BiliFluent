@@ -85,7 +85,7 @@ jobs:
         with:
           path: |
             src/Desktop/BiliCopilot.UI/Assets/libmpv/x64/libmpv-2.dll
-          key: native-${{ hashFiles('scripts/ci/Provision-NativeAssets.ps1') }}
+          key: native-${{ hashFiles('scripts/ci/Provision-NativeAssets.ps1', 'scripts/native-assets.json') }}
 
       - name: Provision native assets (libmpv, Visor)
         run: ./scripts/ci/Provision-NativeAssets.ps1

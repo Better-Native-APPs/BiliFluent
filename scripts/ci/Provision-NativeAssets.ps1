@@ -3,7 +3,7 @@ param(
     [string]$SevenZipPath
 )
 # CI: provisions the untracked x64 native assets required by scripts/Build-Release.ps1 (see scripts/native-assets.json).
-# Downloads are pinned to shinchiro/mpv-winbuild-cmake release 20261006; both the archive and the extracted file are SHA-256 verified.
+# Downloads are pinned to shinchiro/mpv-winbuild-cmake release 20261109; both the archive and the extracted file are SHA-256 verified.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -18,11 +18,11 @@ if (-not (Test-Path -LiteralPath $SevenZipPath)) { throw "7-Zip not found: $Seve
 
 function Get-Sha([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
 
-$base = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261006'
+$base = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261109'
 $pins = @(
     [pscustomobject]@{
-        Url = "$base/mpv-dev-x86_64-20261006-git-6c092d978b.7z"; ArchiveSha256 = 'bc0e016bdf6573bada824873d4746ab58d9bfac0ddd59c046f160312f81f9548'
-        File = 'libmpv-2.dll'; FileSha256 = 'd10d0994bd1398813da87fdb299961b378c71561bae1d135cb2b641b5864d7eb'; Target = 'libmpv/x64'
+        Url = "$base/mpv-dev-x86_64-20261109-git-8bc468896e.7z"; ArchiveSha256 = '4e888424015f7146893d03c4d40e2aaf9474d8d47e761bcc6a97489008a7e425'
+        File = 'libmpv-2.dll'; FileSha256 = '4598835ced121fd7acbe0f4bdadfee19bf3de28b1b96867e5aa829e0bbedb637'; Target = 'libmpv/x64'
     }
 )
 
