@@ -42,7 +42,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install
 需要 `global.json` 固定的 **.NET SDK 10.0.403** 与 Windows SDK 工具。
 
 ```powershell
-git clone --recurse-submodules https://github.com/Better-Native-APPs/BiliFluent.git
+git clone https://github.com/Better-Native-APPs/BiliFluent.git
 cd BiliFluent
 .\scripts\Build-BiliKernel.ps1
 # 按 scripts/README.md 放置 libmpv、FFmpeg 并编译 Visor 后执行：
@@ -58,6 +58,11 @@ cd BiliFluent
 - **预发布构建**：向 `main` 分支推送提交时自动构建已签名的 Pre-Release。
 - **正式发布**：推送 `v*` 标签时构建并发布 GitHub Release。
 - **代码签名**：由仓库 Secrets（`SIGNING_PFX_BASE64`、`SIGNING_PFX_PASSWORD`、`SIGNING_CERT_THUMBPRINT`）提供。
+
+## 参与开发与贡献
+
+- **贡献指南**：分支管理、提交规范（Conventional Commits）与发版清单见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- **变更日志**：版本更新历史记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 致谢
 
