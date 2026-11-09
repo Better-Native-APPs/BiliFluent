@@ -38,14 +38,6 @@ CI 流程与发布脚本固定从 [shinchiro/mpv-winbuild-cmake 20261006 Release
 - **放置路径**：`src/Desktop/BiliCopilot.UI/Assets/libmpv/x64/libmpv-2.dll`
 - **版本标识**：`v0.41.0-1102-g6c092d978`
 
-### FFmpeg 运行时
-- **归档名称**：`ffmpeg-x86_64-git-47313ad3f.7z`
-- **归档 SHA-256**：`32f3ab53954901c6fd7a0fd811b0724ded3239306009af41b99b10094d91a25a`
-- **提取目标**：`ffmpeg.exe`
-- **文件 SHA-256**：`97cba10ab56e0ed7b3fc09004f1caedd8468924fd5fb39db126383a053da9c5e`
-- **放置路径**：`src/Desktop/BiliCopilot.UI/Assets/ffmpeg/x64/ffmpeg.exe`
-- **版本标识**：`N-127218-g47313ad3f`
-
 ### Visor 原生二进制
 Visor 直接基于仓库源码通过 NativeAOT 编译，保证纯原生无外部运行时依赖：
 

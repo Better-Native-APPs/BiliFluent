@@ -11,9 +11,7 @@ using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Richasy.WinUIKernel.Share.ViewModels;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Windows.ApplicationModel.Core;
-using Windows.Storage;
 using Windows.System;
 using WinUIEx;
 
@@ -81,15 +79,6 @@ public sealed partial class AppViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task InitializeExternalAsync()
-    {
-        var architecture = RuntimeInformation.ProcessArchitecture;
-        var identifier = architecture == Architecture.Arm64 ? "arm64" : "x64";
-        var ffmpegFile = await StorageFile.GetFileFromApplicationUriAsync(new Uri($"ms-appx:///Assets/ffmpeg/{identifier}/ffmpeg.exe")).AsTask();
-        FFmpegPath = ffmpegFile.Path;
-    }
-
-    [RelayCommand]
     private void HideAllWindows()
     {
         foreach (var wnd in Windows)
@@ -109,7 +98,6 @@ public sealed partial class AppViewModel : ViewModelBase
             var mainWindow = new MainWindow();
             BindSponsorMainWindow(mainWindow);
             mainWindow.Activate();
-            InitializeExternalCommand.Execute(default);
         }
         else
         {

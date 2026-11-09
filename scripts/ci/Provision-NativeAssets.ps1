@@ -23,10 +23,6 @@ $pins = @(
     [pscustomobject]@{
         Url = "$base/mpv-dev-x86_64-20261006-git-6c092d978b.7z"; ArchiveSha256 = 'bc0e016bdf6573bada824873d4746ab58d9bfac0ddd59c046f160312f81f9548'
         File = 'libmpv-2.dll'; FileSha256 = 'd10d0994bd1398813da87fdb299961b378c71561bae1d135cb2b641b5864d7eb'; Target = 'libmpv/x64'
-    },
-    [pscustomobject]@{
-        Url = "$base/ffmpeg-x86_64-git-47313ad3f.7z"; ArchiveSha256 = '32f3ab53954901c6fd7a0fd811b0724ded3239306009af41b99b10094d91a25a'
-        File = 'ffmpeg.exe'; FileSha256 = '97cba10ab56e0ed7b3fc09004f1caedd8468924fd5fb39db126383a053da9c5e'; Target = 'ffmpeg/x64'
     }
 )
 

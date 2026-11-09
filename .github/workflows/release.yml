@@ -85,10 +85,9 @@ jobs:
         with:
           path: |
             src/Desktop/BiliCopilot.UI/Assets/libmpv/x64/libmpv-2.dll
-            src/Desktop/BiliCopilot.UI/Assets/ffmpeg/x64/ffmpeg.exe
           key: native-${{ hashFiles('scripts/ci/Provision-NativeAssets.ps1') }}
 
-      - name: Provision native assets (libmpv, ffmpeg, Visor)
+      - name: Provision native assets (libmpv, Visor)
         run: ./scripts/ci/Provision-NativeAssets.ps1
 
       - name: Import signing certificate

@@ -83,7 +83,7 @@ try {
     $ns.AddNamespace('c', 'http://schemas.microsoft.com/appx/manifest/com/windows10')
     $com = $manifest.SelectSingleNode('//c:ExeServer', $ns)
     if (-not (Test-Path (Join-Path $layout ([string]$com.Executable)))) { throw 'COM executable is missing from layout.' }
-    foreach ($name in @('libmpv-2.dll', 'ffmpeg.exe', 'BiliCopilot.Visor.exe')) {
+    foreach ($name in @('libmpv-2.dll', 'BiliCopilot.Visor.exe')) {
         $packed = @(Get-ChildItem $layout -Recurse -File -Filter $name)
         if ($packed.Count -ne 1) { throw "Required x64 asset missing from layout: $name" }
     }

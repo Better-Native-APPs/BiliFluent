@@ -1,6 +1,5 @@
 {
   "files": {
-    "ffmpeg/x64/ffmpeg.exe": "N-127218-g47313ad3f",
     "libmpv/x64/libmpv-2.dll": "v0.41.0-1102-g6c092d978",
     "visor/x64/BiliCopilot.Visor.exe": "1.0.0"
   }

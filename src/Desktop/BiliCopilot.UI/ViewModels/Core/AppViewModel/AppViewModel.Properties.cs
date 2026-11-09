@@ -48,11 +48,6 @@ public sealed partial class AppViewModel : ViewModelBase
     public List<Window> Windows { get; } = new();
 
     /// <summary>
-    /// FFmpeg 路径.
-    /// </summary>
-    public string FFmpegPath { get; private set; }
-
-    /// <summary>
     /// 是否为 AMD 显卡.
     /// </summary>
     public bool? IsAmdGpu { get; private set; }

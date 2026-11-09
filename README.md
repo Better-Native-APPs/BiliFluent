@@ -77,7 +77,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -Install
 git clone https://github.com/Better-Native-APPs/BiliFluent.git
 cd BiliFluent
 .\scripts\Build-BiliKernel.ps1
-# 按 scripts/README.md 放置 libmpv、FFmpeg 并编译 Visor 后执行：
+# 按 scripts/README.md 放置 libmpv 并编译 Visor 后执行：
 .\scripts\Build-Release.ps1 -CertificateThumbprint <证书指纹>
 .\scripts\local-release\Make-Delivery.ps1 -CertificateThumbprint <证书指纹>
 ```

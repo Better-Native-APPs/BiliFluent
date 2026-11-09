@@ -30,8 +30,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Remove="Assets\basic-mpv.conf" />
-    <Content Remove="Assets\ffmpeg\arm64\ffmpeg.exe" />
-    <Content Remove="Assets\ffmpeg\x64\ffmpeg.exe" />
     <Content Remove="Assets\libmpv\arm64\libmpv-2.dll" />
     <Content Remove="Assets\libmpv\x64\libmpv-2.dll" />
 	<Content Remove="Assets\visor\arm64\*" />
@@ -967,16 +965,6 @@
   	<None Update="Assets\visor\arm64\*">
   		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   	</None>
-  </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'x64'">
-      <None Update="Assets\ffmpeg\x64\ffmpeg.exe">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
-  </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'ARM64'">
-      <None Update="Assets\ffmpeg\arm64\ffmpeg.exe">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
   </ItemGroup>
   <ItemGroup>
   	<None Update="Assets\Anime4K\*">
