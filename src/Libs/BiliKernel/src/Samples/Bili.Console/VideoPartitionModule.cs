@@ -76,7 +76,6 @@ internal sealed class VideoPartitionModule : IFeatureModule
     {
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("ID");
         table.AddColumn("标题");
 

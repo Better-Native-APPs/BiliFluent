@@ -98,7 +98,6 @@ internal sealed class MyProfileModule : IFeatureModule
 
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("关注数");
         table.AddColumn("粉丝数");
         table.AddColumn("动态数");
@@ -134,7 +133,6 @@ internal sealed class MyProfileModule : IFeatureModule
         AnsiConsole.MarkupLine($"[bold]分组[green] {group.Name} [/]的详细信息:[/]");
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("UID");
         table.AddColumn("昵称");
 
@@ -164,7 +162,6 @@ internal sealed class MyProfileModule : IFeatureModule
 
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("UID");
         table.AddColumn("昵称");
         foreach (var user in users)
@@ -192,7 +189,6 @@ internal sealed class MyProfileModule : IFeatureModule
 
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("AV号");
         table.AddColumn("标题");
         foreach (var video in videos)
@@ -218,7 +214,6 @@ internal sealed class MyProfileModule : IFeatureModule
         AnsiConsole.MarkupLine($"[bold]历史记录:[/]");
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("ID");
         table.AddColumns("类型");
         table.AddColumn("标题");

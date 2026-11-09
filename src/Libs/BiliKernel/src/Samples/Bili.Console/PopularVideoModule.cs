@@ -122,7 +122,6 @@ internal sealed class PopularVideoModule : IFeatureModule
     {
         var table = new Table();
         table.Border = TableBorder.Rounded;
-        table.LeftAligned();
         table.AddColumn("ID");
         table.AddColumn("标题");
 
