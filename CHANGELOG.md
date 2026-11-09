@@ -4,12 +4,18 @@
 
 ## [Unreleased]
 
+### 新增
+- 安装包内置分发 Microsoft.WindowsAppRuntime.2 (2.6.5) 框架包：安装脚本在部署应用前离线安装该依赖（若系统已存在相同或更高版本则自动跳过），解决此前因缺失运行时导致安装终止的问题。
+- 发布 CI 流水线增加安装器自动化测试。
+
 ### 变更
-- 运行时迁移至 .NET 10，Windows App SDK 升级至 2.6，并同步更新其余 NuGet 依赖与 CI Actions。
+- 运行时迁移至 .NET 10，Windows App SDK 升级至 2.6.5，并同步更新其余 NuGet 依赖与 CI Actions。
+- FluentIcons.WinUI 升级至 2.x，CommunityToolkit 系列组件统一至 8.2.251219，更新 Richasy 核心包。
 - 内置 libmpv 升级至 mpv v0.42.0（shinchiro 20261109 构建）。
 
 ### 移除
-- 移除未被使用的内置 `ffmpeg.exe`（约 102 MiB），安装包体积相应减小；libmpv 保持不变。
+- 移除未被使用的内置 `ffmpeg.exe`（约 102 MiB），安装包体积相应减小。
+- 移除未使用的 CommunityToolkit Labs 依赖（SegmentedControl、Shimmer）与 System.Linq.Async，清理重复的 Windows App SDK 版本声明。
 
 ## [2.2611.7.0] - 2026-11-09
 
