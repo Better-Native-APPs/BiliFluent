@@ -42,7 +42,7 @@ foreach ($pin in $pins) {
     Write-Host "Downloading $($pin.Url)"
     for ($attempt = 1; ; $attempt++) {
         try { Invoke-WebRequest -Uri $pin.Url -OutFile $archive -UseBasicParsing -MaximumRedirection 10; break }
-        catch { if ($attempt -ge 3) { throw }; Write-Warning "Download failed (attempt $attempt): $($_.Exception.Message)"; Start-Sleep -Seconds (5 * $attempt) }
+        catch { if ($attempt -ge 6) { throw }; Write-Warning "Download failed (attempt $attempt): $($_.Exception.Message)"; Start-Sleep -Seconds (15 * $attempt) }
     }
     $actual = Get-Sha $archive
     if ($actual -cne $pin.ArchiveSha256) { throw "Archive SHA-256 mismatch for $($pin.Url): expected $($pin.ArchiveSha256), got $actual" }
