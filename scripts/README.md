@@ -14,17 +14,17 @@ BiliFluent 是采用 Fluent UI 与 WinUI 3 原生控件、专为 Windows 优化�
   - Visual Studio 2022 / Build Tools（包含 .NET 桌面开发、通用 Windows 平台开发与 Windows App SDK C# / C++ 组件）。
   - Windows 10/11 SDK（包含 x64 版本的 `makeappx.exe` 与 `signtool.exe`，默认检测 `10.0.26100.0` 路径）。
   - NativeAOT C++ 编译环境（用于 Visor 原生二进制组件编译）。
-- **网络访问**：可畅通访问 NuGet 源、GitHub Submodule 以及固定的原生外部资产下载源。
+- **网络访问**：可畅通访问 NuGet 源以及固定的原生外部资产下载源。
 
-## 1. 获取源码与构建定制 SDK
+## 1. 获取源码与构建内置 SDK
 
 ```powershell
-git clone --recurse-submodules https://github.com/Better-Native-APPs/BiliFluent.git
+git clone https://github.com/Better-Native-APPs/BiliFluent.git
 cd BiliFluent
 .\scripts\Build-BiliKernel.ps1
 ```
 
-对于已有仓库克隆，请执行 `git submodule update --init --recursive`。子模块 `src/Libs/BiliKernel` 指向定制分支 [Better-Native-APPs/BiliKernel](https://github.com/Better-Native-APPs/BiliKernel)。构建脚本编译 `Abstractions`、`Services.Comment`、`Services.Media` 与 `Services.Moment`，将 `0.0.3-bilicopilot.1` 包输出至本地 feed 目录 `artifacts/bilikernel-feed`，并通过 `nuget.config` 完成命名空间映射。
+BiliKernel SDK 源码已作为 Monorepo 纳入仓库目录 `src/Libs/BiliKernel`（保留提交历史，无需初始化子模块）。构建脚本从 `src/Libs/BiliKernel` 编译 `Abstractions`、`Services.Comment`、`Services.Media` 与 `Services.Moment`，将 `0.0.3-bilicopilot.1` 包输出至本地 feed 目录 `artifacts/bilikernel-feed`，并通过 `nuget.config` 完成命名空间映射。
 
 ## 2. 准备固定的原生运行时依赖
 
@@ -89,7 +89,7 @@ $cert = New-SelfSignedCertificate -Type Custom `
 
 ```text
 BiliFluent-2.2611.7.0/
-  Install.cmd                  # 安装脚本（.cmd，UAC 提权信任证书并部署）
+  安装 BiliFluent.cmd          # 一键安装脚本（.cmd，UAC 提权信任证书并部署）
   Install.ps1                  # PowerShell 安装与预检主脚本
   Trust-Certificate.ps1        # 证书导入辅助脚本（仅导入 LocalMachine\TrustedPeople）
   release-artifacts.json       # 发布包文件清单与 SHA-256 签名摘要

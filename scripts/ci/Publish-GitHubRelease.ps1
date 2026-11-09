@@ -11,6 +11,9 @@ param(
 # CI: creates or updates the GitHub release for $Tag with the delivery ZIP + public .cer, then prunes old pre-releases.
 # Requires the gh CLI with GH_TOKEN (contents: write) and GITHUB_REPOSITORY / GITHUB_SHA.
 $ErrorActionPreference = 'Stop'
+$root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$changelogPath = Join-Path $root 'CHANGELOG.md'
+$getChangelogNotes = Join-Path $PSScriptRoot 'Get-ChangelogNotes.ps1'
 $repo = $env:GITHUB_REPOSITORY
 if (-not $repo) { throw 'GITHUB_REPOSITORY is not set.' }
 foreach ($asset in $Assets) { if (-not (Test-Path -LiteralPath $asset)) { throw "Release asset not found: $asset" } }
@@ -20,10 +23,46 @@ function Invoke-Gh([string[]]$GhArgs) {
     if ($LASTEXITCODE) { throw "gh $($GhArgs -join ' ') failed ($LASTEXITCODE)" }
 }
 
+$tags = @(& git -C $root tag --sort=-v:refname --list 'v*')
+if ($LASTEXITCODE) { throw 'git tag failed.' }
+$previousReleaseTag = $null
+$currentTagSeen = $Prerelease.IsPresent
+foreach ($existingTag in $tags) {
+    if ($existingTag -eq $Tag) {
+        $currentTagSeen = $true
+        continue
+    }
+    if ($currentTagSeen -and $existingTag -notlike '*-pre*') {
+        $previousReleaseTag = $existingTag
+        break
+    }
+}
+
+$notesParts = @()
+if ($Prerelease) {
+    $notesParts += '> [!WARNING]' + "`n" + '> 这是由 `main` 分支自动构建的**预发布版**，可能不稳定。正式版请使用标记为 Latest 的 Release。'
+    $changelogNotes = & $getChangelogNotes -Path $changelogPath -Version $Version -Unreleased
+    if (-not $changelogNotes) {
+        try {
+            $changelogNotes = & $getChangelogNotes -Path $changelogPath -Version $Version
+        } catch [System.Collections.Generic.KeyNotFoundException] {
+            # A pre-release may precede the first versioned changelog entry.
+            $changelogNotes = ''
+        }
+    }
+    if ($changelogNotes) { $notesParts += $changelogNotes }
+    # Before the first release, list only this project's commits (upstream base = last Bili Copilot commit).
+    $range = if ($previousReleaseTag) { "$previousReleaseTag..HEAD" } else { '896a06290ba440cb17776d292dff119bbd3383d6..HEAD' }
+    $commits = @(& git -C $root log --no-merges --format='- %s (%h)' --max-count=100 $range)
+    if ($LASTEXITCODE) { throw 'git log failed.' }
+    $notesParts += (@('### 提交记录') + $commits) -join "`n"
+} else {
+    $notesParts += & $getChangelogNotes -Path $changelogPath -Version $Version
+}
+
 $zipName = Split-Path ($Assets | Where-Object { $_ -like '*.zip' } | Select-Object -First 1) -Leaf
-$kind = if ($Prerelease) { '> [!WARNING]' + "`n" + '> 这是由 `main` 分支自动构建的**预发布版**，可能不稳定。正式版请使用标记为 Latest 的 Release。' + "`n`n" } else { '' }
-$notes = @"
-$kind## 安装方法
+$installGuide = @"
+## 安装方法
 
 1. 下载 ``$zipName``，右键 →「全部解压」到一个普通文件夹（不要在压缩包里直接运行）。
 2. 双击 **``安装 BiliFluent.cmd``**，按窗口中的中文提示操作。
@@ -33,7 +72,12 @@ $kind## 安装方法
 
 > 若提示“已是最新版本”，说明相同版本号（$Version）已安装。签名证书 ``BiliFluent.cer`` 也单独附在本页，可用于手动核对指纹。
 "@
+$notesParts += $installGuide
+$notes = ($notesParts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n`n"
 if ($ManifestSha256) { $notes += "`n`n``release-artifacts.json`` SHA-256: ``$ManifestSha256``" }
+if (-not $Prerelease -and $previousReleaseTag) {
+    $notes += "`n`n**完整变更**：https://github.com/$repo/compare/$previousReleaseTag...v$Version"
+}
 $notesFile = Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }) 'release-notes.md'
 [IO.File]::WriteAllText($notesFile, $notes, (New-Object System.Text.UTF8Encoding($false)))
 
@@ -41,9 +85,9 @@ $notesFile = Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.P
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Release $Tag exists; updating assets and metadata."
     Invoke-Gh (@('release', 'upload', $Tag) + $Assets + @('--repo', $repo, '--clobber'))
-    Invoke-Gh @('release', 'edit', $Tag, '--repo', $repo, '--title', $Title, ('--prerelease=' + $Prerelease.IsPresent.ToString().ToLowerInvariant()))
+    Invoke-Gh @('release', 'edit', $Tag, '--repo', $repo, '--title', $Title, '--notes-file', $notesFile, ('--prerelease=' + $Prerelease.IsPresent.ToString().ToLowerInvariant()))
 } else {
-    $createArgs = @('release', 'create', $Tag) + $Assets + @('--repo', $repo, '--title', $Title, '--notes-file', $notesFile, '--generate-notes')
+    $createArgs = @('release', 'create', $Tag) + $Assets + @('--repo', $repo, '--title', $Title, '--notes-file', $notesFile)
     if ($Prerelease) { $createArgs += @('--target', $env:GITHUB_SHA, '--prerelease', '--latest=false') }
     else { $createArgs += @('--verify-tag', '--latest') }
     Invoke-Gh $createArgs

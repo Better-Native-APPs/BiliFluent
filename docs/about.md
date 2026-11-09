@@ -18,5 +18,5 @@ BiliFluent 是由 [Better Native APPs](https://github.com/Better-Native-APPs) �
 项目基于 Richasy 开源的「哔哩助理」([Bili Copilot](https://github.com/Richasy/Bili.Copilot)) 二次开发，遵循 [GPL-3.0 许可证](https://github.com/Better-Native-APPs/BiliFluent/blob/main/LICENSE)。保留上游及开源依赖组件的原作者署名与许可协议。
 
 - [BiliFluent 源代码](https://github.com/Better-Native-APPs/BiliFluent)
-- [定制 BiliKernel SDK](https://github.com/Better-Native-APPs/BiliKernel)
+- [内置 BiliKernel SDK](https://github.com/Better-Native-APPs/BiliFluent/tree/main/src/Libs/BiliKernel)
 - [安装指南](./install.md) · [源码构建说明](https://github.com/Better-Native-APPs/BiliFluent/blob/main/scripts/README.md)
