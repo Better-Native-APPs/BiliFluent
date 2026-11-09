@@ -25,7 +25,15 @@
                         "isCertificateAuthority":  false
                     },
     "dependencies":  [
-
+                         {
+                             "relativePath": "payload/Microsoft.WindowsAppRuntime.2.msix",
+                             "sha256": "a0b8a226c0c993843f5bb6936037d4970e6e5b8e31c0e6f98497d8dd421a4709",
+                             "name": "Microsoft.WindowsAppRuntime.2",
+                             "publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                             "version": "2.6.5.0",
+                             "architecture": "x64",
+                             "declaredMinVersion": "2.6.5.0"
+                         }
                      ],
     "scripts":  {
                     "installSha256":  "__PENDING_INSTALL_SHA256__",

@@ -46,6 +46,8 @@ foreach ($s in 'Install.ps1', 'Trust-Certificate.ps1') {
 }
 
 $m = Get-Content (Join-Path $PSScriptRoot 'release-artifacts.json') -Raw | ConvertFrom-Json
+$m.dependencies = @(& (Join-Path $PSScriptRoot 'Copy-ReleaseDependencies.ps1') -PackagePath $msixSource `
+    -SourceDirectory (Join-Path $OutputDirectory 'dependencies') -DestinationDirectory $payload)
 $m.package.relativePath = "payload/$msixName"
 $m.package.sha256 = Get-Sha (Join-Path $payload $msixName)
 $m.package.version = $Version

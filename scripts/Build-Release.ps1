@@ -96,8 +96,19 @@ try {
         & (Join-Path $WindowsSdkBin 'signtool.exe') sign /fd SHA256 /s My /sha1 $CertificateThumbprint $msix 1> (Join-Path $out 'sign.log') 2>&1
         if ($LASTEXITCODE) { throw "SignTool failed ($LASTEXITCODE)." }
     }
+    # The restored Windows App SDK Runtime NuGet contains Microsoft's signed redistributable MSIX.
+    $assets = Get-Content (Join-Path $build 'BiliCopilot.UI/obj/project.assets.json') -Raw | ConvertFrom-Json
+    $runtime = @($assets.libraries.PSObject.Properties | Where-Object { $_.Name -like 'Microsoft.WindowsAppSDK.Runtime/*' })
+    if ($runtime.Count -ne 1) { throw 'Expected exactly one restored Microsoft.WindowsAppSDK.Runtime package.' }
+    $runtimeDirectories = @(foreach ($folder in $assets.packageFolders.PSObject.Properties) {
+        $directory = Join-Path $folder.Name $runtime[0].Value.path
+        if (Test-Path -LiteralPath $directory -PathType Container) { $directory }
+    })
+    if ($runtimeDirectories.Count -ne 1) { throw 'Cannot uniquely locate the restored Windows App SDK Runtime redistributables.' }
+    $dependencies = @(& (Join-Path $PSScriptRoot 'local-release/Copy-ReleaseDependencies.ps1') -PackagePath $msix `
+        -SourceDirectory (Join-Path $runtimeDirectories[0] 'tools/MSIX/win10-x64') -DestinationDirectory (Join-Path $out 'dependencies'))
     $files | ConvertTo-Json | Set-Content (Join-Path $out 'layout-files.json') -Encoding UTF8
-    [ordered]@{ msix = $msix; sha256 = (Get-FileHash $msix -Algorithm SHA256).Hash.ToLowerInvariant(); warnings = 0; errors = 0; signed = [bool]$CertificateThumbprint } |
+    [ordered]@{ msix = $msix; sha256 = (Get-FileHash $msix -Algorithm SHA256).Hash.ToLowerInvariant(); dependencies = $dependencies; warnings = 0; errors = 0; signed = [bool]$CertificateThumbprint } |
         ConvertTo-Json | Set-Content (Join-Path $out 'result.json') -Encoding UTF8
     Write-Host "Release MSIX: $msix (0 warnings, 0 errors)"
 } finally { Pop-Location }

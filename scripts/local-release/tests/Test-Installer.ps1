@@ -41,12 +41,16 @@ Invoke-Case 'shared validation region byte-identical in both scripts' {
     'length=' + $a.Length
 }
 . $installSource
+$script:NativePackageDeployment = ${function:Invoke-PackageDeployment}
 $untrustedRootMessage = (New-Object System.ComponentModel.Win32Exception ([int]-2146762487)).Message
 $publisherId = Get-PublisherId 'CN=BiliFluent'
 $fullName = 'BiliFluent_2.2611.7.0_x64__' + $publisherId
 $familyName = 'BiliFluent_' + $publisherId
 $fixtureThumbprint = '0123456789ABCDEF0123456789ABCDEF01234567'
 $msixSignature = [Text.Encoding]::ASCII.GetBytes('PKCX-INERT-FIXTURE-NOT-A-SIGNATURE')
+$runtimeName = 'Microsoft.WindowsAppRuntime.2'
+$runtimePublisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+$runtimeVersion = '2.6.5.0'
 function Reset-Mock {
     $script:M = @{
         Elevated = $false; Sid = 'S-1-5-21-1000-1000-1000-1001'
@@ -54,7 +58,7 @@ function Reset-Mock {
         Trusted = $false; UacCancel = $false; HelperCalls = 0
         DeployCalls = 0; DeployArgs = $null; DeployThrow = $null
         Os = [pscustomobject]@{ Version = [version]'10.0.22631.0'; Architecture = 'AMD64'; Is64BitProcess = $true; PSEdition = 'Desktop'; PSVersion = [version]'5.1.22621.4391' }
-        Policy = $null; CerBytes = $null
+        Policy = $null; CerBytes = $null; DependencySignatureStatus = 'Valid'; NativeDeployArgs = $null
     }
 }
 function Test-ProcessElevated { return [bool]$script:M.Elevated }
@@ -68,6 +72,9 @@ function Get-CertificateFacts([byte[]]$Bytes) {
     return [pscustomobject]$facts
 }
 function Get-NativeSignature([string]$Path) {
+    if ([IO.Path]::GetFileName($Path) -ceq 'Microsoft.WindowsAppRuntime.2.msix') {
+        return [pscustomobject]@{ Status = $script:M.DependencySignatureStatus; StatusMessage = 'INERT'; SignerRawData = $null }
+    }
     return [pscustomobject]@{ Status = 'UnknownError'; StatusMessage = $untrustedRootMessage; SignerRawData = $script:M.CerBytes }
 }
 function Get-UserPackagesByName([string]$Name) { return @($script:M.Packages | Where-Object { $_.Name -ceq $Name }) }
@@ -96,10 +103,16 @@ function Invoke-PackageDeployment([string]$PackagePath, [string[]]$DependencyPat
     [void]$script:M.Packages.Add($record)
 }
 # 核心流程共用的惰性夹具
-function Get-AppxXml([hashtable]$Id) {
+function Get-AppxXml([hashtable]$Id, [switch]$WithDependency, [switch]$Framework) {
     $apps = '<Applications><Application Id="{0}" Executable="Inert.exe" EntryPoint="Windows.FullTrustApplication" /></Applications>' -f $Id.AppId
-    return ('<?xml version="1.0" encoding="utf-8"?><Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"><Identity Name="{0}" Publisher="{1}" Version="{2}" ProcessorArchitecture="{3}" /><Properties><DisplayName>INERT</DisplayName><PublisherDisplayName>INERT</PublisherDisplayName><Logo>a.png</Logo></Properties><Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="{4}" MaxVersionTested="10.0.26100.0" /></Dependencies>{5}</Package>' -f
-        $Id.Name, [Security.SecurityElement]::Escape($Id.Publisher), $Id.Version, $Id.Arch, $Id.MinOs, $apps)
+    $frameworkProperty = ''
+    if ($Framework) { $frameworkProperty = '<Framework>true</Framework>'; $apps = '' }
+    $dependency = ''
+    if ($WithDependency) {
+        $dependency = '<PackageDependency Name="{0}" Publisher="{1}" MinVersion="{2}" />' -f $runtimeName, [Security.SecurityElement]::Escape($runtimePublisher), $runtimeVersion
+    }
+    return ('<?xml version="1.0" encoding="utf-8"?><Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"><Identity Name="{0}" Publisher="{1}" Version="{2}" ProcessorArchitecture="{3}" /><Properties><DisplayName>INERT</DisplayName><PublisherDisplayName>INERT</PublisherDisplayName><Logo>a.png</Logo>{6}</Properties><Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="{4}" MaxVersionTested="10.0.26100.0" />{7}</Dependencies>{5}</Package>' -f
+        $Id.Name, [Security.SecurityElement]::Escape($Id.Publisher), $Id.Version, $Id.Arch, $Id.MinOs, $apps, $frameworkProperty, $dependency)
 }
 function Write-InertZip([string]$Path, [string]$Xml, [byte[]]$Signature) {
     $fs = [IO.File]::Create($Path)
@@ -121,7 +134,8 @@ function New-Fixture([hashtable]$Options) {
     [IO.File]::Copy($trustSource, (Join-Path $dir 'Trust-Certificate.ps1'))
     $id = @{ Name = 'BiliFluent'; Publisher = 'CN=BiliFluent'; Version = '2.2611.7.0'; Arch = 'x64'; AppId = 'App'; MinOs = '10.0.19041.0' }
     $msixPath = Join-Path $dir 'payload\BiliFluent_2.2611.7.0_x64.msix'
-    Write-InertZip $msixPath (Get-AppxXml $id) $msixSignature
+    $withDependency = $Options.ContainsKey('Dependency') -and $Options.Dependency
+    Write-InertZip $msixPath (Get-AppxXml $id -WithDependency:$withDependency) $msixSignature
     $cerPath = Join-Path $dir 'payload\BiliFluent.cer'
     $cerBytes = [Text.Encoding]::ASCII.GetBytes('INERT-CER-FIXTURE: not DER, not a certificate, never trust or import ' + ('0' * 64))
     [IO.File]::WriteAllBytes($cerPath, $cerBytes)
@@ -134,6 +148,16 @@ function New-Fixture([hashtable]$Options) {
             notBeforeUtc = '2026-01-01T00:00:00Z'; notAfterUtc = '2027-12-31T00:00:00Z'; codeSigningEku = '1.3.6.1.5.5.7.3.3'; digitalSignature = $true; isCertificateAuthority = $false }
         dependencies  = @()
         scripts       = [ordered]@{ installSha256 = (Get-FileSha (Join-Path $dir 'Install.ps1')); trustSha256 = (Get-FileSha (Join-Path $dir 'Trust-Certificate.ps1')) }
+    }
+    if ($withDependency -and -not $Options.ContainsKey('OmitDependencyPin')) {
+        $runtimePath = Join-Path $dir 'payload\Microsoft.WindowsAppRuntime.2.msix'
+        $runtimeId = @{ Name = $runtimeName; Publisher = $runtimePublisher; Version = $runtimeVersion; Arch = 'x64'; AppId = ''; MinOs = '10.0.17763.0' }
+        if ($Options.ContainsKey('DependencyIdentity')) {
+            foreach ($key in $Options.DependencyIdentity.Keys) { $runtimeId[$key] = $Options.DependencyIdentity[$key] }
+        }
+        Write-InertZip $runtimePath (Get-AppxXml $runtimeId -Framework) $msixSignature
+        $manifest.dependencies = @([ordered]@{ relativePath = 'payload/Microsoft.WindowsAppRuntime.2.msix'; sha256 = (Get-FileSha $runtimePath)
+            name = $runtimeName; publisher = $runtimePublisher; version = $runtimeVersion; architecture = 'x64'; declaredMinVersion = $runtimeVersion })
     }
     $json = ConvertTo-Json -InputObject $manifest -Depth 6
     [IO.File]::WriteAllText((Join-Path $dir 'release-artifacts.json'), $json, (New-Object Text.UTF8Encoding($false)))
@@ -209,6 +233,72 @@ Invoke-Case 'trust added then deployment fails -> PartialFailure with HRESULT an
     Assert-That ($r.phases.Deployment.status -ceq 'Failed' -and $r.phases.Deployment.hresult -ceq '0x80073CF3' -and $script:M.Trusted) 'deployment phase / trust kept'
     Assert-That ((Get-InstallerExitCode $r) -eq 2) 'exit 2'
     $r.hresult + ' ' + $r.activityId
+}
+Invoke-Case 'missing runtime is resolved from the pinned offline payload and passed to deployment' {
+    Reset-Mock; $dir = New-Fixture @{ Dependency = $true }
+    $r = Invoke-Fixture $dir $true ''
+    Assert-That ($r.outcome -ceq 'Installed') ('outcome=' + $r.outcome + ' ' + $r.failure)
+    Assert-That ($r.phases.Preflight.dependencies[0].state -ceq 'WillAddPinnedLocal') 'dependency plan'
+    Assert-That ($script:M.DeployArgs.Dependencies.Count -eq 1 -and [IO.Path]::GetFileName($script:M.DeployArgs.Dependencies[0]) -ceq 'Microsoft.WindowsAppRuntime.2.msix') 'pinned dependency passed to deployment'
+}
+foreach ($installedVersion in @('2.6.5.0', '2.6.6.0')) {
+    Invoke-Case ('runtime ' + $installedVersion + ' already installed is skipped without downgrade') {
+        Reset-Mock; $dir = New-Fixture @{ Dependency = $true }
+        [void]$script:M.Packages.Add((New-PackageRecord $runtimeName $runtimePublisher $installedVersion 'INERT' 'INERT' 'Store' $true 'X64'))
+        $r = Invoke-Fixture $dir $true ''
+        Assert-That ($r.outcome -ceq 'Installed') ('outcome=' + $r.outcome + ' ' + $r.failure)
+        Assert-That ($r.phases.Preflight.dependencies[0].state -ceq 'Satisfied' -and $script:M.DeployArgs.Dependencies.Count -eq 0) 'already satisfied runtime must not be deployed'
+    }
+}
+foreach ($record in @(
+    @{ Version = '2.6.4.0'; Publisher = $runtimePublisher; Arch = 'X64'; Label = 'older' },
+    @{ Version = '2.6.5.0'; Publisher = 'CN=OTHER'; Arch = 'X64'; Label = 'wrong publisher' },
+    @{ Version = '2.6.5.0'; Publisher = $runtimePublisher; Arch = 'X86'; Label = 'wrong architecture' }
+)) {
+    Invoke-Case ('runtime ' + $record.Label + ' does not satisfy the dependency') {
+        Reset-Mock; $dir = New-Fixture @{ Dependency = $true }
+        [void]$script:M.Packages.Add((New-PackageRecord $runtimeName $record.Publisher $record.Version 'INERT' 'INERT' 'Store' $true $record.Arch))
+        $r = Invoke-Fixture $dir $false ''
+        Assert-That ($r.outcome -ceq 'PreflightPassed' -and $r.phases.Preflight.dependencies[0].state -ceq 'WillAddPinnedLocal') ('outcome=' + $r.outcome + ' ' + $r.failure)
+        Assert-NoChanges $r
+    }
+}
+Invoke-Case 'missing runtime without a local pin blocks before trust or deployment' {
+    Reset-Mock; $dir = New-Fixture @{ Dependency = $true; OmitDependencyPin = $true }
+    $r = Invoke-Fixture $dir $true ''
+    Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match '没有已固定的本地依赖包') $r.failure
+    Assert-NoChanges $r
+}
+Invoke-Case 'modified offline runtime blocks on its SHA-256 before trust or deployment' {
+    Reset-Mock
+    $dir = New-Fixture @{ Dependency = $true; After = { param($d) [IO.File]::AppendAllText((Join-Path $d 'payload/Microsoft.WindowsAppRuntime.2.msix'), 'TAMPERED') } }
+    $r = Invoke-Fixture $dir $true ''
+    Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match 'SHA-256 不匹配') $r.failure
+    Assert-NoChanges $r
+}
+Invoke-Case 'offline runtime identity mismatch blocks even with a matching file digest' {
+    Reset-Mock; $dir = New-Fixture @{ Dependency = $true; DependencyIdentity = @{ Version = '2.6.6.0' } }
+    $r = Invoke-Fixture $dir $true ''
+    Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match '本地依赖包身份与清单不一致') $r.failure
+    Assert-NoChanges $r
+}
+Invoke-Case 'untrusted offline runtime signature blocks before trust or deployment' {
+    Reset-Mock; $script:M.DependencySignatureStatus = 'NotTrusted'; $dir = New-Fixture @{ Dependency = $true }
+    $r = Invoke-Fixture $dir $true ''
+    Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match '平台签名不是 Valid') $r.failure
+    Assert-NoChanges $r
+}
+Invoke-Case 'native deployment uses local DependencyPath so Windows deploys frameworks before the app' {
+    Reset-Mock
+    function Add-AppxPackage {
+        param($Path, $DependencyPath, $ErrorAction)
+        $script:M.NativeDeployArgs = @{ Path = $Path; Dependencies = @($DependencyPath); ErrorAction = $ErrorAction }
+    }
+    try {
+        & $script:NativePackageDeployment 'INERT-APP.msix' @('INERT-RUNTIME.msix')
+        Assert-That ($script:M.NativeDeployArgs.Path -ceq 'INERT-APP.msix' -and $script:M.NativeDeployArgs.Dependencies.Count -eq 1 -and $script:M.NativeDeployArgs.Dependencies[0] -ceq 'INERT-RUNTIME.msix') 'local framework must be supplied to Add-AppxPackage'
+        Assert-That ($script:M.NativeDeployArgs.ErrorAction -ceq 'Stop') 'deployment errors must stop installation'
+    } finally { Remove-Item Function:\Add-AppxPackage }
 }
 Write-Host ('TOTAL_PASS={0} TOTAL_FAIL={1}' -f ($script:Results.Count - $script:Failures), $script:Failures)
 if ($script:Failures -gt 0) { exit 1 }

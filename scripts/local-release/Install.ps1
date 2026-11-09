@@ -688,6 +688,8 @@ function Invoke-ElevatedTrustHelper([string]$Root, [string]$ManifestSha256, [str
 }
 
 function Invoke-PackageDeployment([string]$PackagePath, [string[]]$DependencyPaths) {
+    # -DependencyPath lets Windows deploy the missing local frameworks before the app, offline.
+    # Resolve-Dependencies omits frameworks already installed at or above the declared minimum.
     # 不使用 -ForceApplicationShutdown / -ForceUpdateFromAnyVersion / -AllowUnsigned；仅附带缺失且已固定的依赖。
     if ($DependencyPaths.Count -gt 0) { Add-AppxPackage -Path $PackagePath -DependencyPath $DependencyPaths -ErrorAction Stop }
     else { Add-AppxPackage -Path $PackagePath -ErrorAction Stop }

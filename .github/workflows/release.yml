@@ -103,7 +103,11 @@ jobs:
             ./scripts/ci/Import-SigningCertificate.ps1 -AllowEphemeral
           }
 
-      - name: Build signed MSIX
+      - name: Test offline installer
+        shell: powershell
+        run: ./scripts/local-release/tests/Test-Installer.ps1 -SourceRoot scripts/local-release -WorkRoot artifacts/installer-tests
+
+      - name: Build signed MSIX and stage pinned offline frameworks
         run: ./scripts/Build-Release.ps1 -CertificateThumbprint '${{ steps.cert.outputs.thumbprint }}'
 
       - name: Package delivery ZIP (with one-click installer)
