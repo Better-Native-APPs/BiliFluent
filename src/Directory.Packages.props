@@ -37,7 +37,7 @@
     <PackageVersion Include="NLog.Extensions.Logging" Version="5.3.15" />
     <PackageVersion Include="Richasy.BiliKernel.Abstractions" Version="0.0.3-bilicopilot.1" />
     <PackageVersion Include="Richasy.BiliKernel.Authorizers.TV" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.BiliKernel.Core" Version="0.0.1-preview1" />
+    <PackageVersion Include="Richasy.BiliKernel.Core" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.BiliKernel.Resolvers.WinUICookies" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.BiliKernel.Resolvers.WinUIQRCode" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.BiliKernel.Resolvers.WinUIToken" Version="0.0.2-preview2" />
@@ -51,7 +51,7 @@
     <PackageVersion Include="Richasy.MpvKernel.Core" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.MpvKernel.Player" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.MpvKernel.WinUI" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.WinUIKernel.Share" Version="0.0.12-preview3" />
+    <PackageVersion Include="Richasy.WinUIKernel.Share" Version="0.0.12-preview4" />
     <PackageVersion Include="RichasyKernel.Core" Version="0.0.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
