@@ -2,6 +2,7 @@ name: Build & Release
 
 # dev  -> daily pushes (no workflow run)          PR dev -> main : build + package only (required check "build")
 # main -> signed pre-release v<version>-pre.<run>  tag v<version>  : signed full release
+# Docs-only pushes/PRs skip the build (see job "changes").
 on:
   push:
     branches: [main]
@@ -23,8 +24,39 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}\.nuget-clean
 
 jobs:
+  # Docs-only changes (Markdown, docs/, assets/, issue/PR templates) skip the build.
+  # A skipped "build" job still satisfies the required status check on main.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push'
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!assets/**'
+              - '!LICENSE'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/PULL_REQUEST_TEMPLATE.md'
+
   build:
     name: build
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/') ||
+      needs.changes.outputs.code == 'true'
     runs-on: windows-2025
     timeout-minutes: 120
     defaults:
