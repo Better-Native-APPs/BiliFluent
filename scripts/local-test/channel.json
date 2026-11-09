@@ -13,6 +13,6 @@
   "architecture": "x64",
   "executable": "BiliCopilot.UI.exe",
   "activationArguments": "----AppNotificationActivated:",
-  "windowsAppSdkVersion": "1.8.251106002",
-  "windowsSdkBuildToolsVersion": "10.0.26100.6901"
+  "windowsAppSdkVersion": "2.6.5",
+  "windowsSdkBuildToolsVersion": "10.0.28000.2957"
 }
