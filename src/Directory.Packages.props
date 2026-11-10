@@ -46,10 +46,6 @@
     <PackageVersion Include="Richasy.BiliKernel.Services.Moment" Version="0.0.3-bilicopilot.1" />
     <PackageVersion Include="Richasy.BiliKernel.Services.Search" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.BiliKernel.Services.User" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.MpvKernel" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.MpvKernel.Core" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.MpvKernel.Player" Version="0.0.2-preview2" />
-    <PackageVersion Include="Richasy.MpvKernel.WinUI" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.WinUIKernel.Share" Version="0.0.12-preview4" />
     <PackageVersion Include="RichasyKernel.Core" Version="0.0.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
