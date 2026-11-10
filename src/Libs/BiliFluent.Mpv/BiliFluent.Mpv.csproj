@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>BiliFluent.Mpv</AssemblyName>
+    <!-- The namespaces stay as they were in Richasy.MpvKernel, so the application code that uses them is unchanged. -->
+    <RootNamespace>Richasy.MpvKernel</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!--
+      Rules the ported code does not follow, left as upstream wrote it:
+      VSTHRD001  the player posts to the UI SynchronizationContext it captured at construction;
+      CA1873     log arguments are built before the level check;
+      CA1032, RCS1194  MpvException always carries a native error code.
+    -->
+    <NoWarn>$(NoWarn);VSTHRD001;CA1873;CA1032;RCS1194</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="HanumanInstitute.LibMpv" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>
