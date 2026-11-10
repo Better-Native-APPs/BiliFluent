@@ -41,6 +41,9 @@ internal sealed record SponsorPlayerView(Guid Attachment, SponsorControllerResul
     internal SponsorEditorReply? LastEditorReply { get; init; }
     internal bool CleanupPending { get; init; }
     internal ImmutableArray<SponsorAvailability> EditorCapabilities { get; init; } = [];
+    // The draft this player's live start/end capture is filling; null once that capture was finished, cancelled or dropped.
+    // An Incomplete draft without it is a leftover that "finish capture" can no longer complete.
+    internal string? ActiveCaptureDraftId { get; init; }
 }
 internal sealed record SponsorApplicationView(long Revision, long DraftRevision, SponsorLocalSettings Settings,
     ImmutableArray<DraftEntry> Drafts, PersistenceStatus? Persistence, bool Dirty, bool Closed,

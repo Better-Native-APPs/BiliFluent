@@ -196,10 +196,15 @@ public sealed partial class SponsorEditorViewModel : ObservableObject
         var others = view.Drafts.Count(d => d.Draft.MediaKey != media);
         OtherDraftsText = others > 0 ? $"其他视频还有 {others} 条草稿" : string.Empty;
         HasDrafts = mine.Count > 0;
-        IsCapturing = mine.Any(d => d.State == DraftState.Incomplete);
+        // Only the live capture can be finished or cancelled. An Incomplete draft whose capture was dropped
+        // (another video, a reloaded player, changed settings, a restart) must not block a new start.
+        var captureId = player.ActiveCaptureDraftId;
+        IsCapturing = captureId is not null && mine.Any(d => d.LocalDraftId == captureId);
         CaptureHint = IsCapturing
             ? "已标记开始。播放到片段结尾时点击“标记结束”。"
-            : "播放到片段开头时点击“标记开始”，到结尾时点击“标记结束”。";
+            : mine.Any(d => d.State == DraftState.Incomplete)
+                ? "有一条标记只有开始时间（视频或设置变化后标记已中断）。可以在下方草稿中补上结束时间或删除，也可以重新“标记开始”。"
+                : "播放到片段开头时点击“标记开始”，到结尾时点击“标记结束”。";
         HasPreview = player.Preview is not null;
         PreviewText = player.Preview is { } preview
             ? $"已准备预览 {SponsorUiText.Time(preview.Start)} – {SponsorUiText.Time(preview.End)}，自动跳过已暂停"
@@ -214,7 +219,9 @@ public sealed partial class SponsorEditorViewModel : ObservableObject
             item.CategoryColor = SponsorUiText.CategoryColor(segment.Category);
             item.RangeText = SponsorUiText.Range(segment);
             item.ActionText = SponsorUiText.ActionTitle(segment.ActionType);
-            item.StateText = SponsorUiText.Draft(entry.State);
+            item.StateText = entry.State == DraftState.Incomplete && entry.LocalDraftId != captureId
+                ? "标记已中断"
+                : SponsorUiText.Draft(entry.State);
             item.IsEditable = entry.State is not (DraftState.Confirmed or DraftState.SubmissionInFlight);
             item.CanDelete = entry.LastSubmission is null && entry.State != DraftState.Confirmed;
             item.CanPreview = entry.State == DraftState.Ready && segment.ActionType is "skip" or "mute";
