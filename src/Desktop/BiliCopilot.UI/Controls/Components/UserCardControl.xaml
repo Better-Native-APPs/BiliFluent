@@ -46,10 +46,16 @@
                         <ColumnDefinition />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <base:TrimTextBlock
+                    <TextBlock
+                        x:Name="NameBlock"
                         FontWeight="Bold"
-                        MaxLines="1"
-                        Text="{x:Bind ViewModel.Name, Mode=OneWay}" />
+                        Text="{x:Bind ViewModel.Name, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap">
+                        <ToolTipService.ToolTip>
+                            <ToolTip Content="{x:Bind ViewModel.Name, Mode=OneWay}" IsEnabled="{x:Bind NameBlock.IsTextTrimmed, Mode=OneWay}" />
+                        </ToolTipService.ToolTip>
+                    </TextBlock>
                     <Image
                         Grid.Column="1"
                         Height="9"
@@ -57,11 +63,13 @@
                         Source="{x:Bind ViewModel.Level, Converter={StaticResource LevelImageConverter}, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.Level, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
                 </Grid>
-                <base:TrimTextBlock
+                <TextBlock
                     Grid.Row="1"
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="{x:Bind ViewModel.Description, Mode=OneWay}" />
+                    Text="{x:Bind ViewModel.Description, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition />

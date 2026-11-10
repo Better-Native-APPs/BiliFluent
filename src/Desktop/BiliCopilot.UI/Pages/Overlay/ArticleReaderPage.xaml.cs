@@ -284,6 +284,7 @@ public sealed partial class ArticleReaderPage : ArticleReaderPageBase, IParamete
         var isPreparing = ViewModel.IsLoading || _webFallbackLoading
             || (_isAttached && !isShown && !ViewModel.HasError && ViewModel.TryGetRenderableContent(out _, out _));
         LoadingView.Visibility = isPreparing ? Visibility.Visible : Visibility.Collapsed;
+        LoadingViewRing.IsActive = isPreparing;
     }
 
     private async Task RenderWebFallbackAsync(int version, Uri target)

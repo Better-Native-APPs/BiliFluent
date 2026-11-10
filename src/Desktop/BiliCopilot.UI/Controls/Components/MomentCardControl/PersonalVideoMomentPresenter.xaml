@@ -3,7 +3,6 @@
     x:Class="BiliCopilot.UI.Controls.Components.PersonalVideoMomentPresenter"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -33,13 +32,19 @@
             DecodeWidth="400"
             Source="{x:Bind ViewModel.VideoCover, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}" />
-        <base:TrimTextBlock
+        <TextBlock
+            x:Name="VideoTitleBlock"
             Grid.Row="2"
             HorizontalAlignment="Left"
             FontSize="13"
-            MaxLines="1"
             Text="{x:Bind ViewModel.VideoTitle, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}" />
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap"
+            Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}">
+            <ToolTipService.ToolTip>
+                <ToolTip Content="{x:Bind ViewModel.VideoTitle, Mode=OneWay}" IsEnabled="{x:Bind VideoTitleBlock.IsTextTrimmed, Mode=OneWay}" />
+            </ToolTipService.ToolTip>
+        </TextBlock>
         <!--
             空降助手：推广标记（封面区域）。只标记时是封面左上角的小标签；折叠时占满封面区域并给出“显示内容”，
             卡片高度不变、不留空洞。放在封面之后以便叠在封面上。

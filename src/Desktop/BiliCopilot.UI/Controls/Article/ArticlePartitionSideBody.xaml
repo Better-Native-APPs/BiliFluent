@@ -36,9 +36,10 @@
                 <StackLayout Spacing="8" />
             </ItemsView.Layout>
         </ItemsView>
-        <components:SideBottomLoadingWidget
+        <ProgressBar
             VerticalAlignment="Bottom"
-            Text="{ext:Locale Name=GettingPartitions}"
+            AutomationProperties.Name="{ext:Locale Name=GettingPartitions}"
+            IsIndeterminate="{x:Bind ViewModel.IsPartitionLoading, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.IsPartitionLoading, Mode=OneWay}" />
         <animations:Implicit.ShowAnimations>
             <animations:TranslationAnimation

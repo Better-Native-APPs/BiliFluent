@@ -3,7 +3,6 @@
     x:Class="BiliCopilot.UI.Controls.Components.SearchArticlePresenter"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -57,14 +56,23 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition />
             </Grid.RowDefinitions>
-            <base:TrimTextBlock
+            <TextBlock
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                Text="{x:Bind ViewModel.Author, Mode=OneWay}" />
-            <base:TrimTextBlock
+                Text="{x:Bind ViewModel.Author, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <TextBlock
+                x:Name="TitleBlock"
                 Grid.Row="1"
                 HorizontalAlignment="Left"
-                Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
+                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap">
+                <ToolTipService.ToolTip>
+                    <ToolTip Content="{x:Bind ViewModel.Title, Mode=OneWay}" IsEnabled="{x:Bind TitleBlock.IsTextTrimmed, Mode=OneWay}" />
+                </ToolTipService.ToolTip>
+            </TextBlock>
         </Grid>
     </Grid>
 </local:ArticleCardPresenter>

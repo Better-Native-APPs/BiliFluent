@@ -84,10 +84,12 @@
                     Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}"
                     TextWrapping="Wrap"
                     Visibility="{x:Bind ViewModel.Subtitle, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
-                <base:TrimTextBlock
+                <TextBlock
                     x:Name="DetailBlock"
                     MaxLines="6"
                     Text="{x:Bind ViewModel.Message, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap"
                     Visibility="{x:Bind ViewModel.Message, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
             </StackPanel>
             <Border

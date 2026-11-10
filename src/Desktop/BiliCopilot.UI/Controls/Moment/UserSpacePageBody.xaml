@@ -103,12 +103,19 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <base:TrimTextBlock
+                <TextBlock
+                    x:Name="TitleBlock"
                     HorizontalAlignment="Left"
                     FontSize="16"
                     FontWeight="SemiBold"
                     MaxLines="2"
-                    Text="{x:Bind Title, Mode=OneTime}" />
+                    Text="{x:Bind Title, Mode=OneTime}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap">
+                    <ToolTipService.ToolTip>
+                        <ToolTip Content="{x:Bind Title, Mode=OneTime}" IsEnabled="{x:Bind TitleBlock.IsTextTrimmed, Mode=OneWay}" />
+                    </ToolTipService.ToolTip>
+                </TextBlock>
                 <!-- 标签 + 推荐理由（同一行，理由单行截断；完整理由见悬停提示） -->
                 <Grid
                     Grid.Row="1"
@@ -146,7 +153,7 @@
                         Visibility="{x:Bind local:UserSpacePageBody.IsTextVisible(FeaturedReason), Mode=OneTime}" />
                 </Grid>
                 <!-- 视频简介：读取 VideoInformation 的 Description 扩展数据；当前数据层未写入时整行隐藏 -->
-                <base:TrimTextBlock
+                <TextBlock
                     Grid.Row="2"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top"
@@ -154,6 +161,8 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     MaxLines="3"
                     Text="{x:Bind local:UserSpacePageBody.GetVideoDescription(Video), Mode=OneTime}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap"
                     Visibility="{x:Bind local:UserSpacePageBody.IsVideoDescriptionVisible(Video), Mode=OneTime}" />
                 <!-- 统计：自动换行，窄时折到第二行 -->
                 <toolkit:WrapPanel
@@ -203,13 +212,23 @@
                         <TextBlock Style="{StaticResource FeaturedStatNumberStyle}" Text="{x:Bind local:UserSpacePageBody.FormatVideoStat(Video, 'comment'), Mode=OneTime}" />
                         <TextBlock Style="{StaticResource FeaturedStatLabelStyle}" Text="评论" />
                     </StackPanel>
-                    <base:IconTextBlock
+                    <StackPanel
                         VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        IconBrush="{ThemeResource TextFillColorTertiaryBrush}"
-                        Symbol="CalendarClock"
-                        Text="{x:Bind local:UserSpacePageBody.FormatPublishTime(PublishTime), Mode=OneTime}"
-                        Visibility="{x:Bind local:UserSpacePageBody.IsTimeVisible(PublishTime), Mode=OneTime}" />
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Visibility="{x:Bind local:UserSpacePageBody.IsTimeVisible(PublishTime), Mode=OneTime}">
+                        <ic:SymbolIcon
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Symbol="CalendarClock" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind local:UserSpacePageBody.FormatPublishTime(PublishTime), Mode=OneTime}"
+                            TextLineBounds="Tight" />
+                    </StackPanel>
                 </toolkit:WrapPanel>
             </Grid>
         </DataTemplate>
@@ -334,33 +353,60 @@
                             TextTrimming="CharacterEllipsis"
                             TextWrapping="NoWrap"
                             Visibility="{x:Bind local:UserSpacePageBody.IsTimeVisible(PublishTime), Mode=OneTime}" />
-                        <base:TrimTextBlock
+                        <TextBlock
+                            x:Name="TitleBlock2"
                             Grid.Row="1"
                             HorizontalAlignment="Left"
                             MaxLines="2"
-                            Text="{x:Bind Title, Mode=OneTime}" />
+                            Text="{x:Bind Title, Mode=OneTime}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap">
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="{x:Bind Title, Mode=OneTime}" IsEnabled="{x:Bind TitleBlock2.IsTextTrimmed, Mode=OneWay}" />
+                            </ToolTipService.ToolTip>
+                        </TextBlock>
                         <Grid Grid.Row="2" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <base:IconTextBlock
+                            <StackPanel
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                IconBrush="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                Symbol="PlayCircle"
-                                Text="{x:Bind local:UserSpacePageBody.FormatCount(ViewCount), Mode=OneTime}"
+                                Orientation="Horizontal"
+                                Spacing="4"
                                 ToolTipService.ToolTip="{ext:Locale Name=PlayCount}"
-                                Visibility="{x:Bind local:UserSpacePageBody.IsCountVisible(ViewCount), Mode=OneTime}" />
-                            <base:IconTextBlock
+                                Visibility="{x:Bind local:UserSpacePageBody.IsCountVisible(ViewCount), Mode=OneTime}">
+                                <ic:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Symbol="PlayCircle" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind local:UserSpacePageBody.FormatCount(ViewCount), Mode=OneTime}"
+                                    TextLineBounds="Tight" />
+                            </StackPanel>
+                            <StackPanel
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                IconBrush="{ThemeResource TextFillColorTertiaryBrush}"
-                                Symbol="Star"
-                                Text="{x:Bind local:UserSpacePageBody.FormatCount(FavoriteCount), Mode=OneTime}"
-                                Visibility="{x:Bind local:UserSpacePageBody.IsCountVisible(FavoriteCount), Mode=OneTime}" />
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                Visibility="{x:Bind local:UserSpacePageBody.IsCountVisible(FavoriteCount), Mode=OneTime}">
+                                <ic:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Symbol="Star" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind local:UserSpacePageBody.FormatCount(FavoriteCount), Mode=OneTime}"
+                                    TextLineBounds="Tight" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Grid>
@@ -412,13 +458,15 @@
                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                             Opacity="0.35"
                             Text="“" />
-                        <base:TrimTextBlock
+                        <TextBlock
                             Margin="0,28,0,0"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
                             FontSize="14"
                             MaxLines="5"
-                            Text="{x:Bind Content, Mode=OneTime}" />
+                            Text="{x:Bind Content, Mode=OneTime}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap" />
                     </Grid>
                     <Grid
                         Grid.Row="1"
@@ -428,29 +476,51 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <base:TrimTextBlock
+                        <TextBlock
                             HorizontalAlignment="Left"
                             MaxLines="2"
                             Text="{x:Bind Content, Mode=OneTime}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap"
                             Visibility="{x:Bind local:UserSpacePageBody.IsCoverVisible(Cover), Mode=OneTime}" />
                         <StackPanel
                             Grid.Row="1"
                             Orientation="Horizontal"
                             Spacing="16">
-                            <base:IconTextBlock
+                            <StackPanel
                                 VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                IconBrush="{ThemeResource TextFillColorTertiaryBrush}"
-                                Symbol="ThumbLike"
-                                Text="{x:Bind LikeText, Mode=OneTime}"
-                                Visibility="{x:Bind local:UserSpacePageBody.IsTextVisible(LikeText), Mode=OneTime}" />
-                            <base:IconTextBlock
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                Visibility="{x:Bind local:UserSpacePageBody.IsTextVisible(LikeText), Mode=OneTime}">
+                                <ic:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Symbol="ThumbLike" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind LikeText, Mode=OneTime}"
+                                    TextLineBounds="Tight" />
+                            </StackPanel>
+                            <StackPanel
                                 VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                IconBrush="{ThemeResource TextFillColorTertiaryBrush}"
-                                Symbol="Eye"
-                                Text="{x:Bind ViewText, Mode=OneTime}"
-                                Visibility="{x:Bind local:UserSpacePageBody.IsTextVisible(ViewText), Mode=OneTime}" />
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                Visibility="{x:Bind local:UserSpacePageBody.IsTextVisible(ViewText), Mode=OneTime}">
+                                <ic:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Symbol="Eye" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind ViewText, Mode=OneTime}"
+                                    TextLineBounds="Tight" />
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </Grid>
@@ -1055,10 +1125,26 @@
                             Emoji="&#x1F440;"
                             Visibility="{x:Bind local:UserSpacePageBody.IsStateEmpty(ViewModel.State), Mode=OneWay}" />
 
-                        <base:LoadingWidget
+                        <StackPanel
                             Margin="0,24"
-                            Text="{ext:Locale Name=LoadingAndWait}"
-                            Visibility="{x:Bind local:UserSpacePageBody.IsInitialLoading(ViewModel.IsLoading, ViewModel.State), Mode=OneWay}" />
+                            Padding="20,12"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultSolidBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource OverlayCornerRadius}"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            Visibility="{x:Bind local:UserSpacePageBody.IsInitialLoading(ViewModel.IsLoading, ViewModel.State), Mode=OneWay}">
+                            <ProgressRing
+                                Width="20"
+                                Height="20"
+                                MinWidth="20"
+                                MinHeight="20"
+                                IsActive="{x:Bind local:UserSpacePageBody.IsInitialLoadingActive(ViewModel.IsLoading, ViewModel.State), Mode=OneWay}" />
+                            <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=LoadingAndWait}" />
+                        </StackPanel>
 
                         <StackPanel
                             Margin="0,48"

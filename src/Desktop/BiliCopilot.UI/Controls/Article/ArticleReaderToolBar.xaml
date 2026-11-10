@@ -3,7 +3,6 @@
     x:Class="BiliCopilot.UI.Controls.Article.ArticleReaderToolBar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ic="using:FluentIcons.WinUI"
@@ -77,11 +76,12 @@
                         FontSize="14"
                         IconVariant="{x:Bind ViewModel.IsLiked, Mode=OneWay, Converter={StaticResource BoolToIconVariantConverter}}"
                         Symbol="ThumbLike" />
-                    <base:TrimTextBlock
+                    <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="12"
-                        MaxLines="1"
-                        Text="{x:Bind ViewModel.LikeCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                        Text="{x:Bind ViewModel.LikeCount, Mode=OneWay, Converter={StaticResource CountConverter}}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                 </StackPanel>
             </ToggleButton>
             <ToggleButton
@@ -94,11 +94,12 @@
                         FontSize="14"
                         IconVariant="{x:Bind ViewModel.IsCommentsOpened, Mode=OneWay, Converter={StaticResource BoolToIconVariantConverter}}"
                         Symbol="ChatEmpty" />
-                    <base:TrimTextBlock
+                    <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="12"
-                        MaxLines="1"
-                        Text="{x:Bind ViewModel.CommentCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                        Text="{x:Bind ViewModel.CommentCount, Mode=OneWay, Converter={StaticResource CountConverter}}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                 </StackPanel>
             </ToggleButton>
             <ToggleButton
@@ -111,11 +112,12 @@
                         FontSize="14"
                         IconVariant="{x:Bind ViewModel.IsFavorited, Mode=OneWay, Converter={StaticResource BoolToIconVariantConverter}}"
                         Symbol="Star" />
-                    <base:TrimTextBlock
+                    <TextBlock
                         HorizontalAlignment="Center"
                         FontSize="12"
-                        MaxLines="1"
-                        Text="{x:Bind ViewModel.FavoriteCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                        Text="{x:Bind ViewModel.FavoriteCount, Mode=OneWay, Converter={StaticResource CountConverter}}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                 </StackPanel>
             </ToggleButton>
         </StackPanel>

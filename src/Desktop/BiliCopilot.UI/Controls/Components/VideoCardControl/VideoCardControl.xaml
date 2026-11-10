@@ -57,16 +57,20 @@
                                     <RowDefinition />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <base:TrimTextBlock
+                                <TextBlock
                                     HorizontalAlignment="Left"
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    MaxLines="1"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}" />
-                                <base:TrimTextBlock
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -83,25 +87,36 @@
                                             FontSize="10"
                                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                             Symbol="Tag" />
-                                        <base:TrimTextBlock
+                                        <TextBlock
                                             Grid.Column="1"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
                                             FontSize="12"
                                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            MaxLines="1"
-                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.TagName}" />
+                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.TagName}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="NoWrap" />
                                     </Grid>
 
 
-                                    <base:IconTextBlock
+                                    <StackPanel
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                        IconBrush="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                        Symbol="PlayCircle"
-                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
-                                        ToolTipService.ToolTip="{ext:Locale Name=PlayCount}" />
+                                        Orientation="Horizontal"
+                                        Spacing="4"
+                                        ToolTipService.ToolTip="{ext:Locale Name=PlayCount}">
+                                        <ic:SymbolIcon
+                                            VerticalAlignment="Center"
+                                            FontSize="10"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Symbol="PlayCircle" />
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
+                                            TextLineBounds="Tight" />
+                                    </StackPanel>
                                 </Grid>
                             </Grid>
                         </Grid>
@@ -161,17 +176,21 @@
                                     <RowDefinition />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <base:TrimTextBlock
+                                <TextBlock
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center"
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    MaxLines="1"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}" />
-                                <base:TrimTextBlock
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -280,12 +299,13 @@
                                         <ColumnDefinition />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <base:TrimTextBlock
+                                    <TextBlock
                                         VerticalAlignment="Center"
                                         FontSize="12"
                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                        MaxLines="1"
-                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}" />
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
                                     <TextBlock
                                         Grid.Column="1"
                                         HorizontalAlignment="Left"
@@ -297,10 +317,13 @@
                                         TextWrapping="NoWrap"
                                         Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PublishRelativeTime, Converter={StaticResource ObjectToVisibilityConverter}}" />
                                 </Grid>
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -392,19 +415,24 @@
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="NoWrap"
                                         Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Subtitle, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                                    <base:TrimTextBlock
+                                    <TextBlock
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         FontSize="12"
                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                         Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.TagName}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
                                         Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.TagName, Converter={StaticResource ObjectToVisibilityConverter}}" />
                                 </Grid>
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <StackPanel
                                     Grid.Row="2"
                                     Orientation="Horizontal"
@@ -516,10 +544,13 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -621,11 +652,14 @@
                                 <RowDefinition />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <base:TrimTextBlock
+                            <TextBlock
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Top"
                                 FontWeight="Bold"
-                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap"
+                                ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                             <StackPanel
                                 Grid.Row="1"
                                 Orientation="Horizontal"
@@ -744,10 +778,13 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -820,10 +857,13 @@
                                     <Run Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
                                 </TextBlock>
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -931,10 +971,13 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -1006,10 +1049,13 @@
                                     <Run Text="/" />
                                     <Run Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
                                 </TextBlock>
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <Grid Grid.Row="2" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition />
@@ -1099,11 +1145,14 @@
                                     TextWrapping="NoWrap"
                                     Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author, Converter={StaticResource ObjectToVisibilityConverter}}" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
                                     MaxLines="2"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <StackPanel
                                     Grid.Row="2"
                                     Orientation="Horizontal"
@@ -1210,12 +1259,15 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
                                     MaxLines="2"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <StackPanel
                                     Grid.Row="2"
                                     Orientation="Horizontal"
@@ -1322,12 +1374,15 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
 
-                                <base:TrimTextBlock
+                                <TextBlock
                                     Grid.Row="1"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
                                     MaxLines="2"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
+                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                 <StackPanel
                                     Grid.Row="2"
                                     Orientation="Horizontal"

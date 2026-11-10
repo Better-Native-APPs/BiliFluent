@@ -511,6 +511,9 @@ public sealed partial class UserSpacePageBody : UserSpacePageControlBase
     public static Visibility IsInitialLoading(bool isLoading, UserSpaceLoadState state)
         => isLoading && state == UserSpaceLoadState.Loading ? Visibility.Visible : Visibility.Collapsed;
 
+    public static bool IsInitialLoadingActive(bool isLoading, UserSpaceLoadState state)
+        => isLoading && state == UserSpaceLoadState.Loading;
+
     public static Visibility IsFeaturedSectionVisible(int count, UserSpaceLoadState state)
         => (count > 0 || state is UserSpaceLoadState.Loading or UserSpaceLoadState.Error or UserSpaceLoadState.Unavailable) ? Visibility.Visible : Visibility.Collapsed;
 

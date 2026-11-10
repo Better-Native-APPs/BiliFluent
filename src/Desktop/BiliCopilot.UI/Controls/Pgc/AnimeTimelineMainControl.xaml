@@ -38,6 +38,25 @@
             Emoji="&#x1F92A;"
             Visibility="{x:Bind ViewModel.SelectedTimeline.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-        <base:LoadingWidget Text="{ext:Locale Name=LoadingAndWait}" Visibility="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}" />
+        <StackPanel
+            Margin="20"
+            Padding="20,12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultSolidBrush}"
+            BorderThickness="1"
+            CornerRadius="{ThemeResource OverlayCornerRadius}"
+            Orientation="Horizontal"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}">
+            <ProgressRing
+                Width="20"
+                Height="20"
+                MinWidth="20"
+                MinHeight="20"
+                IsActive="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}" />
+            <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=LoadingAndWait}" />
+        </StackPanel>
     </Grid>
 </local:AnimeTimelineControlBase>
