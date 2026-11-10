@@ -301,16 +301,6 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Graphics.Win2D" />
-    <PackageReference Include="Richasy.BiliKernel.Authorizers.TV" />
-    <PackageReference Include="Richasy.BiliKernel.Resolvers.WinUICookies" />
-    <PackageReference Include="Richasy.BiliKernel.Resolvers.WinUIQRCode" />
-    <PackageReference Include="Richasy.BiliKernel.Resolvers.WinUIToken" />
-    <PackageReference Include="Richasy.BiliKernel.Services.Article" />
-    <PackageReference Include="Richasy.BiliKernel.Services.Comment" />
-    <PackageReference Include="Richasy.BiliKernel.Services.Media" />
-    <PackageReference Include="Richasy.BiliKernel.Services.Moment" />
-    <PackageReference Include="Richasy.BiliKernel.Services.Search" />
-    <PackageReference Include="Richasy.BiliKernel.Services.User" />
     <PackageReference Include="Richasy.MpvKernel" />
     <PackageReference Include="Richasy.MpvKernel.Core" />
     <PackageReference Include="Richasy.MpvKernel.Player" />
@@ -325,6 +315,16 @@
     <PackageReference Include="WinUIEx" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Authorizers\Authorizers.Tv\Authorizers.Tv.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Resolvers\Resolvers.WinUICookies\Resolvers.WinUICookies.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Resolvers\Resolvers.WinUIQRCode\Resolvers.WinUIQRCode.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Resolvers\Resolvers.WinUIToken\Resolvers.WinUIToken.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.Article\Services.Article.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.Comment\Services.Comment.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.Media\Services.Media.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.Moment\Services.Moment.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.Search\Services.Search.csproj" />
+    <ProjectReference Include="..\..\Libs\BiliKernel\src\Services\Services.User\Services.User.csproj" />
     <ProjectReference Include="..\..\Libs\Danmaku.Legacy\Danmaku.Legacy.csproj" />
     <ProjectReference Include="..\BiliCopilot.UI.Models\BiliCopilot.UI.Models.csproj" />
     <ProjectReference Include="..\BiliCopilot.Visor.Models\BiliCopilot.Visor.Models.csproj" />
