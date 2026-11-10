@@ -32,7 +32,7 @@ internal static class MpvShutdownHelper
         {
             // DisposeAsync cancels the event loop without waking its native infinite wait.
             // Quit first so the loop can receive SHUTDOWN and stop using the handle.
-            var error = await Task.Run(() => MpvNative.SetCommandString(client.Handle, "quit")).ConfigureAwait(false);
+            var error = await Task.Run(() => client.CommandString("quit")).ConfigureAwait(false);
             if (error != MpvError.Success)
             {
                 if (logger.IsEnabled(LogLevel.Warning))

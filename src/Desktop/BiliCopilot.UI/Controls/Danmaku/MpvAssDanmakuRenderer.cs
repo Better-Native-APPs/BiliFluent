@@ -396,7 +396,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         if (id is not null)
         {
             // Confirm ownership immediately before touching secondary selection or removing a track.
-            if (MpvNative.GetPropertyString(_client.Handle, "secondary-sid") == id)
+            if (_client.GetPropertyString("secondary-sid") == id)
             {
                 SetProperty("secondary-sub-visibility", "no");
                 SetProperty("secondary-sid", "no");
@@ -416,22 +416,22 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         for (var i = 0; i < count; i++)
         {
             var prefix = "track-list/" + i.ToString(CultureInfo.InvariantCulture) + "/";
-            if (MpvNative.GetPropertyString(_client.Handle, prefix + "type") == "sub"
-                && string.Equals(MpvNative.GetPropertyString(_client.Handle, prefix + "external-filename"), file, StringComparison.OrdinalIgnoreCase))
-                return MpvNative.GetPropertyString(_client.Handle, prefix + "id");
+            if (_client.GetPropertyString(prefix + "type") == "sub"
+                && string.Equals(_client.GetPropertyString(prefix + "external-filename"), file, StringComparison.OrdinalIgnoreCase))
+                return _client.GetPropertyString(prefix + "id");
         }
 
         return null;
     }
 
     private double ReadNumber(string property)
-        => double.TryParse(MpvNative.GetPropertyString(_client.Handle, property), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : double.NaN;
+        => double.TryParse(_client.GetPropertyString(property), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : double.NaN;
 
     private void SetProperty(string name, string value)
-        => RequireSuccess(MpvNative.SetPropertyString(_client.Handle, name, value), name);
+        => RequireSuccess(_client.SetPropertyString(name, value), name);
 
     private void Command(params string[] arguments)
-        => RequireSuccess(MpvNative.SetCommand(_client.Handle, arguments), arguments[0]);
+        => RequireSuccess(_client.Command(arguments), arguments[0]);
 
     private static void RequireSuccess(MpvError error, string operation)
     {

@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Runtime.ExceptionServices;
 using BiliCopilot.UI.SponsorBlock.Rules;
-using FluentResults;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Core.Enums;
@@ -69,7 +68,7 @@ internal sealed class MpvSponsorPlaybackBackend : ISponsorPlaybackBackend
         return Task.Run(() =>
         {
             issuer.ValidateAndConsume(operation, NativeOperationKind.SeekExact);
-            ThrowNativeError(MpvNative.SetCommand(client.Handle, payload), "seek absolute+exact");
+            ThrowNativeError(client.Command(payload), "seek absolute+exact");
         });
     }
 
@@ -117,12 +116,12 @@ internal sealed class MpvSponsorPlaybackBackend : ISponsorPlaybackBackend
             // One capability covers both directions, so require seekability for forward as well as backward.
             if (!HasPausedVideoFlags())
                 throw new NotSupportedException("Paused-video frame capability is unavailable or changed.");
-            ThrowNativeError(MpvNative.SetCommand(client.Handle, new[] { command }), command);
+            ThrowNativeError(client.Command(command), command);
         });
     }
 
     // Only called inside an admitted operation. No handles/nodes escape or survive its task.
-    // Flag is an int in the union's scalar storage, NOT MpvNode.Format (GetProperty initializes it to zero).
+    // An unavailable flag property is reported as null, never as false.
     private bool? ReadMute() => ReadOptionalFlag("mute");
 
     private bool HasPausedVideoFlags() => ReadOptionalFlag("seekable") == true
@@ -131,15 +130,14 @@ internal sealed class MpvSponsorPlaybackBackend : ISponsorPlaybackBackend
 
     private bool? ReadOptionalFlag(string property)
     {
-        var error = MpvNative.GetProperty(client.Handle, property, MpvFormat.Flag, out var node);
-        if (error != MpvError.Success) return null;
-        return node.Flag switch { 0 => false, 1 => true, _ => null };
+        var error = client.GetProperty(property, out bool value);
+        return error == MpvError.Success ? value : null;
     }
 
     private async Task<bool> HasSelectedVideoAsync()
     {
         var result = await client.GetTracksAsync().ConfigureAwait(false);
-        // Track capability is optional. This SDK reports native track errors as Result.Fail(string).
+        // Track capability is optional. The client reports native track errors as a failed result without an exception.
         if (result.IsFailed || result.Value is null) return false;
         foreach (var track in result.Value)
             if (track is not null && track.Type == MpvTrackType.Video && track.Current) return true;
@@ -163,26 +161,17 @@ internal sealed class MpvSponsorPlaybackBackend : ISponsorPlaybackBackend
             throw new MpvException("MPV Sponsor " + operation + " failed.", error);
     }
 
-    private static void RequireSuccess(IResultBase result, string operation)
+    private static void RequireSuccess(IMpvResult result, string operation)
     {
         if (!result.IsFailed) return;
-        var exceptions = new List<Exception>();
-        foreach (var error in result.Errors) CollectExceptions(error, exceptions);
-        if (exceptions.Count == 1)
+        if (result.Exception is { } exception)
         {
-            // Preserve the actual MpvException/code/stack, rather than replacing it with a generic error.
-            exceptions[0].Data["MpvSponsorOperation"] = operation;
-            ExceptionDispatchInfo.Capture(exceptions[0]).Throw();
+            // Preserve the actual MpvException/code, rather than replacing it with a generic error.
+            exception.Data["MpvSponsorOperation"] = operation;
+            ExceptionDispatchInfo.Capture(exception).Throw();
         }
-        if (exceptions.Count > 1)
-            throw new AggregateException("MPV Sponsor " + operation + " failed.", exceptions);
-        // No SDK error text/metadata is copied into logs: these operations need no URL/account/headers.
-        throw new InvalidOperationException("MPV Sponsor " + operation + " failed (SDK Result without exception).");
-    }
 
-    private static void CollectExceptions(IError error, List<Exception> exceptions)
-    {
-        if (error is ExceptionalError exceptional) exceptions.Add(exceptional.Exception);
-        foreach (var reason in error.Reasons) CollectExceptions(reason, exceptions);
+        // No client error text/metadata is copied into logs: these operations need no URL/account/headers.
+        throw new InvalidOperationException("MPV Sponsor " + operation + " failed (client result without exception).");
     }
 }

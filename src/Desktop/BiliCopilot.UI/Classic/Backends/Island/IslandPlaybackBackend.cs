@@ -2,7 +2,6 @@
 
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Toolkits;
-using FluentResults;
 using Microsoft.Extensions.Logging;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
@@ -266,7 +265,7 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
             _loaded = true;
             if (_decode == ClassicDecodePreference.D3D11)
             {
-                var confirmed = string.Equals(MpvNative.GetPropertyString(client.Handle, "hwdec-current"), "d3d11va", StringComparison.Ordinal);
+                var confirmed = string.Equals(client.GetPropertyString("hwdec-current"), "d3d11va", StringComparison.Ordinal);
                 if (!confirmed) throw new BackendFailure("D3D11 decoding is unavailable for this Island media/device.");
             }
             failureStage = FailureStage.IslandInitialSample;
@@ -445,7 +444,7 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
 
     private static string SafeMessage(Exception error) => error is BackendFailure ? error.Message : "Classic Island operation failed; no backend was substituted.";
 
-    private static void Check(Result result, string safeError) { if (result.IsFailed) throw new BackendFailure(safeError); }
+    private static void Check(MpvResult result, string safeError) { if (result.IsFailed) throw new BackendFailure(safeError); }
     private sealed class BackendFailure : Exception
     {
         public bool EndBeforeReady { get; init; }

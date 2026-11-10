@@ -151,13 +151,13 @@ public sealed partial class PlayerViewModel
             CheckMediaAdmission();
             if (options.UseConfig != true && string.IsNullOrEmpty(configPath))
             {
-                // MpvKernel exposes these options only after initialization; keep stats and user scripts enabled.
+                // The client exposes these options only after initialization; keep stats and user scripts enabled.
                 string[] scriptOptions = ["load-console", "load-select", "load-positioning", "load-commands"];
                 foreach (var scriptOption in scriptOptions)
                 {
                     await AwaitInitializationStepAsync(async () =>
                     {
-                        var errorCode = await Task.Run(() => MpvNative.SetOptionString(client.Handle, scriptOption, "no"));
+                        var errorCode = await Task.Run(() => client.SetOptionString(scriptOption, "no"));
                         if (errorCode != MpvError.Success)
                         {
                             if (logger.IsEnabled(LogLevel.Debug))
@@ -716,7 +716,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        var hwdec = MpvNative.GetPropertyString(client.Handle, "hwdec-current");
+        var hwdec = client.GetPropertyString("hwdec-current");
         if (string.IsNullOrEmpty(hwdec))
         {
             return;
@@ -725,7 +725,7 @@ public sealed partial class PlayerViewModel
         _isHardwareDecodeChecked = true;
         if (string.Equals(hwdec, "no", StringComparison.OrdinalIgnoreCase))
         {
-            var codec = MpvNative.GetPropertyString(client.Handle, "video-codec");
+            var codec = client.GetPropertyString("video-codec");
             if (codec is not null && (codec.Contains("av1", StringComparison.OrdinalIgnoreCase)
                 || codec.Contains("hevc", StringComparison.OrdinalIgnoreCase) || codec.Contains("h265", StringComparison.OrdinalIgnoreCase)))
             {
