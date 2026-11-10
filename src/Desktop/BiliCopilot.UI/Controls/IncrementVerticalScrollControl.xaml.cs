@@ -19,6 +19,7 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
     public static readonly DependencyProperty ScrollPaddingProperty =
         DependencyProperty.Register(nameof(ScrollPadding), typeof(Thickness), typeof(IncrementVerticalScrollControl), new PropertyMetadata(new Thickness(20, 0, 20, 0)));
 
+    private readonly LoadMoreGate _loadMoreGate = new();
     private bool _isControlLoaded;
     private RefreshContainer? _refreshContainer;
 
@@ -65,7 +66,11 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
     public async Task DelayCheckItemsAsync()
     {
         await Task.Delay(500);
-        CheckItemsCount();
+        CheckItemsCount(isFollowUp: true);
+
+        // 布局较慢时新内容可能还没量出来，稍后再看一次；内容没有变化时这次检查不会发起加载.
+        await Task.Delay(1500);
+        CheckItemsCount(isFollowUp: true);
     }
 
     public void ResetScrollPosition()
@@ -178,7 +183,7 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
 
         if (_isControlLoaded && ReferenceEquals(command, RefreshCommand) && ReferenceEquals(sender, _refreshContainer))
         {
-            CheckItemsCount();
+            CheckItemsCount(isFollowUp: false);
         }
     }
 
@@ -198,18 +203,18 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
 
     private void OnViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        CheckItemsCount();
+        CheckItemsCount(isFollowUp: false);
     }
 
     private void OnViewSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (e.NewSize.Width > 100)
         {
-            CheckItemsCount();
+            CheckItemsCount(isFollowUp: false);
         }
     }
 
-    private void CheckItemsCount()
+    private void CheckItemsCount(bool isFollowUp)
     {
         if (!_isControlLoaded)
         {
@@ -218,7 +223,9 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
 
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
-            if (_isControlLoaded && View.ExtentHeight - View.ViewportHeight - View.VerticalOffset <= 1600)
+            // 页面被隐藏、窗口最小化或加载没有带来新内容时，内容高度不会变化，不能据此继续加载.
+            if (_isControlLoaded
+                && _loadMoreGate.TryEnter(View, View.Content as FrameworkElement, View.ExtentHeight, View.ViewportHeight, View.VerticalOffset, 1600, isFollowUp))
             {
                 LoadMoreCommand?.Execute(default);
             }
