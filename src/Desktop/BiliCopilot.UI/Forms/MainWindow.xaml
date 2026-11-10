@@ -10,6 +10,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <!--  Declared here so the main window owns its Mica backdrop instead of relying on the shared window base.  -->
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
     <Grid PointerPressed="OnPointerPressed">
         <controls:RootLayout x:Name="RootLayout" Loaded="OnRootLayoutLoaded" />
         <Grid x:Name="TipContainer" Visibility="Collapsed" />
