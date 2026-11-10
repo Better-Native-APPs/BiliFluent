@@ -8,12 +8,16 @@
 - 提交：`4d0f8691f08f1e143294402477e72306a1b38b6f`，记录于 `Danmaku.Legacy` `0.0.1-preview6` NuGet 包中。
 - 组件许可：MIT；原始 `LICENSE.txt` 与源码署名保持不变。主应用 BiliFluent 基于 Richasy 的「哔哩助理」(Bili Copilot)，按 GPL-3.0 发布，不改变该组件的 MIT 许可。
 
+## 内置的 Danmaku.Share 类型
+
+`Share/` 目录是同一上游提交（`4d0f8691f08f1e143294402477e72306a1b38b6f`）中 [Danmaku.Share](https://github.com/Richasy/danmaku-kernel/tree/4d0f8691f08f1e143294402477e72306a1b38b6f/src/Danmaku.Share) 的源码副本，取代 `Danmaku.Share` `0.0.1-preview6` NuGet 包。只保留实际用到的类型：`DanmakuItem`、`DanmakuDefaultLayerDef`、`DanmakuMode`、`DanmakuFontSize`、`DanmakuAlignmentMode`；命名空间（`Richasy.Danmaku.Models`、`Richasy.Danmaku.Enums`）和文件内容与上游一致，许可同为 MIT（见 `LICENSE.txt`）。
+
 ## 性能调整
 
 源码补丁仅从 `DanmakuRender.OnCanvasDraw` 移除 `GC.TryStartNoGCRegion(50_000_000, true)` 及配对的 `GC.EndNoGCRegion()` 清理。逐帧进入、退出 NoGC 区域会反复触发 GC 暂停并提交较大的堆预算；渲染与异常处理逻辑保持不变，其他 C# 文件保留上游实现。
 
 ## 构建集成
 
-项目跟随应用的 .NET / Windows 目标框架与架构。依赖由 `src/Directory.Packages.props` 管理，包括未修改的 `Danmaku.Share` NuGet 包。由于此副本是不可打包的本地库，移除了上游打包导入。
+项目跟随应用的 .NET / Windows 目标框架与架构。依赖由 `src/Directory.Packages.props` 管理。由于此副本是不可打包的本地库，移除了上游打包导入。
 
 仅此项目关闭分析器、代码风格、可空引用及 XML 文档约束；`TreatAsLocalProperty` 确保 Release 脚本通过全局 MSBuild 属性启用分析器与警告即错误时，这些局部选择仍然生效。

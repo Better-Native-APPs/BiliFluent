@@ -11,7 +11,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Media;
 using Richasy.BiliKernel.Models;
-using Richasy.Danmaku;
 using Richasy.Danmaku.Enums;
 using Richasy.Danmaku.Legacy;
 using Richasy.Danmaku.Models;
@@ -33,7 +32,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private bool _hasDanmakuList;
     private bool _isRendererRunning;
     private DanmakuFrostMaster? _danmakuMaster;
-    private DanmakuRenderer? _danmakuRenderer;
     private MpvAssDanmakuRenderer? _mpvRenderer;
     private DanmakuRendererType _rendererType;
     private CanvasAnimatedControl? _canvas;
@@ -66,12 +64,15 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private void ReloadRenderer()
     {
         var type = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
-        _rendererType = type;
-        if (type == DanmakuRendererType.DirectX && _danmakuRenderer == null)
+        if (type == DanmakuRendererType.DirectX)
         {
-            _danmakuRenderer = new DanmakuRenderer(RootGrid, this.Get<ILogger<DanmakuRenderer>>());
+            // The DirectX renderer was removed; move its users to the default renderer.
+            type = DanmakuRendererType.Mpv;
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, type);
         }
-        else if (type == DanmakuRendererType.Win2D && _danmakuMaster == null)
+
+        _rendererType = type;
+        if (type == DanmakuRendererType.Win2D && _danmakuMaster == null)
         {
             _danmakuMaster = new DanmakuFrostMaster(RootGrid);
             _canvas = RootGrid.Children.OfType<CanvasAnimatedControl>().FirstOrDefault();
@@ -98,11 +99,9 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
 
         DetachPlaybackHost();
         _danmakuMaster?.Close();
-        _danmakuRenderer?.Dispose();
         if (_mpvRenderer is not null) _ = _mpvRenderer.DisposeAsync().AsTask();
         _mpvRenderer = null;
         _danmakuMaster = null;
-        _danmakuRenderer = null;
         _canvas = null;
         _hasDanmakuList = false;
         _isRendererRunning = false;
@@ -116,7 +115,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         _hasDanmakuList = false;
         _redrawPending = false;
         _danmakuMaster?.Clear();
-        _danmakuRenderer?.Clear();
         _mpvRenderer?.Clear();
         PauseRendering();
         SubscribeViewModel(IsLoaded ? newValue : null);
@@ -184,11 +182,9 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                 {
                     CancelRedraw();
                     _danmakuMaster?.Close();
-                    _danmakuRenderer?.Dispose();
                     if (_mpvRenderer is not null) _ = _mpvRenderer.DisposeAsync().AsTask();
                     _mpvRenderer = null;
                     _danmakuMaster = null;
-                    _danmakuRenderer = null;
                     _canvas = null;
                     _hasDanmakuList = false;
                     _isRendererRunning = false;
@@ -249,7 +245,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         };
 
         _danmakuMaster?.AddRealtimeDanmaku(model, true);
-        _danmakuRenderer?.AddRealtimeDanmaku(model, true);
         if (_mpvRenderer is not null)
         {
             var position = _observedPlayer?.Position ?? _lastProgress;
@@ -267,7 +262,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         _lastProgress = 0;
 
         _danmakuMaster?.Clear();
-        _danmakuRenderer?.Clear();
         _mpvRenderer?.Clear();
         PauseRendering();
     }
@@ -314,22 +308,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             _danmakuMaster.SetOutlineSize(ViewModel.OutlineSize);
         }
 
-        if (_danmakuRenderer != null)
-        {
-            var config = DanmakuConfiguration.CreateDefault();
-            config.RollingDensity = ViewModel.IsDanmakuLimit ? DefaultRollingDensity : -1;
-            config.AutoControlDensity = ViewModel.IsDanmakuLimit;
-            config.TextOpacity = ViewModel.DanmakuOpacity;
-            config.FontSizeScale = ViewModel.DanmakuFontSize;
-            config.RollingAreaRatio = (float)ViewModel.DanmakuArea;
-            config.FontFamilyName = ViewModel.DanmakuFontFamily ?? "Segoe UI";
-            config.IsTextBold = ViewModel.IsDanmakuBold;
-            config.OutlineSize = ViewModel.OutlineSize;
-
-            _danmakuRenderer.SetDanmakuEnabledType(ViewModel.IsRollingEnabled, ViewModel.IsTopEnabled, ViewModel.IsBottomEnabled);
-            _danmakuRenderer.UpdateConfiguration(config);
-        }
-
         ResetSpeed();
         UpdateMpvStyle();
         UpdateRendererPlaybackState();
@@ -355,7 +333,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     {
         var finalSpeed = ViewModel.DanmakuSpeed * 5 * ViewModel.ExtraSpeed;
         _danmakuMaster?.SetRollingSpeed(finalSpeed);
-        _danmakuRenderer?.UpdateConfiguration(new DanmakuConfiguration { RollingSpeedBase = (float)finalSpeed });
     }
 
     private void Redraw()
@@ -402,7 +379,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                 if (version != _redrawVersion || ViewModel != viewModel || !CanShowDanmaku()) return;
 
                 _danmakuMaster?.SetDanmakuList(danmakus);
-                _danmakuRenderer?.SetDanmakuList(danmakus);
                 if (parsed.AssItems is { } assItems) _mpvRenderer?.SetItems(assItems);
                 _hasDanmakuList = danmakus.Count > 0;
                 _redrawPending = false;
@@ -410,7 +386,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                 {
                     var position = Convert.ToUInt32(_lastProgress * 1000d);
                     _danmakuMaster?.Seek(position);
-                    _danmakuRenderer?.Seek(position);
                 }
 
                 ResetDanmakuStyle();
@@ -572,7 +547,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
 
         _isRendererRunning = true;
         UpdateDanmakuTime(_lastProgress);
-        _danmakuRenderer?.Resume();
         _danmakuMaster?.Resume();
         if (_canvas is not null) _canvas.Paused = false;
     }
@@ -580,7 +554,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private void PauseRendering()
     {
         _isRendererRunning = false;
-        _danmakuRenderer?.Pause();
         _danmakuMaster?.Pause();
         // Legacy Pause freezes items but does not stop CanvasAnimatedControl's per-frame Draw callbacks.
         if (_canvas is not null) _canvas.Paused = true;
@@ -593,7 +566,6 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             return;
         }
 
-        _danmakuRenderer?.UpdateTime(Convert.ToUInt32(pos * 1000));
         _danmakuMaster?.UpdateTime(Convert.ToUInt32(pos * 1000));
     }
 }
