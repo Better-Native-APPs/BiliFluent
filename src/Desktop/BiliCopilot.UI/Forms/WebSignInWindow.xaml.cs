@@ -6,7 +6,6 @@ using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
 using Microsoft.UI.Windowing;
 using Richasy.BiliKernel.Bili.Authorization;
-using Richasy.WinUIKernel.Share.Base;
 using WinUIEx;
 
 namespace BiliCopilot.UI.Forms;
@@ -14,7 +13,7 @@ namespace BiliCopilot.UI.Forms;
 /// <summary>
 /// 网页登录窗口.
 /// </summary>
-public sealed partial class WebSignInWindow : WindowBase
+public sealed partial class WebSignInWindow : WindowEx
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private bool _isClosed;
@@ -34,7 +33,7 @@ public sealed partial class WebSignInWindow : WindowBase
 
         this.CenterOnScreen();
         this.SetIcon("Assets/logo.ico");
-        this.SetTitleBar(TitleBar);
+        this.ExtendIntoTitleBar(TitleBar);
         this.Get<AppViewModel>().Windows.Add(this);
 
         Closed += OnClosed;

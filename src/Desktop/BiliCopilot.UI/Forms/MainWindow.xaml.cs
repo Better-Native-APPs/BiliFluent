@@ -19,7 +19,7 @@ namespace BiliCopilot.UI.Forms;
 /// <summary>
 /// 主窗口.
 /// </summary>
-public sealed partial class MainWindow : WindowBase, ITipWindow
+public sealed partial class MainWindow : WindowEx, ITipWindow
 {
     private const int WindowMinWidth = 640;
     private const int WindowMinHeight = 480;
@@ -125,6 +125,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     {
         _playerOcclusion = new RenderingOcclusionState(OnRenderingOcclusionChanged);
         InitializeComponent();
+        this.ExtendIntoTitleBar(titleBar: null);
         _windowStatsTimer = DispatcherQueue.CreateTimer();
         _windowStatsTimer.Interval = TimeSpan.FromMilliseconds(500);
         _windowStatsTimer.IsRepeating = false;

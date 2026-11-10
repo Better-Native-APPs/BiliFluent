@@ -197,7 +197,7 @@
                         <ImageIcon Source="ms-appx:///Assets/StoreLogo.png" />
                     </Viewbox>
 
-                    <base:TrimTextBlock
+                    <TextBlock
                         x:Name="ChromeTitle"
                         Grid.Column="2"
                         MinWidth="48"
@@ -208,7 +208,8 @@
                         Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                         IsHitTestVisible="False"
                         MaxLines="1"
-                        Text="{ext:Locale Name=AppName}" />
+                        Text="{ext:Locale Name=AppName}"
+                        TextTrimming="CharacterEllipsis" />
 
                     <StackPanel
                         x:Name="HeaderHost"
