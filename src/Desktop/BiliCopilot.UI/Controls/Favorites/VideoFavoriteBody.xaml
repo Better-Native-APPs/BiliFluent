@@ -13,22 +13,21 @@
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" ScrollPadding="16,0" LoadMoreCommand="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,12">
-                    <ItemsRepeater
-                        x:Name="VideoRepeater"
-                        ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
-                        Layout="{StaticResource VideoLayout}">
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:VideoItemViewModel">
-                                <components:VideoCardControl Style="{StaticResource FavoriteVideoCardStyle}" ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="16,12"
+            controls:ItemsViewLoadMore.Command="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+            Layout="{StaticResource VideoLayout}"
+            SelectionMode="None">
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:VideoItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind Title}" IsTabStop="False">
+                        <components:VideoCardControl Style="{StaticResource FavoriteVideoCardStyle}" ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
 
         <StackPanel
             HorizontalAlignment="Center"

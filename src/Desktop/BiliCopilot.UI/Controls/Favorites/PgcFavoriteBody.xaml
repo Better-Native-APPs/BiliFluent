@@ -10,26 +10,24 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Favorites"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" ScrollPadding="16,0" LoadMoreCommand="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,12">
-                    <repeater:AppRepeater
-                        x:Name="SeasonRepeater"
-                        ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
-                        Layout="{StaticResource PgcLayout}">
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:SeasonItemViewModel">
-                                <components:SeasonCardControl Style="{StaticResource FavoriteSeasonCardStyle}" ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="16,12"
+            controls:ItemsViewLoadMore.Command="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+            Layout="{StaticResource PgcLayout}"
+            SelectionMode="None">
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:SeasonItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind Title}" IsTabStop="False">
+                        <components:SeasonCardControl Style="{StaticResource FavoriteSeasonCardStyle}" ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
 
         <StackPanel
             HorizontalAlignment="Center"

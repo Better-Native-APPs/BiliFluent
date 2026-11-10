@@ -10,27 +10,23 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" ScrollPadding="16,0">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,12">
-                    <repeater:AppRepeater
-                        x:Name="VideoRepeater"
-                        ItemsSource="{x:Bind ViewModel.SearchVideos, Mode=OneWay}"
-                        Layout="{StaticResource VideoLayout}">
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:VideoItemViewModel">
-                                <components:VideoCardControl Style="{StaticResource SearchVideoCardStyle}" ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="16,12"
+            ItemsSource="{x:Bind ViewModel.SearchVideos, Mode=OneWay}"
+            Layout="{StaticResource VideoLayout}"
+            SelectionMode="None">
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:VideoItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind Title}" IsTabStop="False">
+                        <components:VideoCardControl Style="{StaticResource SearchVideoCardStyle}" ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
 
         <StackPanel
             HorizontalAlignment="Center"
