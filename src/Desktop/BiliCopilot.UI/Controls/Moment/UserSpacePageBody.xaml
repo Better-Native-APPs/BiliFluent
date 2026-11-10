@@ -1119,11 +1119,27 @@
 
                     <!-- 状态区：位于内容下方——首屏时居上，翻页时位于列表底部，不再遮挡已加载内容 -->
                     <Grid Grid.Row="1">
-                        <base:EmptyHolder
+                        <StackPanel
                             Margin="0,48"
-                            Description="暂无内容"
-                            Emoji="&#x1F440;"
-                            Visibility="{x:Bind local:UserSpacePageBody.IsStateEmpty(ViewModel.State), Mode=OneWay}" />
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Visibility="{x:Bind local:UserSpacePageBody.IsStateEmpty(ViewModel.State), Mode=OneWay}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                FontFamily="Segoe UI Emoji"
+                                FontSize="40"
+                                Glyph="&#x1F440;" />
+                            <TextBlock
+                                MaxWidth="240"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                HorizontalTextAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="暂无内容"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
 
                         <StackPanel
                             Margin="0,24"

@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:animations="using:CommunityToolkit.WinUI.Animations"
     xmlns:article="using:BiliCopilot.UI.Controls.Article"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:comment="using:BiliCopilot.UI.Controls.Comment"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -20,33 +19,49 @@
             VerticalAlignment="Stretch" />
 
         <!--  正文加载失败、为空或无法显示时的提示. 评论与左侧工具栏仍可使用.  -->
-        <base:EmptyHolder
+        <StackPanel
             MaxWidth="420"
             Margin="96,24"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Description="{x:Bind ViewModel.ErrorDescription, Mode=OneWay}"
-            Emoji="&#x1F4C4;"
-            Title="{x:Bind ViewModel.ErrorTitle, Mode=OneWay}"
+            Spacing="8"
             Visibility="{x:Bind ViewModel.HasError, Mode=OneWay}">
-            <base:EmptyHolder.ActionElement>
-                <StackPanel
-                    HorizontalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="8">
-                    <Button
-                        MinWidth="96"
-                        Command="{x:Bind ViewModel.RetryCommand, Mode=OneWay}"
-                        Content="{ext:Locale Name=Retry}"
-                        Style="{StaticResource AccentButtonStyle}" />
-                    <Button
-                        MinWidth="96"
-                        Command="{x:Bind ViewModel.OpenInBrowserCommand, Mode=OneWay}"
-                        Content="{ext:Locale Name=OpenInBrowser}"
-                        Visibility="{x:Bind ViewModel.CanOpenInBrowser, Mode=OneWay}" />
-                </StackPanel>
-            </base:EmptyHolder.ActionElement>
-        </base:EmptyHolder>
+            <FontIcon
+                HorizontalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontFamily="Segoe UI Emoji"
+                FontSize="40"
+                Glyph="&#x1F4C4;" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                HorizontalTextAlignment="Center"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind ViewModel.ErrorTitle, Mode=OneWay}"
+                TextWrapping="Wrap" />
+            <TextBlock
+                MaxWidth="240"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                HorizontalTextAlignment="Center"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind ViewModel.ErrorDescription, Mode=OneWay}"
+                TextWrapping="Wrap" />
+            <StackPanel
+                HorizontalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    MinWidth="96"
+                    Command="{x:Bind ViewModel.RetryCommand, Mode=OneWay}"
+                    Content="{ext:Locale Name=Retry}"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <Button
+                    MinWidth="96"
+                    Command="{x:Bind ViewModel.OpenInBrowserCommand, Mode=OneWay}"
+                    Content="{ext:Locale Name=OpenInBrowser}"
+                    Visibility="{x:Bind ViewModel.CanOpenInBrowser, Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
 
         <article:ArticleReaderToolBar
             Margin="12"
