@@ -291,6 +291,7 @@
     <PackageReference Include="ComputeSharp.D2D1.WinUI" />
     <PackageReference Include="Danmaku.Core" />
     <PackageReference Include="Danmaku.Share" />
+    <PackageReference Include="DevWinUI" />
     <PackageReference Include="FluentIcons.WinUI" />
     <PackageReference Include="H.NotifyIcon.WinUI" />
     <PackageReference Include="Microsoft.Web.WebView2" />

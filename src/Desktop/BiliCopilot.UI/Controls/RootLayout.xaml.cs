@@ -52,8 +52,8 @@ public sealed partial class RootLayout : RootLayoutBase
     private PropertyChangedEventHandler? _accountChanged;
     private EventHandler? _accountBoundaryChanged;
     private NavigationViewModel? _navigationOwner;
-    private readonly HashSet<AppNavigationViewItem> _loadedNavigationItems = new();
-    private readonly Dictionary<AppNavigationViewItem, NavigationItemState> _navigationItems = new();
+    private readonly HashSet<NavigationViewItem> _loadedNavigationItems = new();
+    private readonly Dictionary<NavigationViewItem, NavigationItemState> _navigationItems = new();
     private long _scopeEpoch;
     private bool _stateLoaded;
     private bool _navigationInitialized;
@@ -867,19 +867,19 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private void OnNavigationItemLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not AppNavigationViewItem item) return;
+        if (sender is not NavigationViewItem item) return;
         _loadedNavigationItems.Add(item);
         if (_stateLoaded) TrackNavigationItem(item);
     }
 
     private void OnNavigationItemUnloaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not AppNavigationViewItem item) return;
+        if (sender is not NavigationViewItem item) return;
         _loadedNavigationItems.Remove(item);
         UntrackNavigationItem(item);
     }
 
-    private void TrackNavigationItem(AppNavigationViewItem item)
+    private void TrackNavigationItem(NavigationViewItem item)
     {
         if (_navigationItems.ContainsKey(item)) return;
         var scope = _scopeEpoch;
@@ -896,10 +896,10 @@ public sealed partial class RootLayout : RootLayoutBase
         QueueScopeUpdate(scope, () => UpdateMessageBadge(item, state, scope));
     }
 
-    private bool IsCurrentItem(AppNavigationViewItem item, NavigationItemState state, long scope)
+    private bool IsCurrentItem(NavigationViewItem item, NavigationItemState state, long scope)
         => IsCurrentScope(scope) && item.IsLoaded && _navigationItems.TryGetValue(item, out var current) && ReferenceEquals(current, state);
 
-    private void BindNavigationItemOwner(AppNavigationViewItem item, NavigationItemState state, long scope)
+    private void BindNavigationItemOwner(NavigationViewItem item, NavigationItemState state, long scope)
     {
         var owner = item.Tag as AppNavigationItemViewModel;
         if (ReferenceEquals(owner, state.Owner)) return;
@@ -919,7 +919,7 @@ public sealed partial class RootLayout : RootLayoutBase
         owner.PropertyChanged += state.OwnerChanged;
     }
 
-    private void UntrackNavigationItem(AppNavigationViewItem item)
+    private void UntrackNavigationItem(NavigationViewItem item)
     {
         if (!_navigationItems.Remove(item, out var state)) return;
         item.UnregisterPropertyChangedCallback(FrameworkElement.TagProperty, state.TagToken);
@@ -927,7 +927,7 @@ public sealed partial class RootLayout : RootLayoutBase
         ClearOwnedBadge(item, state);
     }
 
-    private static void ClearOwnedBadge(AppNavigationViewItem item, NavigationItemState state)
+    private static void ClearOwnedBadge(NavigationViewItem item, NavigationItemState state)
     {
         if (state.Badge is not { } badge) return;
         if (ReferenceEquals(item.InfoBadge, badge)) item.InfoBadge = null;
@@ -942,7 +942,7 @@ public sealed partial class RootLayout : RootLayoutBase
     }
 
     /// <summary>Revalidate every recycled container; never clear somebody else's badge or item tooltip.</summary>
-    private void UpdateMessageBadge(AppNavigationViewItem item, NavigationItemState state, long scope)
+    private void UpdateMessageBadge(NavigationViewItem item, NavigationItemState state, long scope)
     {
         if (!IsCurrentItem(item, state, scope)) return;
         if (item.Tag is not AppNavigationItemViewModel owner || !ReferenceEquals(owner, state.Owner)
@@ -972,7 +972,7 @@ public sealed partial class RootLayout : RootLayoutBase
     private void OnNavViewItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         _ = this;
-        var item = args.InvokedItemContainer as AppNavigationViewItem;
+        var item = args.InvokedItemContainer as NavigationViewItem;
         var context = item?.Tag as AppNavigationItemViewModel;
         context?.NavigateCommand.Execute(default);
     }
