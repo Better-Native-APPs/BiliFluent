@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Richasy.WinUIKernel.Share.ViewModels;
 
@@ -45,6 +46,10 @@ public abstract partial class LayoutPageViewModelBase : ViewModelBase
     /// </summary>
     protected virtual void IsNavManualHideChanged(bool value)
         => NavColumnWidth = value ? 0 : this.Get<ISettingsToolkit>().ReadLocalSetting($"{GetPageKey()}NavColumnWidth", 240d);
+
+    [RelayCommand]
+    private void ToggleNavColumn()
+        => IsNavColumnManualHide = !IsNavColumnManualHide;
 
     partial void OnNavColumnWidthChanged(double value)
     {
