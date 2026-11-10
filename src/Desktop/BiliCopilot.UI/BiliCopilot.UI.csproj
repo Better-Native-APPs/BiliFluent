@@ -321,6 +321,7 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="System.Management" />
     <PackageReference Include="System.Runtime.InteropServices.WindowsRuntime" />
+    <PackageReference Include="WinUIEx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Libs\Danmaku.Legacy\Danmaku.Legacy.csproj" />
