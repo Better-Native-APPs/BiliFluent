@@ -119,6 +119,7 @@ internal sealed partial class SponsorApplicationCoordinator
                       PreviewPlayback = UiPreview(p.PreviewPlayback), LastEditorReply = p.LastEditorReply,
                       CleanupPending = p.Attachment.IsClosed || PreviewCleanupPending(p),
                       EditorCapabilities = EditorAvailability(p),
+                      ActiveCaptureDraftId = editor == p.Attachment.Id ? queue.ActiveCapture?.LocalDraftId : null,
                   }).ToImmutableArray(),
              ledger.Totals, mutations)
         {
@@ -211,11 +212,24 @@ internal sealed partial class SponsorApplicationCoordinator
         var previewOwnsContext = PreviewUnresolved(state) && state.PreviewPlayback is { } activePreview && activePreview.Token.Owner == observed.Owner
             && activePreview.Phase is not (SponsorPreviewPhase.Interrupted or SponsorPreviewPhase.Ended)
             && observed.Stamp?.PolicyRevision == policyRevision;
+        // An in-progress capture belongs to this exact media and native generation, not to one visit:
+        // seeking to find the end point or playing across a segment boundary must not discard it.
+        // A different owner (video/part/native binding) or policy revision still invalidates it.
+        var captureOwnsContext = queue.ActiveCapture is { } capture && editorStamp is not null && observed.Stamp is { } captureStamp
+            && captureStamp.Owner == editorStamp.Owner && captureStamp.PolicyRevision == editorStamp.PolicyRevision
+            && capture.MediaKey == captureStamp.Owner.Media.Combined && capture.NativeMediaGeneration == captureStamp.Owner.Generation;
         var invalidateEditor = editor == attachment.Id && (observed.Stamp is null || editorStamp is null
-            || (!previewOwnsContext && !SameEditorContext(editorStamp, observed.Stamp)));
+            || (!previewOwnsContext && !captureOwnsContext && !SameEditorContext(editorStamp, observed.Stamp)));
+        var previewDropped = false;
         if (invalidateEditor) ClearEditor();
-        else if (editor == attachment.Id) editorStamp = observed.Stamp;
-        if ((changedOwner || invalidateEditor) && observed.Owner is not null) await PushAsync(state);
+        else if (editor == attachment.Id)
+        {
+            // The capture alone carried the editor across a new visit: a merely prepared preview still ends with its visit.
+            if (!previewOwnsContext && !SameEditorContext(editorStamp!, observed.Stamp!) && state.Preview is not null)
+            { state.Preview = null; state.PreparedDraft = null; previewDropped = true; }
+            editorStamp = observed.Stamp;
+        }
+        if ((changedOwner || invalidateEditor || previewDropped) && observed.Owner is not null) await PushAsync(state);
         Publish(); return true;
     });
 
