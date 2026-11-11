@@ -10,33 +10,31 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.LivePartition"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" ScrollPadding="16,0" LoadMoreCommand="{x:Bind ViewModel.LoadRoomsCommand, Mode=OneWay}">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,12">
-                    <repeater:AppRepeater
-                        x:Name="LiveRepeater"
-                        ItemsSource="{x:Bind ViewModel.Rooms, Mode=OneWay}">
-                        <repeater:AppRepeater.Layout>
-                            <UniformGridLayout
-                                ItemsStretch="Fill"
-                                MinColumnSpacing="16"
-                                MinItemHeight="220"
-                                MinItemWidth="200"
-                                MinRowSpacing="16" />
-                        </repeater:AppRepeater.Layout>
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:LiveItemViewModel">
-                                <components:LiveCardControl Style="{StaticResource PartitionLiveCardStyle}" ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="16,12"
+            controls:ItemsViewLoadMore.Command="{x:Bind ViewModel.LoadRoomsCommand, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Rooms, Mode=OneWay}"
+            SelectionMode="None">
+            <ItemsView.Layout>
+                <UniformGridLayout
+                    ItemsStretch="Fill"
+                    MinColumnSpacing="16"
+                    MinItemHeight="220"
+                    MinItemWidth="200"
+                    MinRowSpacing="16" />
+            </ItemsView.Layout>
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:LiveItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind Title}" IsTabStop="False">
+                        <components:LiveCardControl Style="{StaticResource PartitionLiveCardStyle}" ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
         <StackPanel
             Margin="20"
             Padding="20,12"

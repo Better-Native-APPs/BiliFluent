@@ -10,26 +10,30 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" LoadMoreCommand="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,12">
-                    <repeater:AppRepeater MaxWidth="1200" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:MomentItemViewModel">
-                                <components:MomentCardControl
-                                    Margin="0,6"
-                                    Style="{StaticResource PersonalFullMomentCardStyle}"
-                                    ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="20,12"
+            controls:ItemsViewLoadMore.Command="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+            SelectionMode="None">
+            <ItemsView.Layout>
+                <StackLayout />
+            </ItemsView.Layout>
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:MomentItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind Author}" IsTabStop="False">
+                        <components:MomentCardControl
+                            Margin="0,6"
+                            MaxWidth="1200"
+                            Style="{StaticResource PersonalFullMomentCardStyle}"
+                            ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
 
         <StackPanel
             HorizontalAlignment="Center"

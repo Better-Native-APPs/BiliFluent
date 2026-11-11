@@ -10,29 +10,26 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Message"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
-        <controls:IncrementVerticalScrollControl x:Name="View" LoadMoreCommand="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}">
-            <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,16">
-                    <repeater:AppRepeater
-                        x:Name="MessageRepeater"
-                        MaxWidth="1000"
-                        ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:NotifyMessageItemViewModel">
-                                <local:NotifyMessageCardControl ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                        <repeater:AppRepeater.Layout>
-                            <StackLayout Spacing="8" />
-                        </repeater:AppRepeater.Layout>
-                    </repeater:AppRepeater>
-                </Grid>
-            </controls:IncrementVerticalScrollControl.Element>
-        </controls:IncrementVerticalScrollControl>
+        <ItemsView
+            x:Name="View"
+            Padding="20,16"
+            controls:ItemsViewLoadMore.Command="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+            SelectionMode="None">
+            <ItemsView.Layout>
+                <StackLayout Spacing="8" />
+            </ItemsView.Layout>
+            <ItemsView.ItemTemplate>
+                <DataTemplate x:DataType="items:NotifyMessageItemViewModel">
+                    <ItemContainer AutomationProperties.Name="{x:Bind FirstUserName}" IsTabStop="False">
+                        <local:NotifyMessageCardControl MaxWidth="1000" ViewModel="{x:Bind}" />
+                    </ItemContainer>
+                </DataTemplate>
+            </ItemsView.ItemTemplate>
+        </ItemsView>
 
         <StackPanel
             HorizontalAlignment="Center"
