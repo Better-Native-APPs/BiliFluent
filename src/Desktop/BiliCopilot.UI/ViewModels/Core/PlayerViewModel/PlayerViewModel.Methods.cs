@@ -18,6 +18,7 @@ using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Core.Models;
+using Richasy.WinUIKernel.Share.Base;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -1140,7 +1141,8 @@ public sealed partial class PlayerViewModel
                     {
                         var vm = new SubtitleItemViewModel(item,
                             selected => IsCurrentPlayback(version) ? OwnWork(SelectSubtitleAsync(selected)) : Task.CompletedTask,
-                            selected => IsCurrentPlayback(version) ? OwnWork(DeselectSubtitleAsync(selected)) : Task.CompletedTask);
+                            selected => IsCurrentPlayback(version) ? OwnWork(DeselectSubtitleAsync(selected)) : Task.CompletedTask,
+                            message => { if (IsCurrentPlayback(version)) Window?.ShowTip(message, InfoType.Error); }, token);
                         Subtitles.Add(vm);
                     }
                 }
@@ -1163,27 +1165,89 @@ public sealed partial class PlayerViewModel
 
     private async Task SelectSubtitleAsync(SubtitleItemViewModel vm)
     {
-        foreach (var item in Subtitles)
+        var version = _mediaVersion;
+        var token = _activeMediaToken;
+        var entered = false;
+        try
         {
-            item.IsSelected = item.Data.Equals(vm.Data);
-        }
+            // Share the media/replay boundary: a delayed download must not select a track
+            // on another file, and a load failure must retain the previous selection.
+            await _initializationGate.WaitAsync(token);
+            entered = true;
+            if (!IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
 
-        if (string.IsNullOrEmpty(vm._srtFilePath))
+            if (string.IsNullOrEmpty(vm._srtFilePath))
+            {
+                Window?.ShowTip("字幕文件未生成，请重试。", InfoType.Error);
+                return;
+            }
+
+            var result = await Client.SetExternalSubtitleTrackAsync(vm._srtFilePath, cancellationToken: token);
+            if (!IsCurrentPlayback(version)) return;
+            if (result.IsFailed)
+            {
+                ShowSubtitleFailure(result, selecting: true);
+                return;
+            }
+
+            foreach (var item in Subtitles)
+            {
+                item.IsSelected = ReferenceEquals(item, vm);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally
         {
-            return;
+            if (entered) _initializationGate.Release();
         }
-
-        await Client!.SetExternalSubtitleTrackAsync(vm._srtFilePath);
     }
 
     private async Task DeselectSubtitleAsync(SubtitleItemViewModel vm)
     {
-        foreach (var item in Subtitles)
+        var version = _mediaVersion;
+        var token = _activeMediaToken;
+        var entered = false;
+        try
         {
-            item.IsSelected = false;
-        }
+            await _initializationGate.WaitAsync(token);
+            entered = true;
+            if (!IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
 
-        await Client!.SetSubtitleTrackAsync(default);
+            var result = await Client.SetSubtitleTrackAsync(default, token);
+            if (!IsCurrentPlayback(version)) return;
+            if (result.IsFailed)
+            {
+                ShowSubtitleFailure(result, selecting: false);
+                return;
+            }
+
+            foreach (var item in Subtitles)
+            {
+                item.IsSelected = false;
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (IsCurrentPlayback(version))
+            {
+                logger.LogWarning("取消字幕失败：{ErrorType}", ex.GetType().Name);
+                Window?.ShowTip("取消字幕失败，请重试。", InfoType.Error);
+            }
+        }
+        finally
+        {
+            if (entered) _initializationGate.Release();
+        }
+    }
+
+    private void ShowSubtitleFailure(MpvResult result, bool selecting)
+    {
+        logger.LogWarning("Subtitle selection failed: {Reason}", result.ErrorMessage);
+        var message = !selecting ? "取消字幕失败，请重试。"
+            : result.ErrorMessage?.Contains("timed out", StringComparison.Ordinal) == true ? "字幕加载超时，请重试。"
+            : "字幕加载失败，请重试。";
+        Window?.ShowTip(message, InfoType.Error);
     }
 
     private static string[] FindAnime4KShaders(Anime4KMode mode)
