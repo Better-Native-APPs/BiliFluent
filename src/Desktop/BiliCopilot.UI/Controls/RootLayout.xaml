@@ -26,6 +26,7 @@
                 IsSelected="{x:Bind IsSelected, Mode=TwoWay}"
                 Loaded="OnNavigationItemLoaded"
                 SelectsOnInvoked="True"
+                Style="{StaticResource AppNavigationViewItemStoreStyle}"
                 Tag="{x:Bind}"
                 Unloaded="OnNavigationItemUnloaded"
                 Visibility="{x:Bind IsVisible, Mode=OneWay}">
