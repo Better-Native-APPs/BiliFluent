@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Resolvers.NativeCookies;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加本地 Cookie 解析器.
     /// </summary>
-    public static IKernelBuilder AddNativeCookiesResolver(this IKernelBuilder builder)
+    public static IServiceCollection AddNativeCookiesResolver(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IBiliCookiesResolver, NativeBiliCookiesResolver>();
+        builder.AddSingleton<IBiliCookiesResolver, NativeBiliCookiesResolver>();
         return builder;
     }
 }

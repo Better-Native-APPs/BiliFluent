@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Moment;
 using Richasy.BiliKernel.Services.Moment;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,18 +15,18 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加动态发现服务.
     /// </summary>
-    public static IKernelBuilder AddMomentDiscoveryService(this IKernelBuilder builder)
+    public static IServiceCollection AddMomentDiscoveryService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IMomentDiscoveryService, MomentDiscoveryService>();
+        builder.AddSingleton<IMomentDiscoveryService, MomentDiscoveryService>();
         return builder;
     }
 
     /// <summary>
     /// 添加动态操作服务.
     /// </summary>
-    public static IKernelBuilder AddMomentOperationService(this IKernelBuilder builder)
+    public static IServiceCollection AddMomentOperationService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IMomentOperationService, MomentOperationService>();
+        builder.AddSingleton<IMomentOperationService, MomentOperationService>();
         return builder;
     }
 }

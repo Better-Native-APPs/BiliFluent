@@ -13,5 +13,5 @@ public sealed partial class NotificationViewModel : INotificationViewModel
 {
     [RelayCommand]
     private static async Task ShowTipAsync((string, InfoType) data)
-        => await GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().ShowTipCommand.ExecuteAsync(data);
+        => await GlobalDependencies.Services.GetRequiredService<AppViewModel>().ShowTipCommand.ExecuteAsync(data);
 }

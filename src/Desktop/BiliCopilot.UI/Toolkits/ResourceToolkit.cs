@@ -16,5 +16,5 @@ internal sealed class ResourceToolkit : SharedResourceToolkit
     /// <param name="stringName">Resource name corresponding to localized text.</param>
     /// <returns>Localized text.</returns>
     public static string GetLocalizedString(StringNames stringName)
-        => GlobalDependencies.Kernel.GetRequiredService<IResourceToolkit>().GetLocalizedString(stringName.ToString());
+        => GlobalDependencies.Services.GetRequiredService<IResourceToolkit>().GetLocalizedString(stringName.ToString());
 }

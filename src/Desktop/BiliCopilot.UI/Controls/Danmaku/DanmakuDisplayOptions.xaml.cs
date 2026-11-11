@@ -16,7 +16,7 @@ public sealed partial class DanmakuDisplayOptions : DanmakuControlBase
     protected override void OnControlLoaded()
     {
         var renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
-        RendererComboBox.SelectedIndex = (int)renderer;
+        RendererComboBox.SelectedIndex = renderer == DanmakuRendererType.Win2D ? 0 : 1;
         DanmakuFontComboBox.SelectedItem = ViewModel.Fonts.FirstOrDefault(p => p.LocalName == ViewModel.DanmakuFontFamily);
     }
 
@@ -28,7 +28,7 @@ public sealed partial class DanmakuDisplayOptions : DanmakuControlBase
             return;
         }
 
-        var renderer = (DanmakuRendererType)index;
+        var renderer = index == 0 ? DanmakuRendererType.Win2D : DanmakuRendererType.Mpv;
         if (ViewModel.Renderer != renderer)
         {
             ViewModel.Renderer = renderer;

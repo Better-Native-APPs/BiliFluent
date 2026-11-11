@@ -244,7 +244,7 @@ public sealed partial class PlayerViewModel
 
     public DanmakuRenderViewModel Danmaku { get; } = new();
 
-    public DanmakuSendViewModel DanmakuSend { get; } = GlobalDependencies.Kernel.GetRequiredService<DanmakuSendViewModel>();
+    public DanmakuSendViewModel DanmakuSend { get; } = GlobalDependencies.Services.GetRequiredService<DanmakuSendViewModel>();
 
     public ObservableCollection<SourceItemViewModel> Sources { get; } = [];
 

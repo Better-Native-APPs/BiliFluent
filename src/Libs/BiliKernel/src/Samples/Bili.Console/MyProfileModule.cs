@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using Bili.Console.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.User;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
-using RichasyKernel;
 using Spectre.Console;
 using System.Diagnostics;
 
@@ -14,7 +14,7 @@ namespace Bili.Console;
 
 internal sealed class MyProfileModule : IFeatureModule
 {
-    private readonly Kernel _kernel;
+    private readonly IServiceProvider _kernel;
     private readonly CancellationToken _cancellationToken;
     private readonly Func<string, Task> _backFunc;
 
@@ -22,7 +22,7 @@ internal sealed class MyProfileModule : IFeatureModule
     private UserCommunityInformation? _myCommunityInfo;
 
     public MyProfileModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

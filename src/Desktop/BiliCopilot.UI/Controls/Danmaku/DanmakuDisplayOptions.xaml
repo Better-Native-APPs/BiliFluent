@@ -25,7 +25,6 @@
                 HorizontalAlignment="Stretch"
                 Header="{ext:Locale Name=DanmakuRenderer}"
                 SelectionChanged="OnRendererChanged">
-                <ComboBoxItem Content="DirectX" />
                 <ComboBoxItem Content="Win2D" />
                 <ComboBoxItem Content="{ext:Locale Name=MpvDanmakuRenderer}" />
             </ComboBox>

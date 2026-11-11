@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Resolvers.WinUICookies;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加 WinUI Cookie 解析器.
     /// </summary>
-    public static IKernelBuilder AddWinUICookiesResolver(this IKernelBuilder builder)
+    public static IServiceCollection AddWinUICookiesResolver(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IBiliCookiesResolver, WinUIBiliCookiesResolver>();
+        builder.AddSingleton<IBiliCookiesResolver, WinUIBiliCookiesResolver>();
         return builder;
     }
 }

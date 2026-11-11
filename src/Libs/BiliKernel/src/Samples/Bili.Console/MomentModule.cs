@@ -3,8 +3,8 @@
 
 #define USER
 
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Moment;
-using RichasyKernel;
 using Spectre.Console;
 
 #if USER
@@ -21,7 +21,7 @@ internal sealed class MomentModule : IFeatureModule
     private readonly IMomentOperationService _operationService;
 
     public MomentModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

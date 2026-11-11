@@ -258,7 +258,7 @@ internal sealed partial class AppToolkit : SharedAppToolkit
         }
         catch (Exception ex)
         {
-            GlobalDependencies.Kernel.GetRequiredService<ILogger<App>>().LogError(ex, "Failed to enumerate GPU adapters.");
+            GlobalDependencies.Services.GetRequiredService<ILogger<App>>().LogError(ex, "Failed to enumerate GPU adapters.");
         }
 
         return gpuNames;

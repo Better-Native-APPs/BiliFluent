@@ -2,21 +2,21 @@
 // Licensed under the MIT License.
 
 using Bili.Console.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Media;
-using RichasyKernel;
 using Spectre.Console;
 
 namespace Bili.Console;
 
 internal sealed class PopularVideoModule : IFeatureModule
 {
-    private readonly Kernel _kernel;
+    private readonly IServiceProvider _kernel;
     private readonly CancellationToken _cancellationToken;
     private readonly Func<string, Task> _backFunc;
     private readonly IVideoDiscoveryService _popularVideoService;
 
     public PopularVideoModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

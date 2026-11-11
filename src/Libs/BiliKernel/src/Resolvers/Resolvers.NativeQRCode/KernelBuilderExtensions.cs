@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Resolvers.NativeQRCode;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加本地二维码解析器.
     /// </summary>
-    public static IKernelBuilder AddNativeQRCodeResolver(this IKernelBuilder builder)
+    public static IServiceCollection AddNativeQRCodeResolver(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IQRCodeResolver, NativeQRCodeResolver>();
+        builder.AddSingleton<IQRCodeResolver, NativeQRCodeResolver>();
         return builder;
     }
 }

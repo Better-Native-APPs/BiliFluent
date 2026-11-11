@@ -61,7 +61,7 @@ public partial class App : Application
         try
         {
             // Redirect-only secondary instance never initializes DI and cannot own playback.
-            if (GlobalDependencies.Kernel is not null)
+            if (GlobalDependencies.Services is not null)
             {
                 app = this.Get<AppViewModel>();
                 if (!await app.PreparePlaybackShutdownAsync())
@@ -170,9 +170,9 @@ public partial class App : Application
             GlobalDependencies.Initialize();
             InitializeNotificationRouting();
             if (activatedArgs is not null) CaptureActivation(activatedArgs, initial: true);
-            _sponsorInitialization = GlobalDependencies.Kernel
+            _sponsorInitialization = GlobalDependencies.Services
                 .GetRequiredService<BiliCopilot.UI.SponsorBlock.Integration.SponsorRuntime>().InitializeAsync();
-            GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
+            GlobalDependencies.Services.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
         }
         else
         {
@@ -184,7 +184,7 @@ public partial class App : Application
     }
 
     private static MainWindow? GetMainWindow()
-        => GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().Windows.Find(p => p is MainWindow) as MainWindow;
+        => GlobalDependencies.Services.GetRequiredService<AppViewModel>().Windows.Find(p => p is MainWindow) as MainWindow;
 
     private void OnInstanceActivated(object? sender, AppActivationArguments e)
     {
