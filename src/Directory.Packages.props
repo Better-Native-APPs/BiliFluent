@@ -34,7 +34,6 @@
     <PackageVersion Include="Richasy.MpvKernel.WinUI" Version="0.0.2-preview2" />
     <PackageVersion Include="Richasy.WinUIKernel.Share" Version="0.0.12-preview4" />
     <PackageVersion Include="RichasyKernel.Abstractions" Version="0.0.1" />
-    <PackageVersion Include="RichasyKernel.Core" Version="0.0.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />

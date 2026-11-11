@@ -7,5 +7,5 @@ namespace BiliCopilot.UI.Extensions;
 
 public sealed class XamlRootProvider : IXamlRootProvider
 {
-    public XamlRoot? XamlRoot => GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().ActivatedWindow.Content.XamlRoot;
+    public XamlRoot? XamlRoot => GlobalDependencies.Services.GetRequiredService<AppViewModel>().ActivatedWindow.Content.XamlRoot;
 }

@@ -1,8 +1,8 @@
 ﻿// Copyright (c) Richasy. All rights reserved.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.User;
-using RichasyKernel;
 using Spectre.Console;
 
 namespace Bili.Console;
@@ -14,7 +14,7 @@ internal sealed class MessageModule : IFeatureModule
     private readonly IMessageService _messageService;
 
     public MessageModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

@@ -2,22 +2,22 @@
 // Licensed under the MIT License.
 
 using Bili.Console.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Richasy.BiliKernel;
-using RichasyKernel;
 using Spectre.Console;
 
 namespace Bili.Console;
 
 internal sealed class BiliService : IHostedService
 {
-    private readonly Kernel _kernel;
+    private readonly IServiceProvider _kernel;
     private readonly Dictionary<FeatureType, IFeatureModule> _features = new();
     private CancellationToken _cancellationToken;
 
     public BiliService()
     {
-        _kernel = Kernel.CreateBuilder()
+        _kernel = new ServiceCollection()
             .AddNativeTokenResolver()
             .AddNativeQRCodeResolver()
             .AddNativeCookiesResolver()
@@ -39,7 +39,7 @@ internal sealed class BiliService : IHostedService
             .AddSearchService()
             .AddPlayerService()
             .AddDanmakuService()
-            .Build();
+            .BuildServiceProvider();
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

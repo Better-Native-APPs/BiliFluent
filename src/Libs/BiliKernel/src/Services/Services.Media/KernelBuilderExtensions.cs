@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Services.Media;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,54 +15,54 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加视频探索服务.
     /// </summary>
-    public static IKernelBuilder AddVideoDiscoveryService(this IKernelBuilder builder)
+    public static IServiceCollection AddVideoDiscoveryService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IVideoDiscoveryService, VideoDiscoveryService>();
+        builder.AddSingleton<IVideoDiscoveryService, VideoDiscoveryService>();
         return builder;
     }
 
     /// <summary>
     /// 添加直播探索服务.
     /// </summary>
-    public static IKernelBuilder AddLiveDiscoveryService(this IKernelBuilder builder)
+    public static IServiceCollection AddLiveDiscoveryService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<ILiveDiscoveryService, LiveDiscoveryService>();
+        builder.AddSingleton<ILiveDiscoveryService, LiveDiscoveryService>();
         return builder;
     }
 
     /// <summary>
     /// 添加动漫/电影/电视剧/纪录片服务.
     /// </summary>
-    public static IKernelBuilder AddEntertainmentDiscoveryService(this IKernelBuilder builder)
+    public static IServiceCollection AddEntertainmentDiscoveryService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IEntertainmentDiscoveryService, EntertainmentDiscoveryService>();
+        builder.AddSingleton<IEntertainmentDiscoveryService, EntertainmentDiscoveryService>();
         return builder;
     }
 
     /// <summary>
     /// 添加播放服务.
     /// </summary>
-    public static IKernelBuilder AddPlayerService(this IKernelBuilder builder)
+    public static IServiceCollection AddPlayerService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IPlayerService, PlayerService>();
+        builder.AddSingleton<IPlayerService, PlayerService>();
         return builder;
     }
 
     /// <summary>
     /// 添加弹幕服务.
     /// </summary>
-    public static IKernelBuilder AddDanmakuService(this IKernelBuilder builder)
+    public static IServiceCollection AddDanmakuService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IDanmakuService, DanmakuService>();
+        builder.AddSingleton<IDanmakuService, DanmakuService>();
         return builder;
     }
 
     /// <summary>
     /// 添加字幕服务.
     /// </summary>
-    public static IKernelBuilder AddSubtitleService(this IKernelBuilder builder)
+    public static IServiceCollection AddSubtitleService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<ISubtitleService, SubtitleService>();
+        builder.AddSingleton<ISubtitleService, SubtitleService>();
         return builder;
     }
 }

@@ -1,16 +1,16 @@
 ﻿// Copyright (c) Richasy. All rights reserved.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models;
-using RichasyKernel;
 using Spectre.Console;
 
 namespace Bili.Console;
 
 internal sealed class VideoPartitionModule : IFeatureModule
 {
-    private readonly Kernel _kernel;
+    private readonly IServiceProvider _kernel;
     private readonly CancellationToken _cancellationToken;
     private readonly Func<string, Task> _backFunc;
     private readonly IVideoDiscoveryService _videoPartitionService;
@@ -18,7 +18,7 @@ internal sealed class VideoPartitionModule : IFeatureModule
     private IList<Partition> _partitions;
 
     public VideoPartitionModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

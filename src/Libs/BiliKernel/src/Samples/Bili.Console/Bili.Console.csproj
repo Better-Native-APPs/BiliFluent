@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <PackageReference Include="RichasyKernel.Core" />
     <PackageReference Include="Spectre.Console" />
   </ItemGroup>
 

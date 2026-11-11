@@ -52,7 +52,7 @@ public partial class App
         // immediately into the mailbox, not retained in an unbounded dispatcher backlog.
         if (!initial) _dispatcherQueue.TryEnqueue(() =>
         {
-            if (GlobalDependencies.Kernel is not null) GetMainWindow()?.Activate();
+            if (GlobalDependencies.Services is not null) GetMainWindow()?.Activate();
         });
         if (arguments.Kind == ExtendedActivationKind.AppNotification
             && arguments.Data is AppNotificationActivatedEventArgs notification)

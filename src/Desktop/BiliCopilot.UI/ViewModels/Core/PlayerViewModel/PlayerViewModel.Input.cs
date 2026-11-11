@@ -28,7 +28,7 @@ public sealed partial class PlayerViewModel
 
     internal static double ReadTemporaryAccelerationFactor()
     {
-        var settings = GlobalDependencies.Kernel.GetRequiredService<ISettingsToolkit>();
+        var settings = GlobalDependencies.Services.GetRequiredService<ISettingsToolkit>();
         if (settings.IsSettingKeyExist(TemporaryAccelerationFactorKey))
             return NormalizeTemporaryAccelerationFactor(settings.ReadLocalSetting(TemporaryAccelerationFactorKey, DefaultTemporaryAccelerationFactor));
 
@@ -41,7 +41,7 @@ public sealed partial class PlayerViewModel
     }
 
     internal static void WriteTemporaryAccelerationFactor(double value)
-        => GlobalDependencies.Kernel.GetRequiredService<ISettingsToolkit>().WriteLocalSetting(
+        => GlobalDependencies.Services.GetRequiredService<ISettingsToolkit>().WriteLocalSetting(
             TemporaryAccelerationFactorKey, NormalizeTemporaryAccelerationFactor(value));
 
     private static double NormalizeTemporaryAccelerationFactor(double value)

@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Search;
 using Richasy.BiliKernel.Services.Search;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加搜索服务.
     /// </summary>
-    public static IKernelBuilder AddSearchService(this IKernelBuilder builder)
+    public static IServiceCollection AddSearchService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<ISearchService, SearchService>();
+        builder.AddSingleton<ISearchService, SearchService>();
         return builder;
     }
 }

@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Resolvers.NativeToken;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加本地令牌解析器.
     /// </summary>
-    public static IKernelBuilder AddNativeTokenResolver(this IKernelBuilder builder)
+    public static IServiceCollection AddNativeTokenResolver(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IBiliTokenResolver, NativeBiliTokenResolver>();
+        builder.AddSingleton<IBiliTokenResolver, NativeBiliTokenResolver>();
         return builder;
     }
 }

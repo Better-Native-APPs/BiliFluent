@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Resolvers.WinUIToken;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加 WinUI 令牌解析器.
     /// </summary>
-    public static IKernelBuilder AddWinUITokenResolver(this IKernelBuilder builder)
+    public static IServiceCollection AddWinUITokenResolver(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IBiliTokenResolver, WinUIBiliTokenResolver>();
+        builder.AddSingleton<IBiliTokenResolver, WinUIBiliTokenResolver>();
         return builder;
     }
 }

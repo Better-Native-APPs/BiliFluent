@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Authorizers.TV;
 using Richasy.BiliKernel.Bili.Authorization;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加电视端授权器.
     /// </summary>
-    public static IKernelBuilder AddTVAuthenticationService(this IKernelBuilder builder)
+    public static IServiceCollection AddTVAuthenticationService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<IAuthenticationService, TVAuthenticationService>();
+        builder.AddSingleton<IAuthenticationService, TVAuthenticationService>();
         return builder;
     }
 }

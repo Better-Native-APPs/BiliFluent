@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Authenticator;
 using Richasy.BiliKernel.Http;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -18,9 +17,9 @@ public static class KernelExtensions
     /// </summary>
     /// <param name="builder">内核构建器.</param>
     /// <returns></returns>
-    public static IKernelBuilder AddBiliClient(this IKernelBuilder builder)
+    public static IServiceCollection AddBiliClient(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<BiliHttpClient>();
+        builder.AddSingleton<BiliHttpClient>();
         return builder;
     }
 
@@ -28,10 +27,10 @@ public static class KernelExtensions
     /// 添加Bili认证器.
     /// </summary>
     /// <param name="builder">内核构建器.</param>
-    /// <returns><see cref="IKernelBuilder"/>.</returns>
-    public static IKernelBuilder AddBiliAuthenticator(this IKernelBuilder builder)
+    /// <returns><see cref="IServiceCollection"/>.</returns>
+    public static IServiceCollection AddBiliAuthenticator(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<BiliAuthenticator>();
+        builder.AddSingleton<BiliAuthenticator>();
         return builder;
     }
 }

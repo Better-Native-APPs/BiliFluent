@@ -1,9 +1,9 @@
 ﻿// Copyright (c) Richasy. All rights reserved.
 // Licensed under the MIT License.
 
+using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models.Media;
-using RichasyKernel;
 using Spectre.Console;
 
 namespace Bili.Console;
@@ -15,7 +15,7 @@ internal sealed class TestModule : IFeatureModule
     private readonly IPlayerService _playerService;
 
     public TestModule(
-        Kernel kernel,
+        IServiceProvider kernel,
         CancellationToken cancellationToken,
         Func<string, Task> backFunc)
     {

@@ -4,7 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Richasy.BiliKernel.Bili.Comment;
 using Richasy.BiliKernel.Services.Comment;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel;
 
@@ -16,9 +15,9 @@ public static class KernelBuilderExtensions
     /// <summary>
     /// 添加评论服务.
     /// </summary>
-    public static IKernelBuilder AddCommentService(this IKernelBuilder builder)
+    public static IServiceCollection AddCommentService(this IServiceCollection builder)
     {
-        builder.Services.AddSingleton<ICommentService, CommentService>();
+        builder.AddSingleton<ICommentService, CommentService>();
         return builder;
     }
 }

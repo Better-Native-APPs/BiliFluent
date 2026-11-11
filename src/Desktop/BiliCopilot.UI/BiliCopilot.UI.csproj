@@ -291,6 +291,7 @@
     <PackageReference Include="ComputeSharp.D2D1.WinUI" />
     <PackageReference Include="FluentIcons.WinUI" />
     <PackageReference Include="H.NotifyIcon.WinUI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Web.WebView2" />
     <PackageReference Include="Microsoft.Windows.CsWin32">
       <PrivateAssets>all</PrivateAssets>
@@ -303,7 +304,6 @@
     <PackageReference Include="Richasy.MpvKernel.Core" />
     <PackageReference Include="Richasy.MpvKernel.Player" />
     <PackageReference Include="Richasy.WinUIKernel.Share" />
-    <PackageReference Include="RichasyKernel.Core" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Serilog.Sinks.File" />
