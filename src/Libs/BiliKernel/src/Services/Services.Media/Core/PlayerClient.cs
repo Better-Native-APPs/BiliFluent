@@ -176,7 +176,11 @@ internal sealed class PlayerClient
             { "qn", quality.ToString() },
             { "codec", "0,1,2" },
             { "dolby", "5" },
+            // Match the web player: SDR, PQ and HLG streams are negotiated separately.
+            { "eotf", "0,1,2" },
             { "format", "0,1,2" },
+            { "platform", "web" },
+            { "ptype", "8" },
             { "only_audio", audioOnly ? "1" : "0" },
             { "protocol", "0,1" },
             { "mask", "1" },

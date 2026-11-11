@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Richasy. All rights reserved.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Richasy.BiliKernel.Services.Media.Core.Models;
@@ -99,6 +100,18 @@ internal sealed class LiveAppQualityDescription
     /// </summary>
     [JsonPropertyName("hdr_desc")]
     public string HDRSign { get; set; }
+
+    /// <summary>
+    /// 电光传递函数，0-SDR, 1-PQ, 2-HLG.
+    /// </summary>
+    [JsonPropertyName("eotf")]
+    public int? Eotf { get; set; }
+
+    /// <summary>
+    /// 旧版 HDR 类型，0-SDR, 1-PQ, 6-Vivid.
+    /// </summary>
+    [JsonPropertyName("hdr_type")]
+    public int HdrType { get; set; }
 }
 
 /// <summary>
@@ -177,6 +190,36 @@ internal sealed class LiveAppPlayCodec
     /// </summary>
     [JsonPropertyName("dolby_type")]
     public int DolbyType { get; set; }
+
+    /// <summary>
+    /// 旧版电光传递函数.
+    /// </summary>
+    [JsonPropertyName("eotf")]
+    public int? Eotf { get; set; }
+
+    /// <summary>
+    /// 旧版 HDR 类型，0-SDR, 1-PQ, 6-Vivid.
+    /// </summary>
+    [JsonPropertyName("hdr_type")]
+    public int HdrType { get; set; }
+
+    /// <summary>
+    /// 视频色彩信息.
+    /// </summary>
+    [JsonPropertyName("video_color_info")]
+    public LiveAppVideoColorInformation? VideoColorInformation { get; set; }
+}
+
+/// <summary>
+/// 直播视频色彩信息.
+/// </summary>
+internal sealed class LiveAppVideoColorInformation
+{
+    /// <summary>
+    /// 电光传递函数，接口可能返回数字或 pq/hlg 字符串.
+    /// </summary>
+    [JsonPropertyName("eotf")]
+    public JsonElement Eotf { get; set; }
 }
 
 /// <summary>

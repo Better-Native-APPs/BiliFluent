@@ -300,9 +300,6 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Graphics.Win2D" />
-    <PackageReference Include="Richasy.MpvKernel" />
-    <PackageReference Include="Richasy.MpvKernel.Core" />
-    <PackageReference Include="Richasy.MpvKernel.Player" />
     <PackageReference Include="Richasy.WinUIKernel.Share" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Extensions.Logging" />
@@ -313,6 +310,7 @@
     <PackageReference Include="WinUIEx" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Libs\BiliFluent.Mpv\BiliFluent.Mpv.csproj" />
     <ProjectReference Include="..\..\Libs\BiliKernel\src\Authorizers\Authorizers.Tv\Authorizers.Tv.csproj" />
     <ProjectReference Include="..\..\Libs\BiliKernel\src\Resolvers\Resolvers.WinUICookies\Resolvers.WinUICookies.csproj" />
     <ProjectReference Include="..\..\Libs\BiliKernel\src\Resolvers\Resolvers.WinUIQRCode\Resolvers.WinUIQRCode.csproj" />
