@@ -2,7 +2,6 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Components"
@@ -12,9 +11,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:MomentCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <local:VideoMomentPresenter ViewModel="{TemplateBinding ViewModel}" />
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -24,9 +23,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:MomentCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <local:PersonalVideoMomentPresenter ViewModel="{TemplateBinding ViewModel}" />
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -36,9 +35,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:MomentCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <local:FullMomentPresenter ViewModel="{TemplateBinding ViewModel}" />
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -58,9 +57,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:MomentCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <local:PersonalFullMomentPresenter ViewModel="{TemplateBinding ViewModel}" />
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

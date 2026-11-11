@@ -3,6 +3,8 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Richasy.WinUIKernel.Share.Base;
 
@@ -18,7 +20,7 @@ public abstract class MomentCardPresenter : LayoutUserControlBase<MomentItemView
 /// </summary>
 public sealed partial class MomentCardControl : LayoutControlBase<MomentItemViewModel>
 {
-    private CardControl _rootCard;
+    private ButtonBase _rootCard;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentCardControl"/> class.
@@ -28,12 +30,13 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
-        _rootCard = GetTemplateChild("RootCard") as CardControl;
+        _rootCard = GetTemplateChild("RootCard") as ButtonBase;
         if (ViewModel is not null)
         {
             if (_rootCard is not null)
             {
                 _rootCard.Command = ViewModel.ActivateCommand;
+                AutomationProperties.SetName(_rootCard, GetCardName(ViewModel));
             }
         }
     }
@@ -52,8 +55,12 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
         if (_rootCard is not null)
         {
             _rootCard.Command = newValue?.ActivateCommand;
+            AutomationProperties.SetName(_rootCard, GetCardName(newValue));
         }
     }
+
+    private static string GetCardName(MomentItemViewModel? item)
+        => string.IsNullOrEmpty(item?.VideoTitle) ? item?.Author ?? string.Empty : item.VideoTitle;
 
     private static MenuFlyoutItem CreatePrivatePlayItem()
     {

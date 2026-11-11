@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:BiliCopilot.UI.Converters">
+
+    <!--  Clickable content card: the built-in Button template, laid out to fill its cell.  -->
+    <Style
+        x:Key="ContentCardButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!--  Announces the item that is playing now to screen readers.  -->
+    <converters:SelectedItemStatusConverter x:Key="SelectedItemStatusConverter" />
+</ResourceDictionary>

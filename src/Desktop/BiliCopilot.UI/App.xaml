@@ -14,6 +14,7 @@
                 <ResourceDictionary Source="ms-appx:///Richasy.WinUIKernel.Share/Base/CustomNavigationViewResources.xaml" />
                 <ResourceDictionary Source="ms-appx:///Styles/Overrides.xaml" />
                 <ResourceDictionary Source="ms-appx:///Styles/TrayResources.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/Content.xaml" />
                 <ResourceDictionary Source="ms-appx:///Controls/Components/VideoCardControl/VideoCardControl.xaml" />
                 <ResourceDictionary Source="ms-appx:///Controls/Components/SeasonCardControl/SeasonCardControl.xaml" />
                 <ResourceDictionary Source="ms-appx:///Controls/Components/LiveCardControl/LiveCardControl.xaml" />

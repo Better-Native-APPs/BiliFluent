@@ -253,14 +253,11 @@
 
         <!-- 置顶/代表作共用同一模板；页面宽度单向决定卡片尺寸和内部行列，不替换模板或布局 -->
         <DataTemplate x:Key="FeaturedVideoTemplate" x:DataType="services:UserSpaceVideoRow">
-            <base:CardControl
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
+            <Button
                 AutomationProperties.Name="{x:Bind Title, Mode=OneTime}"
                 Click="OnVideoRowClick"
                 Loaded="OnFeaturedCardLoaded"
+                Style="{StaticResource ContentCardButtonStyle}"
                 Tag="{x:Bind}"
                 Unloaded="OnFeaturedCardUnloaded">
                 <Grid Padding="12" ColumnSpacing="16">
@@ -292,7 +289,7 @@
                         IsHitTestVisible="False"
                         IsTabStop="False" />
                 </Grid>
-            </base:CardControl>
+            </Button>
         </DataTemplate>
 
         <!--
@@ -301,13 +298,10 @@
             尺寸由 App.xaml 中的 VideoLayout（与首页/搜索相同）决定。
         -->
         <DataTemplate x:Key="VideoCardTemplate" x:DataType="services:UserSpaceVideoRow">
-            <base:CardControl
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
+            <Button
                 AutomationProperties.Name="{x:Bind Title, Mode=OneTime}"
                 Click="OnVideoRowClick"
+                Style="{StaticResource ContentCardButtonStyle}"
                 Tag="{x:Bind}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -410,7 +404,7 @@
                         </Grid>
                     </Grid>
                 </Grid>
-            </base:CardControl>
+            </Button>
         </DataTemplate>
 
         <!-- 横向轨道中的标准视频卡（合集/系列组内）：固定尺寸后复用同一张卡片 -->
@@ -427,12 +421,9 @@
 
         <!-- 投稿图文：通过 Tag 传递独立的 cv/opus 身份，在应用内阅读；不按 OriginalUri 禁用卡片。 -->
         <DataTemplate x:Key="OpusTemplate" x:DataType="services:UserSpaceOpusRow">
-            <base:CardControl
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
+            <Button
                 Click="OnOpusRowClick"
+                Style="{StaticResource ContentCardButtonStyle}"
                 Tag="{x:Bind}">
                 <Grid IsHitTestVisible="False">
                     <Grid.RowDefinitions>
@@ -524,18 +515,15 @@
                         </StackPanel>
                     </Grid>
                 </Grid>
-            </base:CardControl>
+            </Button>
         </DataTemplate>
 
         <!-- 投稿音频：显示真实 au{id}，OriginalUri 为空时禁用打开 -->
         <DataTemplate x:Key="AudioTemplate" x:DataType="services:UserSpaceAudioRow">
-            <base:CardControl
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
+            <Button
                 Click="OnAudioRowClick"
-                IsEnabled="{x:Bind local:UserSpacePageBody.IsUriValid(OriginalUri), Mode=OneTime}">
+                IsEnabled="{x:Bind local:UserSpacePageBody.IsUriValid(OriginalUri), Mode=OneTime}"
+                Style="{StaticResource ContentCardButtonStyle}">
                 <Grid Padding="12" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -574,7 +562,7 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Symbol="Open" />
                 </Grid>
-            </base:CardControl>
+            </Button>
         </DataTemplate>
 
         <!--

@@ -2,7 +2,6 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
@@ -11,7 +10,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -120,7 +119,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -130,7 +129,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -226,7 +225,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -236,7 +235,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -358,7 +357,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -368,7 +367,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -492,7 +491,7 @@
                                 </StackPanel>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -502,7 +501,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -606,7 +605,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -711,7 +710,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -815,7 +814,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -825,7 +824,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -894,7 +893,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -904,7 +903,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -1008,7 +1007,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -1018,7 +1017,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard">
+                    <Button x:Name="RootCard" Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -1090,7 +1089,7 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -1100,7 +1099,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:CardControl x:Name="RootCard" Height="104">
+                    <Button
+                        x:Name="RootCard"
+                        Height="104"
+                        Style="{StaticResource ContentCardButtonStyle}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="148" />
@@ -1195,7 +1197,7 @@
                                 </StackPanel>
                             </Grid>
                         </Grid>
-                    </base:CardControl>
+                    </Button>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -1205,112 +1207,115 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:AppToggleCard
-                        x:Name="RootCard"
-                        Padding="0"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        BorderBrush="Transparent"
-                        BorderThickness="2"
-                        IsChecked="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected}"
-                        IsEnableCheck="False">
-                        <Grid Height="86">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition />
-                            </Grid.ColumnDefinitions>
-                            <controls:BasicCoverImage
-                                Margin="6"
-                                VerticalAlignment="Stretch"
-                                CornerRadius="4"
-                                DecodeWidth="400"
-                                Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
-                            <Border
-                                Margin="8"
-                                Padding="4"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Bottom"
-                                CornerRadius="{StaticResource ControlCornerRadius}">
-                                <Border.Background>
-                                    <SolidColorBrush Opacity="0.6" Color="Black" />
-                                </Border.Background>
-                                <TextBlock
-                                    Foreground="White"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
-                            </Border>
-                            <Grid
-                                Grid.Column="1"
-                                Padding="8,8,12,12"
-                                VerticalAlignment="Stretch"
-                                RowSpacing="6">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <TextBlock
-                                    HorizontalAlignment="Left"
-                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PublishRelativeTime}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap" />
+                    <Grid>
+                        <Button
+                            x:Name="RootCard"
+                            AutomationProperties.ItemStatus="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource SelectedItemStatusConverter}}"
+                            BorderBrush="Transparent"
+                            BorderThickness="2"
+                            Style="{StaticResource ContentCardButtonStyle}">
+                            <Grid Height="86">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <controls:BasicCoverImage
+                                    Margin="6"
+                                    VerticalAlignment="Stretch"
+                                    CornerRadius="4"
+                                    DecodeWidth="400"
+                                    Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
+                                <Border
+                                    Margin="8"
+                                    Padding="4"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    CornerRadius="{StaticResource ControlCornerRadius}">
+                                    <Border.Background>
+                                        <SolidColorBrush Opacity="0.6" Color="Black" />
+                                    </Border.Background>
+                                    <TextBlock
+                                        Foreground="White"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
+                                </Border>
+                                <Grid
+                                    Grid.Column="1"
+                                    Padding="8,8,12,12"
+                                    VerticalAlignment="Stretch"
+                                    RowSpacing="6">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock
+                                        HorizontalAlignment="Left"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PublishRelativeTime}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
 
-                                <TextBlock
-                                    Grid.Row="1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    MaxLines="2"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap"
-                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
-                                <StackPanel
-                                    Grid.Row="2"
-                                    Orientation="Horizontal"
-                                    Spacing="12">
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        MaxLines="2"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                     <StackPanel
-                                        VerticalAlignment="Center"
+                                        Grid.Row="2"
                                         Orientation="Horizontal"
-                                        Spacing="4"
-                                        ToolTipService.ToolTip="{ext:Locale Name=PlayCount}">
-                                        <ic:SymbolIcon
+                                        Spacing="12">
+                                        <StackPanel
                                             VerticalAlignment="Center"
-                                            FontSize="10"
-                                            Foreground="{ThemeResource AccentTextFillColorTertiaryBrush}"
-                                            Symbol="PlayCircle" />
-                                        <TextBlock
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            ToolTipService.ToolTip="{ext:Locale Name=PlayCount}">
+                                            <ic:SymbolIcon
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource AccentTextFillColorTertiaryBrush}"
+                                                Symbol="PlayCircle" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
+                                                TextLineBounds="Tight" />
+                                        </StackPanel>
+                                        <StackPanel
                                             VerticalAlignment="Center"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
-                                            TextLineBounds="Tight" />
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            ToolTipService.ToolTip="{ext:Locale Name=DanmakuCount}"
+                                            Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource ObjectToVisibilityConverter}}">
+                                            <ic:SymbolIcon
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Symbol="TextBulletList" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource CountConverter}}"
+                                                TextLineBounds="Tight" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <StackPanel
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal"
-                                        Spacing="4"
-                                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuCount}"
-                                        Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource ObjectToVisibilityConverter}}">
-                                        <ic:SymbolIcon
-                                            VerticalAlignment="Center"
-                                            FontSize="10"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Symbol="TextBulletList" />
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource CountConverter}}"
-                                            TextLineBounds="Tight" />
-                                    </StackPanel>
-                                </StackPanel>
+                                </Grid>
                             </Grid>
-                        </Grid>
-                    </base:AppToggleCard>
+                        </Button>
+                        <Border
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="2"
+                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -1320,112 +1325,115 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VideoCardControl">
-                    <base:AppToggleCard
-                        x:Name="RootCard"
-                        Padding="0"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        BorderBrush="Transparent"
-                        BorderThickness="2"
-                        IsChecked="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected}"
-                        IsEnableCheck="False">
-                        <Grid Height="98">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition />
-                            </Grid.ColumnDefinitions>
-                            <controls:BasicCoverImage
-                                Margin="6"
-                                VerticalAlignment="Stretch"
-                                CornerRadius="4"
-                                DecodeWidth="400"
-                                Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
-                            <Border
-                                Margin="8"
-                                Padding="4"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Bottom"
-                                CornerRadius="{StaticResource ControlCornerRadius}">
-                                <Border.Background>
-                                    <SolidColorBrush Opacity="0.6" Color="Black" />
-                                </Border.Background>
-                                <TextBlock
-                                    Foreground="White"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
-                            </Border>
-                            <Grid
-                                Grid.Column="1"
-                                Padding="8,8,12,12"
-                                VerticalAlignment="Stretch"
-                                RowSpacing="6">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <TextBlock
-                                    HorizontalAlignment="Left"
-                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap" />
+                    <Grid>
+                        <Button
+                            x:Name="RootCard"
+                            AutomationProperties.ItemStatus="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource SelectedItemStatusConverter}}"
+                            BorderBrush="Transparent"
+                            BorderThickness="2"
+                            Style="{StaticResource ContentCardButtonStyle}">
+                            <Grid Height="98">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <controls:BasicCoverImage
+                                    Margin="6"
+                                    VerticalAlignment="Stretch"
+                                    CornerRadius="4"
+                                    DecodeWidth="400"
+                                    Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
+                                <Border
+                                    Margin="8"
+                                    Padding="4"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    CornerRadius="{StaticResource ControlCornerRadius}">
+                                    <Border.Background>
+                                        <SolidColorBrush Opacity="0.6" Color="Black" />
+                                    </Border.Background>
+                                    <TextBlock
+                                        Foreground="White"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
+                                </Border>
+                                <Grid
+                                    Grid.Column="1"
+                                    Padding="8,8,12,12"
+                                    VerticalAlignment="Stretch"
+                                    RowSpacing="6">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock
+                                        HorizontalAlignment="Left"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Author}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
 
-                                <TextBlock
-                                    Grid.Row="1"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Top"
-                                    MaxLines="2"
-                                    Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap"
-                                    ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
-                                <StackPanel
-                                    Grid.Row="2"
-                                    Orientation="Horizontal"
-                                    Spacing="12">
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        MaxLines="2"
+                                        Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        ToolTipService.ToolTip="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Title}" />
                                     <StackPanel
-                                        VerticalAlignment="Center"
+                                        Grid.Row="2"
                                         Orientation="Horizontal"
-                                        Spacing="4"
-                                        ToolTipService.ToolTip="{ext:Locale Name=PlayCount}">
-                                        <ic:SymbolIcon
+                                        Spacing="12">
+                                        <StackPanel
                                             VerticalAlignment="Center"
-                                            FontSize="10"
-                                            Foreground="{ThemeResource AccentTextFillColorTertiaryBrush}"
-                                            Symbol="PlayCircle" />
-                                        <TextBlock
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            ToolTipService.ToolTip="{ext:Locale Name=PlayCount}">
+                                            <ic:SymbolIcon
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource AccentTextFillColorTertiaryBrush}"
+                                                Symbol="PlayCircle" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
+                                                TextLineBounds="Tight" />
+                                        </StackPanel>
+                                        <StackPanel
                                             VerticalAlignment="Center"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.PlayCount, Converter={StaticResource CountConverter}}"
-                                            TextLineBounds="Tight" />
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            ToolTipService.ToolTip="{ext:Locale Name=DanmakuCount}"
+                                            Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource ObjectToVisibilityConverter}}">
+                                            <ic:SymbolIcon
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Symbol="TextBulletList" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource CountConverter}}"
+                                                TextLineBounds="Tight" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <StackPanel
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal"
-                                        Spacing="4"
-                                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuCount}"
-                                        Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource ObjectToVisibilityConverter}}">
-                                        <ic:SymbolIcon
-                                            VerticalAlignment="Center"
-                                            FontSize="10"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Symbol="TextBulletList" />
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.DanmakuCount, Converter={StaticResource CountConverter}}"
-                                            TextLineBounds="Tight" />
-                                    </StackPanel>
-                                </StackPanel>
+                                </Grid>
                             </Grid>
-                        </Grid>
-                    </base:AppToggleCard>
+                        </Button>
+                        <Border
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="2"
+                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

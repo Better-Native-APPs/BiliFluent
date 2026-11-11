@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Richasy.WinUIKernel.Share.Base;
@@ -33,6 +34,7 @@ public sealed partial class VideoCardControl : LayoutControlBase<VideoItemViewMo
             if (_rootCard is not null)
             {
                 _rootCard.Command = ViewModel.PlayCommand;
+                AutomationProperties.SetName(_rootCard, ViewModel.Title ?? string.Empty);
             }
 
             if (_userButton is not null)
@@ -56,6 +58,7 @@ public sealed partial class VideoCardControl : LayoutControlBase<VideoItemViewMo
         if (_rootCard is not null)
         {
             _rootCard.Command = newValue?.PlayCommand;
+            AutomationProperties.SetName(_rootCard, newValue?.Title ?? string.Empty);
         }
 
         if (_userButton is not null)

@@ -3,7 +3,6 @@
     x:Class="BiliCopilot.UI.Controls.Components.UserCardControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -12,10 +11,12 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <base:CardControl
+    <Button
         x:Name="RootCard"
+        AutomationProperties.Name="{x:Bind ViewModel.Name, Mode=OneWay}"
         BorderThickness="0"
-        Command="{x:Bind ViewModel.ShowUserSpaceCommand, Mode=OneWay}">
+        Command="{x:Bind ViewModel.ShowUserSpaceCommand, Mode=OneWay}"
+        Style="{StaticResource ContentCardButtonStyle}">
         <Grid Padding="12,12,12,8" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -103,5 +104,5 @@
                 </Grid>
             </Grid>
         </Grid>
-    </base:CardControl>
+    </Button>
 </local:UserCardControlBase>
