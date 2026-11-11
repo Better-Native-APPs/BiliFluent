@@ -22,7 +22,6 @@
         <DataTemplate x:Key="AppNavItemTemplate" x:DataType="viewmodels:AppNavigationItemViewModel">
             <NavigationViewItem
                 dev:StoreNavigationViewItemAttach.ShowNotificationDot="{x:Bind local:RootLayout.ShowNonMessageUnread(PageKey, ShowUnread), Mode=OneWay}"
-                dev:StoreNavigationViewItemAttach.StaticIconVisibility="Visible"
                 Content="{x:Bind Title}"
                 IsSelected="{x:Bind IsSelected, Mode=TwoWay}"
                 Loaded="OnNavigationItemLoaded"
@@ -30,12 +29,12 @@
                 Tag="{x:Bind}"
                 Unloaded="OnNavigationItemUnloaded"
                 Visibility="{x:Bind IsVisible, Mode=OneWay}">
-                <dev:StoreNavigationViewItemAttach.UnselectedIcon>
-                    <ic:SymbolIcon Symbol="{x:Bind Symbol}" />
-                </dev:StoreNavigationViewItemAttach.UnselectedIcon>
-                <dev:StoreNavigationViewItemAttach.SelectedIcon>
-                    <ic:SymbolIcon IconVariant="Filled" Symbol="{x:Bind Symbol}" />
-                </dev:StoreNavigationViewItemAttach.SelectedIcon>
+                <!--  The Store presenter enters IconCollapsed when the native Icon is null, even with attached icons.  -->
+                <NavigationViewItem.Icon>
+                    <ic:SymbolIcon
+                        IconVariant="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource BoolToIconVariantConverter}}"
+                        Symbol="{x:Bind Symbol}" />
+                </NavigationViewItem.Icon>
             </NavigationViewItem>
         </DataTemplate>
 
