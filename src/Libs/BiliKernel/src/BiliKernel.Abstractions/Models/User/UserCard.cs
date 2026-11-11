@@ -30,6 +30,11 @@ public sealed class UserCard
     /// </summary>
     public UserCommunityInformation? Community { get; set; }
 
+    /// <summary>
+    /// 用户直播间信息，未获取到时为空.
+    /// </summary>
+    public UserLiveRoom? LiveRoom { get; set; }
+
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is UserCard card && EqualityComparer<UserDetailProfile>.Default.Equals(Profile, card.Profile);
 

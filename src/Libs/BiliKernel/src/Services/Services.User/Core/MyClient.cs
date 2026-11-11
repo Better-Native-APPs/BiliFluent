@@ -473,8 +473,34 @@ internal sealed class MyClient
         _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, ApiType = BiliApiType.Web, RequireCookie = true });
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseUserCardDetailResponse).ConfigureAwait(false);
-        return responseObj.Data?.ToUserCard()
-            ?? throw new KernelException("无法获取用户卡片数据");
+        var card = responseObj.Data?.ToUserCard() ?? throw new KernelException("无法获取用户卡片数据");
+        if (card.LiveRoom is null)
+        {
+            try
+            {
+                card.LiveRoom = await GetUserLiveRoomAsync(userId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Live status is optional; a failed lookup must not discard the user card.
+            }
+        }
+
+        return card;
+    }
+
+    private async Task<UserLiveRoom?> GetUserLiveRoomAsync(string userId, CancellationToken cancellationToken)
+    {
+        var parameters = new Dictionary<string, string>
+        {
+            { "mid", userId },
+        };
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri(BiliApis.Live.UserRoom));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, ApiType = BiliApiType.Web });
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseUserLiveRoomResponse).ConfigureAwait(false);
+        return responseObj.Data?.ToUserLiveRoom();
     }
 
     private async Task<T> GetAsync<T>(string url, JsonTypeInfo<T> converter, Dictionary<string, string>? parameters = default, CancellationToken cancellationToken = default)
