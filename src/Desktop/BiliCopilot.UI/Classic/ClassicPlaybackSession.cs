@@ -59,7 +59,9 @@ public sealed class ClassicPlaybackSession : ObservableObject, IClassicPlaybackS
         SelectEpisodeCommand = new AsyncRelayCommand<EpisodeInformation>(episode => ChangeAsync(() => episode is not null && Episodes.Contains(episode)
             ? Request with { Item = Request.Item with { Episode = episode, StartPosition = 0 } } : null), episode => Ready && episode is not null && Episodes.Contains(episode));
         SelectQualityCommand = new AsyncRelayCommand<PlayerFormatInformation>(quality => ChangeAsync(() => Can(ClassicCapabilities.Quality) && quality is not null && Qualities.Contains(quality)
-            ? Request with { Item = Request.Item with { PreferQuality = quality.Quality, StartPosition = PositionSeconds } } : null),
+            ? Request with { Item = Request.Item with { PreferQuality = quality.Quality,
+                PreferLiveEotf = Request.Item.Type == BiliMediaType.Live ? quality.Eotf : null,
+                StartPosition = PositionSeconds } } : null),
             quality => Can(ClassicCapabilities.Quality) && quality is not null && Qualities.Contains(quality));
         CloseCommand = new AsyncRelayCommand(CloseAsync, () => !IsClosing);
         Input = new ClassicPlayerInputController(this);

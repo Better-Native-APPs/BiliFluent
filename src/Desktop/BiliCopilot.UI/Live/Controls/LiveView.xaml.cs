@@ -512,7 +512,7 @@ public sealed partial class LiveView : UserControl
             var index = -1;
             for (var i = 0; i < qualities.Count && selected is not null; i++)
             {
-                if (qualities[i]?.Quality == selected.Quality) { index = i; break; }
+                if (Equals(qualities[i], selected)) { index = i; break; }
             }
 
             if (index >= 0) QualityView.Select(index);
@@ -528,8 +528,8 @@ public sealed partial class LiveView : UserControl
     {
         if (_syncingQuality || !_attached || !_session.CanChangeQuality
             || args.InvokedItem is not PlayerFormatInformation quality
-            || !_session.Qualities.Any(item => item?.Quality == quality.Quality)) return;
-        if (_session.SelectedQuality is { } current && current.Quality == quality.Quality)
+            || !_session.Qualities.Contains(quality)) return;
+        if (_session.SelectedQuality is { } current && current.Equals(quality))
         {
             QualityFlyout.Hide(); // Re-picking the current quality is a no-op, as in the VOD format button.
             return;

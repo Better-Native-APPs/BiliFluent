@@ -51,7 +51,7 @@ public sealed class LiveSession : ILiveSession
     private LiveAccountStamp? _stamp;
     private CancellationTokenRegistration _accountRegistration;
     private long _generation;
-    private int? _preferredQuality;
+    private PlayerFormatInformation? _preferredQuality;
     private bool _sending;
     private bool _controlPending;
     private bool _releaseBlocked;
@@ -74,7 +74,7 @@ public sealed class LiveSession : ILiveSession
             throw new InvalidOperationException("Live requires the Island backend.");
         Messages = new(_messages);
         SelectQualityCommand = new AsyncRelayCommand<PlayerFormatInformation>(SelectQualityFromCommandAsync,
-            quality => CanChangeQuality && quality is not null && Qualities.Any(item => item.Quality == quality.Quality));
+            quality => CanChangeQuality && quality is not null && Qualities.Contains(quality));
     }
 
     private static Func<ClassicPlaybackRequest, CancellationToken, Task<ClassicSourceResult>> BindSources(ClassicMediaSourceService sources)
@@ -145,21 +145,21 @@ public sealed class LiveSession : ILiveSession
         CheckAdmission(cancellationToken);
         ArgumentNullException.ThrowIfNull(quality);
         if (!CanChangeQuality) return Task.CompletedTask;
-        if (!Qualities.Any(item => item.Quality == quality.Quality))
+        if (!Qualities.Contains(quality))
             throw new ArgumentException("Live quality was not advertised by this room.", nameof(quality));
-        if (SelectedQuality?.Quality == quality.Quality) return Task.CompletedTask;
-        return BeginOpen(cancellationToken, isRefresh: true, quality: quality.Quality);
+        if (Equals(SelectedQuality, quality)) return Task.CompletedTask;
+        return BeginOpen(cancellationToken, isRefresh: true, quality: quality);
     }
 
     private async Task SelectQualityFromCommandAsync(PlayerFormatInformation? quality)
     {
-        if (quality is null || !CanChangeQuality || !Qualities.Any(item => item.Quality == quality.Quality)) return;
+        if (quality is null || !CanChangeQuality || !Qualities.Contains(quality)) return;
         try { await SelectQualityAsync(quality, CancellationToken.None); }
         catch (OperationCanceledException) { }
         catch (InvalidOperationException) { } // BeginOpen already publishes the retryable playback error.
     }
 
-    private Task BeginOpen(CancellationToken token, bool isRefresh = false, int? quality = null)
+    private Task BeginOpen(CancellationToken token, bool isRefresh = false, PlayerFormatInformation? quality = null)
     {
         RequireSameAccount();
         var requestedQuality = quality ?? _preferredQuality;
@@ -185,7 +185,8 @@ public sealed class LiveSession : ILiveSession
                 EnsureCurrent(scope);
                 failureStage = FailureStage.LiveResolve;
                 var request = ClassicRequestMapper.FromLive(_live!);
-                request = request with { Item = request.Item with { PreferQuality = requestedQuality } };
+                request = request with { Item = request.Item with { PreferQuality = requestedQuality?.Quality,
+                    PreferLiveEotf = requestedQuality?.Eotf } };
                 var result = await _resolve(request, scope.Token);
                 EnsureCurrent(scope); // SDK parsing can complete after cancellation.
                 failureStage = FailureStage.LiveValidateSource;
@@ -204,13 +205,12 @@ public sealed class LiveSession : ILiveSession
                 failureStage = FailureStage.LiveBackendOpen;
                 await _backend.OpenAsync(result.Media, scope.Token);
                 EnsureCurrent(scope);
-                // g_qn_desc includes global descriptions, not the room's supported qn list.
-                var accepted = result.Media.Live!.Lines.SelectMany(line => line.AcceptQualities).ToHashSet();
-                accepted.UnionWith(result.Media.Live.Lines.Select(line => line.Quality));
-                Qualities = Array.AsReadOnly(result.Qualities.Where(format => accepted.Contains(format.Quality))
-                    .DistinctBy(format => format.Quality).ToArray());
-                SelectedQuality = Qualities.FirstOrDefault(format => format.Quality == result.SelectedQuality?.Quality);
-                _preferredQuality = SelectedQuality?.Quality;
+                // Global descriptions must be checked against this room's matching SDR/PQ/HLG lines.
+                Qualities = Array.AsReadOnly(result.Qualities.Where(format => result.Media.Live!.Lines.Any(line => line.Eotf == format.Eotf
+                    && (line.Quality == format.Quality || line.AcceptQualities.Contains(format.Quality))))
+                    .Distinct().ToArray());
+                SelectedQuality = Qualities.FirstOrDefault(format => Equals(format, result.SelectedQuality));
+                _preferredQuality = SelectedQuality;
                 failureStage = FailureStage.LivePublishPlaying;
                 PlaybackState = LivePlaybackState.Playing;
                 ChatState = LiveChatState.Connecting;
