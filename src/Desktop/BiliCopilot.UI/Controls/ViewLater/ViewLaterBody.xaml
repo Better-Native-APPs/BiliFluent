@@ -10,23 +10,22 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.ViewLater"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
         <controls:IncrementVerticalScrollControl x:Name="View" ScrollPadding="16,0" LoadMoreCommand="{x:Bind ViewModel.LoadVideosCommand, Mode=OneWay}" RefreshCommand="{x:Bind ViewModel.RefreshCommand, Mode=OneWay}">
             <controls:IncrementVerticalScrollControl.Element>
                 <Grid Margin="0,12">
-                    <repeater:AppRepeater
+                    <ItemsRepeater
                         x:Name="VideoRepeater"
                         ItemsSource="{x:Bind ViewModel.Videos}"
                         Layout="{StaticResource VideoLayout}">
-                        <repeater:AppRepeater.ItemTemplate>
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="items:VideoItemViewModel">
                                 <components:VideoCardControl Style="{StaticResource ViewLaterVideoCardStyle}" ViewModel="{x:Bind}" />
                             </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </Grid>
             </controls:IncrementVerticalScrollControl.Element>
 

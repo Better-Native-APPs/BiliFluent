@@ -11,7 +11,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.VideoPartition"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
@@ -22,16 +21,16 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <repeater:AppRepeater
+                    <ItemsRepeater
                         x:Name="VideoRepeater"
                         ItemsSource="{x:Bind CategorySource.VisibleItems, Mode=OneTime}"
                         Layout="{StaticResource VideoLayout}">
-                        <repeater:AppRepeater.ItemTemplate>
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="items:VideoItemViewModel">
                                 <components:VideoCardControl Style="{StaticResource PartitionVideoCardStyle}" ViewModel="{x:Bind}" controls:VideoCategorySource.ItemRow="{x:Bind}" />
                             </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </Grid>
             </controls:IncrementVerticalScrollControl.Element>
         </controls:IncrementVerticalScrollControl>

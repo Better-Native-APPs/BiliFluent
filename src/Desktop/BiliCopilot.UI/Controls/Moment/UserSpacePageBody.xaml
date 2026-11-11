@@ -12,7 +12,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     xmlns:services="using:BiliCopilot.UI.Services.UserSpace"
     xmlns:sponsor="using:BiliCopilot.UI.SponsorBlock.Controls"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
@@ -962,7 +961,7 @@
                                     </StackPanel>
                                 </HyperlinkButton>
                             </Grid>
-                            <repeater:AppRepeater
+                            <ItemsRepeater
                                 ItemTemplate="{StaticResource VideoCardTemplate}"
                                 ItemsSource="{x:Bind ViewModel.HomeVideos, Mode=OneWay}"
                                 Layout="{StaticResource VideoLayout}" />
@@ -1072,7 +1071,7 @@
                         </Grid>
 
                         <!-- 视频：与首页/搜索一致的 VideoLayout 网格 -->
-                        <repeater:AppRepeater
+                        <ItemsRepeater
                             ItemTemplate="{StaticResource VideoCardTemplate}"
                             ItemsSource="{x:Bind ViewModel.SubmissionVideos, Mode=OneWay}"
                             Layout="{StaticResource VideoLayout}"

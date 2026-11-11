@@ -10,7 +10,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
@@ -21,16 +20,16 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <repeater:AppRepeater MaxWidth="1200" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                        <repeater:AppRepeater.ItemTemplate>
+                    <ItemsRepeater MaxWidth="1200" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="items:MomentItemViewModel">
                                 <components:MomentCardControl
                                     Margin="0,6"
                                     Style="{StaticResource FullMomentCardStyle}"
                                     ViewModel="{x:Bind}" />
                             </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                     <!--  追加页脚：失败时可显式重试；到底时安静提示  -->
                     <Grid Grid.Row="1" HorizontalAlignment="Center">
                         <StackPanel

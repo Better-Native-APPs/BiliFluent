@@ -8,7 +8,6 @@
     xmlns:local="using:BiliCopilot.UI.Controls.Message"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:messages="using:BiliCopilot.UI.Services.Messages"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
@@ -17,8 +16,8 @@
             Padding="20,0"
             Style="{StaticResource PageScrollViewerStyle}">
             <Grid Margin="0,16">
-                <repeater:AppRepeater MaxWidth="1000" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                    <repeater:AppRepeater.ItemTemplate>
+                <ItemsRepeater MaxWidth="1000" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                    <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="messages:SystemMessageRow">
                             <Border
                                 Margin="0,0,0,4"
@@ -58,11 +57,11 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </repeater:AppRepeater.ItemTemplate>
-                    <repeater:AppRepeater.Layout>
+                    </ItemsRepeater.ItemTemplate>
+                    <ItemsRepeater.Layout>
                         <StackLayout Spacing="8" />
-                    </repeater:AppRepeater.Layout>
-                </repeater:AppRepeater>
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
             </Grid>
         </ScrollViewer>
 

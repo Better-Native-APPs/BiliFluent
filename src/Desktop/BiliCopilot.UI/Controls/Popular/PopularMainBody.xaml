@@ -11,7 +11,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Popular"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -39,11 +38,11 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <repeater:AppRepeater
+                    <ItemsRepeater
                         x:Name="VideoRepeater"
                         ItemsSource="{x:Bind CategorySource.VisibleItems, Mode=OneTime}"
                         Layout="{StaticResource VideoLayout}">
-                        <repeater:AppRepeater.ItemTemplate>
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="items:VideoItemViewModel">
                                 <ContentControl
                                     Content="{x:Bind}"
@@ -51,8 +50,8 @@
                                     ContentTemplateSelector="{StaticResource CardSelector}"
                                     Style="{StaticResource AppContentControlStyle}" />
                             </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                     <StackPanel
                         Grid.Row="1"
                         HorizontalAlignment="Center"

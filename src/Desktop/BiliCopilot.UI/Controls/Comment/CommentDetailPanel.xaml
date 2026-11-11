@@ -9,7 +9,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Comment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid RowSpacing="12">
@@ -24,16 +23,16 @@
                         IsMoreEnabled="False"
                         SponsorSurface="Comment"
                         ViewModel="{x:Bind ViewModel.Data, Mode=OneWay}" />
-                    <repeater:AppRepeater ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}">
-                        <repeater:AppRepeater.ItemTemplate>
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="items:CommentItemViewModel">
                                 <local:CommentItemControl
                                     Margin="0,2"
                                     SponsorSurface="Reply"
                                     ViewModel="{x:Bind}" />
                             </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                    </repeater:AppRepeater>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </StackPanel>
             </controls:IncrementVerticalScrollControl.Element>
         </controls:IncrementVerticalScrollControl>

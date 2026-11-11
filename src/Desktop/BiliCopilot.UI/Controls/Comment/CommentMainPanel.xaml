@@ -11,7 +11,6 @@
     xmlns:local="using:BiliCopilot.UI.Controls.Comment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:Richasy.BiliKernel.Models"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid Padding="0,12" RowSpacing="12">
@@ -64,8 +63,8 @@
                             SponsorSurface="Comment"
                             ViewModel="{x:Bind ViewModel.TopItem.Data, Mode=OneWay}"
                             Visibility="{x:Bind ViewModel.TopItem, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                        <repeater:AppRepeater ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}">
-                            <repeater:AppRepeater.ItemTemplate>
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}">
+                            <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="components1:CommentDetailViewModel">
                                     <local:CommentItemControl
                                         Margin="0,2"
@@ -73,8 +72,8 @@
                                         SponsorSurface="Comment"
                                         ViewModel="{x:Bind Data}" />
                                 </DataTemplate>
-                            </repeater:AppRepeater.ItemTemplate>
-                        </repeater:AppRepeater>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
                     </StackPanel>
                 </controls:IncrementVerticalScrollControl.Element>
             </controls:IncrementVerticalScrollControl>
