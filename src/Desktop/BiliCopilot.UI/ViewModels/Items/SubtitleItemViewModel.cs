@@ -84,6 +84,14 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
                 await File.WriteAllTextAsync(filePath, srtContent, Encoding.UTF8, _cancellationToken);
                 // Publish the cache path only after a successful write, so IO failures can be retried.
                 _srtFilePath = filePath;
+                var logger = this.Get<ILogger<SubtitleItemViewModel>>();
+                var level = Environment.GetEnvironmentVariable("BILIFLUENT_SUBTITLE_DIAGNOSTICS") == "1" ? LogLevel.Information : LogLevel.Debug;
+                if (logger.IsEnabled(level))
+                {
+                    logger.Log(level, "Subtitle file prepared: file={File}; cues={Count}; skipped={Skipped}; first-start={Start}; last-end={End}.",
+                        Path.GetFileName(filePath), subtitles.Count, _subtitles.Count - subtitles.Count,
+                        subtitles.Min(subtitle => subtitle.StartPosition), subtitles.Max(subtitle => subtitle.EndPosition));
+                }
             }
 
             _cancellationToken.ThrowIfCancellationRequested();

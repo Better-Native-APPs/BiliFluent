@@ -3,12 +3,17 @@
 // Modified for BiliFluent: native calls go through HanumanInstitute.LibMpv, results use MpvResult.
 
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using static Richasy.MpvKernel.Core.Enums.MpvClientProperties;
 
 namespace Richasy.MpvKernel.Core;
 
 public sealed partial class MpvClient
 {
+    private static readonly bool SubtitleDiagnosticsEnabled = Environment.GetEnvironmentVariable("BILIFLUENT_SUBTITLE_DIAGNOSTICS") == "1";
+
+    private LogLevel SubtitleDiagnosticLevel => SubtitleDiagnosticsEnabled ? LogLevel.Information : LogLevel.Debug;
+
     /// <summary>
     /// 播放指定路径的文件.
     /// </summary>
@@ -133,7 +138,12 @@ public sealed partial class MpvClient
         }
 
         var cmd = string.Join(' ', commandArgs);
-        await Task.Run(() => errorCode = _handle.CommandString(cmd));
+        await Task.Run(() =>
+        {
+            TraceSubtitleState("loadfile", "before");
+            errorCode = _handle.CommandString(cmd);
+            TraceSubtitleState("loadfile", "after", errorCode.ToString());
+        });
         ThrowIfFailed(errorCode, "Mpv | loadfile failed");
     }
 
@@ -404,6 +414,12 @@ public sealed partial class MpvClient
         }
         catch (TimeoutException)
         {
+            if (_logger.IsEnabled(SubtitleDiagnosticLevel))
+            {
+                _logger.Log(SubtitleDiagnosticLevel, "Subtitle load timed out: file={File}; the pending sub-add cannot select sid.",
+                    SubtitleDiagnosticText(externalUrl));
+            }
+
             return MpvResult.Fail("Mpv | set external subtitle track failed: operation timed out");
         }
     }
@@ -478,6 +494,38 @@ public sealed partial class MpvClient
         }
 
         return (MpvResult.Ok(), newestId);
+    }
+
+    private void TraceSubtitleState(string operation, string phase, string? result = null)
+    {
+        var level = SubtitleDiagnosticLevel;
+        if (!_logger.IsEnabled(level) || IsDisposed) return;
+
+        var error = _handle.GetPropertyNode("track-list", out var value);
+        var tracks = new List<string>();
+        if (value is List<object?> trackList)
+        {
+            foreach (var item in trackList)
+            {
+                if (item is not Dictionary<string, object?> track || track.GetString("type") != "sub") continue;
+                tracks.Add(string.Create(CultureInfo.InvariantCulture,
+                    $"id={track.GetInteger("id")}; title={SubtitleDiagnosticText(track.GetString("title"))}; selected={track.GetFlag("selected")}; file={SubtitleDiagnosticText(track.GetString("external-filename"))}"));
+            }
+        }
+
+        _logger.Log(level,
+            "Subtitle state: {Operation} {Phase}; result={Result}; sid={Sid}; secondary-sid={SecondarySid}; sub-visibility={Visibility}; secondary-sub-visibility={SecondaryVisibility}; time={Position}; track-list-result={TrackResult}; tracks=[{Tracks}]",
+            operation, phase, result ?? "pending", _handle.GetPropertyString("sid"), _handle.GetPropertyString("secondary-sid"),
+            _handle.GetPropertyString("sub-visibility"), _handle.GetPropertyString("secondary-sub-visibility"),
+            _handle.GetPropertyString("time-pos"), error, string.Join(" | ", tracks));
+    }
+
+    private static string SubtitleDiagnosticText(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "<none>";
+        var query = value.IndexOfAny(['?', '#']);
+        if (query >= 0) value = value[..query];
+        return Path.GetFileName(value.Replace('\\', '/')).Replace('\r', ' ').Replace('\n', ' ');
     }
 
     /// <summary>
