@@ -210,7 +210,16 @@ public sealed partial class PlayerViewModel
             }
             else if (decodeType == PreferDecodeType.Software)
             {
+                // Software decoding still needs a color-managed GPU output for HDR.
+                await AwaitInitializationStepAsync(() => Client.SetVideoOutputAsync(VideoOutputType.GpuNext));
+                await AwaitInitializationStepAsync(() => Client.SetGpuApiAsync(GpuApiType.D3D11));
+                await AwaitInitializationStepAsync(() => Client.SetGpuContextAsync(GpuContextType.Auto));
                 await AwaitInitializationStepAsync(() => Client.SetHardwareDecodeAsync(HardwareDecodeType.None));
+            }
+
+            if (decodeType != PreferDecodeType.Custom && string.IsNullOrEmpty(configPath))
+            {
+                await AwaitInitializationStepAsync(() => Client.ConfigureHdrOutputAsync(useD3D11: decodeType != PreferDecodeType.Vulkan));
             }
 
             await AwaitInitializationStepAsync(() => Client.SetMuteAsync(IsMute));

@@ -102,6 +102,29 @@ public sealed partial class MpvClient
     }
 
     /// <summary>
+    /// 配置 gpu-next 的自动 HDR 输出，按显示器能力协商色彩空间并映射 SDR 输出.
+    /// </summary>
+    /// <param name="useD3D11">是否同时配置 D3D11 的输出格式和色彩空间.</param>
+    /// <returns><see cref="Task"/>.</returns>
+    public Task ConfigureHdrOutputAsync(bool useD3D11 = true)
+        => Task.Run(() =>
+        {
+            // mpv 0.42: target mode follows the display, strict mode respects the negotiated swapchain.
+            // Do not force PQ/scRGB on SDR displays or when Windows HDR is disabled.
+            SetOption("target-colorspace-hint", "auto");
+            SetOption("target-colorspace-hint-mode", "target");
+            SetOption("target-colorspace-hint-strict", "yes");
+            if (useD3D11)
+            {
+                SetOption("d3d11-output-format", "auto");
+                SetOption("d3d11-output-csp", "auto");
+            }
+
+            void SetOption(string name, string value)
+                => ThrowIfFailed(_handle.SetOptionString(name, value), $"Mpv | configure HDR option {name} failed");
+        });
+
+    /// <summary>
     /// 设置是否验证TLS证书.
     /// </summary>
     /// <param name="enabled">是否验证</param>

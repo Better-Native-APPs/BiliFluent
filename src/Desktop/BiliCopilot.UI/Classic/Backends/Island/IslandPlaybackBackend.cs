@@ -244,6 +244,7 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
             await client.SetGpuApiAsync(GpuApiType.D3D11).ConfigureAwait(false);
             await client.SetGpuContextAsync(GpuContextType.D3D11).ConfigureAwait(false);
             await client.SetHardwareDecodeAsync(decode).ConfigureAwait(false);
+            await client.ConfigureHdrOutputAsync().ConfigureAwait(false);
             Check(await client.UseKeepOpenAsync(true).ConfigureAwait(false), "Island keep-open configuration failed.");
             EnsureCurrent(generation, cancellationToken);
             failureStage = FailureStage.IslandPlay;
