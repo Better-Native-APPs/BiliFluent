@@ -15,7 +15,7 @@ namespace BiliCopilot.UI.Forms;
 /// <summary>
 /// 图片浏览窗口.
 /// </summary>
-public sealed partial class GalleryWindow : WindowBase, ITipWindow
+public sealed partial class GalleryWindow : WindowEx, ITipWindow
 {
     private bool _isActivated;
 
@@ -31,7 +31,7 @@ public sealed partial class GalleryWindow : WindowBase, ITipWindow
         Title = ResourceToolkit.GetLocalizedString(StringNames.ImageGallery);
         MinWidth = 500;
         MinHeight = 500;
-        SetTitleBar(TitleBar);
+        this.ExtendIntoTitleBar(TitleBar);
 
         MainFrame.Navigate(typeof(GalleryPage), (image, list));
         this.Get<AppViewModel>().Windows.Add(this);

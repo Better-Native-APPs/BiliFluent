@@ -36,6 +36,7 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
+    <PackageVersion Include="DevWinUI" Version="10.9.1" />
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageVersion Include="QRCoder" Version="1.8.1" />
     <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.14" />
