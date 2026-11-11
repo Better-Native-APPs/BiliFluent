@@ -6,6 +6,7 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.Media.Core.Models;
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
@@ -86,8 +87,14 @@ internal static class LiveAdapter
         var formats = new List<PlayerFormatInformation>();
         foreach (var item in playInfo.Descriptions)
         {
-            var desc = item.Description;
-            formats.Add(new PlayerFormatInformation(item.Quality, desc, false, false));
+            var eotf = NormalizeEotf(item.Eotf is > 0 ? item.Eotf.Value : item.HdrType);
+            var desc = eotf == 2 ? $"{item.Description} (HLG)" : item.Description;
+            if (eotf > 0 && !desc.Contains("HDR", StringComparison.OrdinalIgnoreCase))
+            {
+                desc += " HDR";
+            }
+
+            formats.Add(new PlayerFormatInformation(item.Quality, desc, false, false, eotf));
         }
 
         var lines = new List<LiveLineInformation>();
@@ -99,13 +106,33 @@ internal static class LiveAdapter
                 {
                     var name = codec.CodecName;
                     var urls = codec.Urls.Select(p => new LivePlayUrl(stream.ProtocolName, p.Host, codec.BaseUrl, p.Extra)).ToList();
-                    lines.Add(new LiveLineInformation(name, codec.CurrentQuality, codec.AcceptQualities, urls));
+                    lines.Add(new LiveLineInformation(name, codec.CurrentQuality, codec.AcceptQualities, urls,
+                        GetEotf(codec), format.FormatName));
                 }
             }
         }
 
         return new LiveMediaInformation(id, formats, lines);
     }
+
+    // The web player prefers video_color_info.eotf, then legacy eotf/hdr_type.
+    private static int GetEotf(LiveAppPlayCodec codec)
+    {
+        var eotf = codec.VideoColorInformation?.Eotf ?? default;
+        if (eotf.ValueKind == JsonValueKind.Number)
+        {
+            return eotf.TryGetInt32(out var value) ? NormalizeEotf(value) : 0;
+        }
+
+        if (eotf.ValueKind == JsonValueKind.String)
+        {
+            return eotf.GetString() switch { "pq" => 1, "hlg" => 2, _ => 0 };
+        }
+
+        return NormalizeEotf(codec.Eotf is > 0 ? codec.Eotf.Value : codec.HdrType);
+    }
+
+    private static int NormalizeEotf(int eotf) => eotf switch { 1 or 6 => 1, 2 => 2, _ => 0 };
 
     public static Partition ToPartition(this LiveAreaGroup group)
     {
