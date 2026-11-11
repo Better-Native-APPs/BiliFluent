@@ -103,6 +103,14 @@
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="Wrap"
                         Visibility="{x:Bind Card, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                    <HyperlinkButton
+                        Padding="0"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.Name="正在直播，进入直播间"
+                        Command="{x:Bind OpenLiveCommand}"
+                        Content="正在直播"
+                        ToolTipService.ToolTip="{x:Bind Card.LiveRoom.Title, Mode=OneWay}"
+                        Visibility="{x:Bind local:UserSpacePageHeader.GetLiveRoomVisibility(Card), Mode=OneWay}" />
                     <StackPanel
                         Margin="0,4,0,0"
                         Orientation="Horizontal"
@@ -188,6 +196,7 @@
                         Visibility="{x:Bind local:UserSpacePageHeader.IsFollowUnknownVisible(ViewModel.IsFollowed), Mode=OneWay}" />
                     <Button
                         AutomationProperties.Name="{ext:Locale Name=Refresh}"
+                        Click="OnRefreshClicked"
                         Command="{x:Bind ViewModel.RefreshCommand, Mode=OneWay}"
                         ToolTipService.ToolTip="{ext:Locale Name=Refresh}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
