@@ -1174,31 +1174,36 @@ public sealed partial class PlayerViewModel
             // on another file, and a load failure must retain the previous selection.
             await _initializationGate.WaitAsync(token);
             entered = true;
-            if (!IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
-
-            if (string.IsNullOrEmpty(vm._srtFilePath))
-            {
-                Window?.ShowTip("字幕文件未生成，请重试。", InfoType.Error);
-                return;
-            }
-
-            var result = await Client.SetExternalSubtitleTrackAsync(vm._srtFilePath, cancellationToken: token);
-            if (!IsCurrentPlayback(version)) return;
-            if (result.IsFailed)
-            {
-                ShowSubtitleFailure(result, selecting: true);
-                return;
-            }
-
-            foreach (var item in Subtitles)
-            {
-                item.IsSelected = ReferenceEquals(item, vm);
-            }
+            await SelectSubtitleCoreAsync(vm, version, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         finally
         {
             if (entered) _initializationGate.Release();
+        }
+    }
+
+    private async Task SelectSubtitleCoreAsync(SubtitleItemViewModel vm, long version, CancellationToken token)
+    {
+        if (!IsCurrentPlayback(version) || !Subtitles.Any(item => ReferenceEquals(item, vm)) || Client is null) return;
+
+        if (string.IsNullOrEmpty(vm._srtFilePath))
+        {
+            Window?.ShowTip("字幕文件未生成，请重试。", InfoType.Error);
+            return;
+        }
+
+        var result = await Client.SetExternalSubtitleTrackAsync(vm._srtFilePath, cancellationToken: token);
+        if (!IsCurrentPlayback(version)) return;
+        if (result.IsFailed)
+        {
+            ShowSubtitleFailure(result, selecting: true);
+            return;
+        }
+
+        foreach (var item in Subtitles)
+        {
+            item.IsSelected = ReferenceEquals(item, vm);
         }
     }
 
