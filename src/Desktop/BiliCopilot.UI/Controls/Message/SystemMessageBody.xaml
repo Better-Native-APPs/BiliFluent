@@ -3,13 +3,11 @@
     x:Class="BiliCopilot.UI.Controls.Message.SystemMessageBody"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:local="using:BiliCopilot.UI.Controls.Message"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:messages="using:BiliCopilot.UI.Services.Messages"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
@@ -18,8 +16,8 @@
             Padding="20,0"
             Style="{StaticResource PageScrollViewerStyle}">
             <Grid Margin="0,16">
-                <repeater:AppRepeater MaxWidth="1000" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                    <repeater:AppRepeater.ItemTemplate>
+                <ItemsRepeater MaxWidth="1000" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                    <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="messages:SystemMessageRow">
                             <Border
                                 Margin="0,0,0,4"
@@ -59,20 +57,55 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </repeater:AppRepeater.ItemTemplate>
-                    <repeater:AppRepeater.Layout>
+                    </ItemsRepeater.ItemTemplate>
+                    <ItemsRepeater.Layout>
                         <StackLayout Spacing="8" />
-                    </repeater:AppRepeater.Layout>
-                </repeater:AppRepeater>
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
             </Grid>
         </ScrollViewer>
 
-        <base:EmptyHolder
-            Description="{ext:Locale Name=NoSystemNotification}"
-            Emoji="&#x1F4EC;"
-            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+        <StackPanel
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <FontIcon
+                HorizontalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontFamily="Segoe UI Emoji"
+                FontSize="40"
+                Glyph="&#x1F4EC;" />
+            <TextBlock
+                MaxWidth="240"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                HorizontalTextAlignment="Center"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{ext:Locale Name=NoSystemNotification}"
+                TextWrapping="Wrap" />
+        </StackPanel>
 
-        <base:LoadingWidget Text="{ext:Locale Name=LoadingAndWait}" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+        <StackPanel
+            Margin="20"
+            Padding="20,12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultSolidBrush}"
+            BorderThickness="1"
+            CornerRadius="{ThemeResource OverlayCornerRadius}"
+            Orientation="Horizontal"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
+            <ProgressRing
+                Width="20"
+                Height="20"
+                MinWidth="20"
+                MinHeight="20"
+                IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+            <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=LoadingAndWait}" />
+        </StackPanel>
 
         <InfoBar
             Margin="20,12"

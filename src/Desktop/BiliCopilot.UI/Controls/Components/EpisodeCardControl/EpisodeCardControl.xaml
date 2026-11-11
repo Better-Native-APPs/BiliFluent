@@ -2,7 +2,6 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Components">
@@ -20,19 +19,22 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:EpisodeCardControl">
-                    <base:AppToggleCard
-                        x:Name="RootCard"
-                        Padding="0"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        BorderBrush="Transparent"
-                        BorderThickness="2"
-                        IsChecked="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected}"
-                        IsEnableCheck="False">
-                        <local:PlayerEpisodePresenter ViewModel="{TemplateBinding ViewModel}" />
-                    </base:AppToggleCard>
+                    <Grid>
+                        <Button
+                            x:Name="RootCard"
+                            AutomationProperties.ItemStatus="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource SelectedItemStatusConverter}}"
+                            BorderBrush="Transparent"
+                            BorderThickness="2"
+                            Style="{StaticResource ContentCardButtonStyle}">
+                            <local:PlayerEpisodePresenter ViewModel="{TemplateBinding ViewModel}" />
+                        </Button>
+                        <Border
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="2"
+                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

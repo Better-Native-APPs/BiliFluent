@@ -3,6 +3,8 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
@@ -19,7 +21,7 @@ public abstract class ArticleCardPresenter : LayoutUserControlBase<ArticleItemVi
 /// </summary>
 public sealed partial class ArticleCardControl : LayoutControlBase<ArticleItemViewModel>
 {
-    private CardControl _rootCard;
+    private ButtonBase _rootCard;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ArticleCardControl"/> class.
@@ -29,12 +31,13 @@ public sealed partial class ArticleCardControl : LayoutControlBase<ArticleItemVi
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
-        _rootCard = GetTemplateChild("RootCard") as CardControl;
+        _rootCard = GetTemplateChild("RootCard") as ButtonBase;
         if (ViewModel is not null)
         {
             if (_rootCard is not null)
             {
                 _rootCard.Command = ViewModel.OpenReaderCommand;
+                AutomationProperties.SetName(_rootCard, ViewModel.Title ?? string.Empty);
             }
         }
     }
@@ -53,6 +56,7 @@ public sealed partial class ArticleCardControl : LayoutControlBase<ArticleItemVi
         if (_rootCard is not null)
         {
             _rootCard.Command = newValue?.OpenReaderCommand;
+            AutomationProperties.SetName(_rootCard, newValue?.Title ?? string.Empty);
         }
     }
 

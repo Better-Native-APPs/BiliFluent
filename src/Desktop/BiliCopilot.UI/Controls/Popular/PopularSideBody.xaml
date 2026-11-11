@@ -4,7 +4,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:animations="using:CommunityToolkit.WinUI.Animations"
-    xmlns:components="using:BiliCopilot.UI.Controls.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:extensions="using:BiliCopilot.UI.Extensions"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
@@ -52,9 +51,10 @@
                 <StackLayout Spacing="8" />
             </ItemsView.Layout>
         </ItemsView>
-        <components:SideBottomLoadingWidget
+        <ProgressBar
             VerticalAlignment="Bottom"
-            Text="{extensions:Locale Name=GettingPartitions}"
+            AutomationProperties.Name="{extensions:Locale Name=GettingPartitions}"
+            IsIndeterminate="{x:Bind ViewModel.IsPartitionLoading, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.IsPartitionLoading, Mode=OneWay}" />
         <animations:Implicit.ShowAnimations>
             <animations:TranslationAnimation

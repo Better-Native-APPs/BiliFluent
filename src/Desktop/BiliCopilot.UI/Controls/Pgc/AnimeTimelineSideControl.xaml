@@ -31,12 +31,32 @@
             </ItemsView.Layout>
         </ItemsView>
 
-        <base:EmptyHolder
-            Description="{ext:Locale Name=RequestPgcTimeLineFailed}"
-            Emoji="&#x1F6F8;"
-            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}" />
+        <StackPanel
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+            <FontIcon
+                HorizontalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontFamily="Segoe UI Emoji"
+                FontSize="40"
+                Glyph="&#x1F6F8;" />
+            <TextBlock
+                MaxWidth="240"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                HorizontalTextAlignment="Center"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{ext:Locale Name=RequestPgcTimeLineFailed}"
+                TextWrapping="Wrap" />
+        </StackPanel>
 
-        <components:SideBottomLoadingWidget Text="{ext:Locale Name=LoadingAndWait}" Visibility="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}" />
+        <ProgressBar
+            VerticalAlignment="Bottom"
+            AutomationProperties.Name="{ext:Locale Name=LoadingAndWait}"
+            IsIndeterminate="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.IsTimelineLoading, Mode=OneWay}" />
 
         <animations:Implicit.ShowAnimations>
             <animations:TranslationAnimation

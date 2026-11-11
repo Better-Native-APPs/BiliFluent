@@ -3,7 +3,6 @@
     x:Class="BiliCopilot.UI.Controls.Player.PgcEpisodesSection"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:components="using:BiliCopilot.UI.Controls.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -18,26 +17,30 @@
             <components:EpisodeCardControl Style="{StaticResource PlayerEpisodeCardStyle}" ViewModel="{x:Bind}" />
         </DataTemplate>
         <DataTemplate x:Name="IndexTemplate" x:DataType="items:EpisodeItemViewModel">
-            <base:AppToggleCard
-                Padding="0"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
-                BorderBrush="Transparent"
-                BorderThickness="2"
-                Command="{x:Bind PlayCommand}"
-                IsChecked="{x:Bind IsSelected, Mode=OneWay}"
-                IsEnableCheck="False">
-                <Grid>
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="14"
-                        FontWeight="Bold"
-                        Text="{x:Bind Index}" />
-                </Grid>
-            </base:AppToggleCard>
+            <Grid>
+                <Button
+                    AutomationProperties.ItemStatus="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource SelectedItemStatusConverter}}"
+                    AutomationProperties.Name="{x:Bind Index}"
+                    BorderBrush="Transparent"
+                    BorderThickness="2"
+                    Command="{x:Bind PlayCommand}"
+                    Style="{StaticResource ContentCardButtonStyle}">
+                    <Grid>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            FontWeight="Bold"
+                            Text="{x:Bind Index}" />
+                    </Grid>
+                </Button>
+                <Border
+                    BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+            </Grid>
         </DataTemplate>
         <StackLayout x:Name="DefaultLayout" Spacing="8" />
         <UniformGridLayout

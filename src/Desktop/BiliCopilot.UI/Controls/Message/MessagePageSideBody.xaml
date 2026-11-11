@@ -4,9 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:animations="using:CommunityToolkit.WinUI.Animations"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:components="using:BiliCopilot.UI.ViewModels.Components"
-    xmlns:components1="using:BiliCopilot.UI.Controls.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
@@ -59,11 +57,31 @@
                 <StackLayout Spacing="8" />
             </ItemsView.Layout>
         </ItemsView>
-        <components1:SideBottomLoadingWidget
+        <ProgressBar
             VerticalAlignment="Bottom"
-            Text="{ext:Locale Name=LoadingAndWait}"
+            AutomationProperties.Name="{ext:Locale Name=LoadingAndWait}"
+            IsIndeterminate="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
-        <base:LoadingWidget Text="{ext:Locale Name=LoadingAndWait}" Visibility="{x:Bind ViewModel.IsChatSessionLoading, Mode=OneWay}" />
+        <StackPanel
+            Margin="20"
+            Padding="20,12"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultSolidBrush}"
+            BorderThickness="1"
+            CornerRadius="{ThemeResource OverlayCornerRadius}"
+            Orientation="Horizontal"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsChatSessionLoading, Mode=OneWay}">
+            <ProgressRing
+                Width="20"
+                Height="20"
+                MinWidth="20"
+                MinHeight="20"
+                IsActive="{x:Bind ViewModel.IsChatSessionLoading, Mode=OneWay}" />
+            <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=LoadingAndWait}" />
+        </StackPanel>
         <animations:Implicit.ShowAnimations>
             <animations:TranslationAnimation
                 From="-20,0"

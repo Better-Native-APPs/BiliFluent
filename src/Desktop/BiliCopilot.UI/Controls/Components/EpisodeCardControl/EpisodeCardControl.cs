@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Richasy.WinUIKernel.Share.Base;
@@ -33,6 +34,10 @@ public sealed partial class EpisodeCardControl : LayoutControlBase<EpisodeItemVi
         if (ViewModel is not null)
         {
             _rootCard?.Command = ViewModel.PlayCommand;
+            if (_rootCard is not null)
+            {
+                AutomationProperties.SetName(_rootCard, ViewModel.Title ?? string.Empty);
+            }
         }
     }
 
@@ -48,6 +53,10 @@ public sealed partial class EpisodeCardControl : LayoutControlBase<EpisodeItemVi
     protected override void OnViewModelChanged(EpisodeItemViewModel? oldValue, EpisodeItemViewModel? newValue)
     {
         _rootCard?.Command = newValue?.PlayCommand;
+        if (_rootCard is not null)
+        {
+            AutomationProperties.SetName(_rootCard, newValue?.Title ?? string.Empty);
+        }
     }
 
     private static MenuFlyoutItem CreateOpenInBroswerItem()

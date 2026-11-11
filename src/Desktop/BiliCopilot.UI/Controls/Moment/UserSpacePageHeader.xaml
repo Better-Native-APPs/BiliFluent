@@ -94,12 +94,14 @@
                         Text="{x:Bind local:UserSpacePageHeader.GetDisplayName(Profile, Card, ViewModel.UserName), Mode=OneWay}"
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="NoWrap" />
-                    <base:TrimTextBlock
+                    <TextBlock
                         x:Name="SignBlock"
                         HorizontalAlignment="Left"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         MaxLines="2"
                         Text="{x:Bind local:UserSpacePageHeader.FormatSign(Card), Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap"
                         Visibility="{x:Bind Card, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
                     <StackPanel
                         Margin="0,4,0,0"

@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Richasy.WinUIKernel.Share.Base;
@@ -34,6 +35,10 @@ public sealed partial class SeasonCardControl : LayoutControlBase<SeasonItemView
         if (ViewModel is not null)
         {
             _rootCard?.Command = ViewModel.PlayCommand;
+            if (_rootCard is not null)
+            {
+                AutomationProperties.SetName(_rootCard, ViewModel.Title ?? string.Empty);
+            }
         }
     }
 
@@ -51,6 +56,7 @@ public sealed partial class SeasonCardControl : LayoutControlBase<SeasonItemView
         if (_rootCard is not null)
         {
             _rootCard.Command = newValue?.PlayCommand;
+            AutomationProperties.SetName(_rootCard, newValue?.Title ?? string.Empty);
         }
     }
 
