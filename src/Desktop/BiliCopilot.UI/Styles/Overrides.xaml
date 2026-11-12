@@ -45,10 +45,8 @@
         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
     </Style>
 
-    <Style
-        x:Key="PageScrollViewStyle"
-        BasedOn="{StaticResource DefaultScrollViewStyle}"
-        TargetType="ScrollView">
+    <!--  DefaultScrollViewStyle is not exposed through XamlControlsResources, so this style cannot be based on it.  -->
+    <Style x:Key="PageScrollViewStyle" TargetType="ScrollView">
         <Setter Property="HorizontalScrollMode" Value="Disabled" />
         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
     </Style>
