@@ -179,7 +179,7 @@ internal sealed class PlayerClient
             // Match the web player: SDR, PQ and HLG streams are negotiated separately.
             { "eotf", "0,1,2" },
             { "format", "0,1,2" },
-            { "platform", "web" },
+            // No platform entry here: the authenticator adds it, and a second one makes the request fail.
             { "ptype", "8" },
             { "only_audio", audioOnly ? "1" : "0" },
             { "protocol", "0,1" },
