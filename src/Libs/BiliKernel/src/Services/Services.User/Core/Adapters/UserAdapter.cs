@@ -185,6 +185,12 @@ internal static class UserAdapter
         var detailProfile = new UserDetailProfile(userProfile, response.Card.Sign, response.Card.Level.CurrentLevel, response.Card.Vip.Status >= 1, response.Card.IsSeniorMember == 1);
         var relation = response.Following ? UserRelationStatus.Following : UserRelationStatus.Unfollow;
         var communityInfo = new UserCommunityInformation(response.Card.Mid, response.Card.Attention, response.Card.Fans, likeCount: response.LikeCount, relation: relation);
-        return new UserCard(detailProfile, communityInfo);
+        return new UserCard(detailProfile, communityInfo)
+        {
+            LiveRoom = response.LiveRoom?.ToUserLiveRoom(),
+        };
     }
+
+    public static UserLiveRoom ToUserLiveRoom(this UserLiveRoomResponse response)
+        => new(response.RoomStatus, response.LiveStatus, response.RoomId, response.Title);
 }

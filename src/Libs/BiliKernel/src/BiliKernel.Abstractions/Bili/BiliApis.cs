@@ -417,6 +417,11 @@ public static class BiliApis
         public const string RoomDetail = _liveBase + "/xlive/app-room/v1/index/getInfoByRoom";
 
         /// <summary>
+        /// 用户直播间状态.
+        /// </summary>
+        public const string UserRoom = _liveBase + "/room/v1/Room/getRoomInfoOld";
+
+        /// <summary>
         /// 直播播放信息.
         /// </summary>
         public const string PlayInformation = _liveBase + "/xlive/web-room/v1/index/getRoomPlayInfo";

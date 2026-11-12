@@ -18,6 +18,9 @@ internal sealed class UserCardDetailResponse
 
     [JsonPropertyName("like_num")]
     public int LikeCount { get; set; }
+
+    [JsonPropertyName("live_room")]
+    public UserLiveRoomResponse? LiveRoom { get; set; }
 }
 
 internal sealed class UserCardDetail

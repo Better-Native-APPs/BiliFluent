@@ -1,10 +1,14 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Services.UserSpace;
+using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
+using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Bili.User;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
 using System.ComponentModel;
+using System.Globalization;
 
 namespace BiliCopilot.UI.Controls.Moment;
 
@@ -20,6 +24,7 @@ public sealed partial class UserSpacePageHeader : UserSpacePageControlBase
     /// </summary>
     public UserSpacePageHeader()
     {
+        OpenLiveCommand = new AsyncRelayCommand(OpenLiveAsync, CanOpenLive);
         InitializeComponent();
         Loaded += OnHeaderLoaded;
         Unloaded += OnHeaderUnloaded;
@@ -35,7 +40,7 @@ public sealed partial class UserSpacePageHeader : UserSpacePageControlBase
     /// 头部独立拉取的用户卡片（签名/等级/统计）.
     /// </summary>
     public static readonly DependencyProperty CardProperty =
-        DependencyProperty.Register(nameof(Card), typeof(UserCard), typeof(UserSpacePageHeader), new PropertyMetadata(default(UserCard)));
+        DependencyProperty.Register(nameof(Card), typeof(UserCard), typeof(UserSpacePageHeader), new PropertyMetadata(default(UserCard), OnCardChanged));
 
     /// <summary>
     /// 用户卡片是否加载失败（失败时仅隐藏骨架，不影响页面主体状态）.
@@ -44,6 +49,11 @@ public sealed partial class UserSpacePageHeader : UserSpacePageControlBase
         DependencyProperty.Register(nameof(IsCardFailed), typeof(bool), typeof(UserSpacePageHeader), new PropertyMetadata(false));
 
     private CancellationTokenSource? _cardCancellation;
+
+    /// <summary>
+    /// 通过应用现有直播路由打开当前用户的直播间.
+    /// </summary>
+    public IAsyncRelayCommand OpenLiveCommand { get; }
 
     public UserProfile? Profile
     {
@@ -126,6 +136,37 @@ public sealed partial class UserSpacePageHeader : UserSpacePageControlBase
 
     public static Visibility IsFollowUnknownVisible(bool? isFollowed)
         => isFollowed.HasValue ? Visibility.Collapsed : Visibility.Visible;
+
+    public static Visibility GetLiveRoomVisibility(UserCard? card)
+        => card?.LiveRoom?.IsLiving == true ? Visibility.Visible : Visibility.Collapsed;
+
+    private static void OnCardChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((UserSpacePageHeader)d).OpenLiveCommand.NotifyCanExecuteChanged();
+
+    private bool CanOpenLive()
+        => Card?.LiveRoom is { IsLiving: true, RoomId: > 0 };
+
+    private Task OpenLiveAsync()
+    {
+        var card = Card;
+        if (card?.LiveRoom is not { IsLiving: true, RoomId: > 0 } room)
+        {
+            return Task.CompletedTask;
+        }
+
+        var user = card.Profile?.User ?? Profile;
+        var identifier = new MediaIdentifier(room.RoomId.ToString(CultureInfo.InvariantCulture), room.Title, user?.Avatar);
+        return this.Get<AppViewModel>().OpenLiveAsync(new LiveInformation(identifier, user));
+    }
+
+    private void OnRefreshClicked(object sender, RoutedEventArgs e)
+    {
+        if (Profile is { } profile)
+        {
+            // Refresh the independent card without changing the active feed's state.
+            SetProfile(profile);
+        }
+    }
 
     private void OnHeaderLoaded(object sender, RoutedEventArgs e)
     {
