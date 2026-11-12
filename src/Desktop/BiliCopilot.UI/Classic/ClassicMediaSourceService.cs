@@ -137,16 +137,18 @@ public sealed class ClassicMediaSourceService
             livePage = await _player.GetLivePageDetailAsync(item.Live.Identifier, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             item = item with { Live = livePage.Information };
-            live = await _player.GetLivePlayDetailAsync(item.Live.Identifier, item.PreferQuality is > 0 ? item.PreferQuality.Value : 10000, false, cancellationToken);
+            // The web quality table reaches 30000; do not cap automatic requests at the legacy 10000 tier.
+            live = await _player.GetLivePlayDetailAsync(item.Live.Identifier, item.PreferQuality is > 0 ? item.PreferQuality.Value : 30000, false, cancellationToken);
             start = 0;
         }
         else throw new ClassicSourceException("Media identity is missing.");
         cancellationToken.ThrowIfCancellationRequested();
         var qualities = (dash?.Formats ?? live?.Formats)?.Where(_canPlayFormat).ToArray() ?? [];
-        var selected = SelectQuality(item, qualities);
         if (live is not null)
-            selected = qualities.FirstOrDefault(q => q.Quality == item.PreferQuality && live.Lines.Any(line => line.Quality == q.Quality))
-                ?? qualities.FirstOrDefault(q => live.Lines.Any(line => line.Quality == q.Quality));
+            qualities = qualities.Where(format => live.Lines.Any(line => line.Eotf == format.Eotf
+                && (line.Quality == format.Quality || line.AcceptQualities.Contains(format.Quality))))
+                .Distinct().ToArray();
+        var selected = SelectQuality(item, qualities, live);
         if (item.PreferQuality is > 0 && selected?.Quality != item.PreferQuality)
             throw new ClassicSourceException("Requested quality is unavailable.");
         var video = dash?.Videos?.FirstOrDefault(v => v.Id == selected?.Quality.ToString(CultureInfo.InvariantCulture)
@@ -188,7 +190,8 @@ public sealed class ClassicMediaSourceService
     private static IReadOnlyList<ClassicLiveStreamCandidate> SelectLiveCandidates(LiveMediaInformation live, PlayerFormatInformation? selected)
     {
         var candidates = new List<ClassicLiveStreamCandidate>();
-        foreach (var line in live.Lines.Where(line => selected is null || line.Quality == selected.Quality))
+        foreach (var line in live.Lines.Where(line => selected is not null
+            && line.Quality == selected.Quality && line.Eotf == selected.Eotf))
         {
             var codec = line.Name.Equals("avc", StringComparison.OrdinalIgnoreCase) ? "avc"
                 : line.Name.Equals("hevc", StringComparison.OrdinalIgnoreCase) ? "hevc" : "other";
@@ -197,9 +200,10 @@ public sealed class ClassicMediaSourceService
                 if (!Uri.TryCreate(url.ToString(), UriKind.Absolute, out var uri)
                     || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
                     || candidates.Any(candidate => candidate.Uri == uri)) continue;
-                // The SDK drops format_name. Classify only known path markers; never log route/query.
+                // Prefer API metadata; older callers can still omit format_name. Never log route/query.
                 var path = uri.AbsolutePath;
-                var format = path.Contains("fmp4", StringComparison.OrdinalIgnoreCase)
+                var format = line.Format?.ToLowerInvariant();
+                format ??= path.Contains("fmp4", StringComparison.OrdinalIgnoreCase)
                     || path.EndsWith(".m4s", StringComparison.OrdinalIgnoreCase) ? "fmp4"
                     : path.EndsWith(".flv", StringComparison.OrdinalIgnoreCase) ? "flv"
                     : path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ? "ts"
@@ -217,8 +221,8 @@ public sealed class ClassicMediaSourceService
             && !string.Equals(candidate.Uri.Host, first.Uri.Host, StringComparison.OrdinalIgnoreCase));
         if (otherHost is not null) attempts.Add(otherHost);
         var otherFormat = ordered.FirstOrDefault(candidate => candidate.Format != first.Format)
-            // ts/fmp4 HLS may both end in .m3u8 after SDK flattening. A different
-            // route still supplies an alternate stream family without exposing it in logs.
+            // Older callers may omit format_name for HLS. A different route still
+            // supplies an alternate stream family without exposing it in logs.
             ?? ordered.FirstOrDefault(candidate => candidate.Codec == first.Codec
                 && candidate.Uri.AbsolutePath != first.Uri.AbsolutePath);
         if (otherFormat is not null && !attempts.Contains(otherFormat)) attempts.Add(otherFormat);
@@ -231,9 +235,26 @@ public sealed class ClassicMediaSourceService
         return attempts.AsReadOnly();
     }
 
-    private PlayerFormatInformation? SelectQuality(ClassicMediaItem item, IReadOnlyList<PlayerFormatInformation> qualities)
+    private PlayerFormatInformation? SelectQuality(ClassicMediaItem item, IReadOnlyList<PlayerFormatInformation> qualities,
+        LiveMediaInformation? live = null)
     {
         if (item.PreferQuality is < 0) throw new ClassicSourceException("Requested quality is invalid.");
+        if (live is not null)
+        {
+            if (item.PreferLiveEotf is < 0 or > 2)
+                throw new ClassicSourceException("Requested live color format is invalid.");
+            // accept_qn advertises switchable tiers; only current_qn is playable in this response.
+            var candidates = qualities.Where(format => live.Lines.Any(line => line.Quality == format.Quality
+                && line.Eotf == format.Eotf));
+            if (item.PreferQuality is > 0)
+                candidates = candidates.Where(format => format.Quality == item.PreferQuality);
+            if (item.PreferLiveEotf.HasValue)
+                candidates = candidates.Where(format => format.Eotf == item.PreferLiveEotf.Value);
+            return candidates.OrderByDescending(format => format.Quality)
+                .ThenByDescending(format => format.IsHdr).ThenBy(format => format.Eotf).FirstOrDefault()
+                ?? throw new ClassicSourceException("Requested live quality or matching stream is unavailable.");
+        }
+
         if (item.PreferQuality is > 0)
             return qualities.FirstOrDefault(q => q.Quality == item.PreferQuality)
                 ?? throw new ClassicSourceException("Requested quality is unavailable.");

@@ -23,7 +23,11 @@ public enum ClassicCapabilities { None = 0, Transport = 1, Seek = 2, Volume = 4,
 
 public sealed record ClassicMediaItem(BiliMediaType Type, VideoInformation? Video,
     SeasonInformation? Season, EpisodeInformation? Episode, LiveInformation? Live,
-    VideoPart? PreferPart, int? PreferQuality, double? StartPosition, bool IsPrivate);
+    VideoPart? PreferPart, int? PreferQuality, double? StartPosition, bool IsPrivate)
+{
+    // Null permits automatic HDR preference; zero is an explicit SDR selection.
+    public int? PreferLiveEotf { get; init; }
+}
 
 public sealed record ClassicPlaybackRequest(ClassicMediaItem Item, IReadOnlyList<ClassicMediaItem> Playlist, int? PlaylistIndex);
 
