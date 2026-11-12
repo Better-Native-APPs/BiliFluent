@@ -52,7 +52,7 @@ internal static class MpvAssDanmakuDocument
         var top = new double[laneCount];
         var bottom = new double[laneCount];
         var active = new PriorityQueue<double, double>();
-        var duration = 9 / Math.Max(0.1, style.Speed);
+        var rollingSpeed = 100 * Math.Max(0.1, style.Speed) * scale;
         var alpha = (int)Math.Round((1 - Math.Clamp(style.Opacity, 0, 1)) * 255);
         var font = style.FontFamily.Replace(',', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var builder = new StringBuilder();
@@ -86,13 +86,17 @@ internal static class MpvAssDanmakuDocument
             var start = Math.Max(0, item.Start);
             var fontSize = GetDipFontSize(item.FontSize, style) * scale;
             var span = Math.Min(laneCount, Math.Max(1, (int)Math.Ceiling(((fontSize * 1.2) + (2 * outline)) / laneHeight)));
-            var end = start + (rolling ? duration : 4);
+            var end = start + 4;
             string position;
             if (rolling)
             {
                 while (active.TryPeek(out var expiry, out _) && expiry <= start) active.Dequeue();
                 if (style.Limit && active.Count >= 20) continue;
                 var textWidth = EstimateWidth(text, fontSize, style.Bold) + (2 * outline);
+                // Match Win2D's 100 DIPs/s per speed unit and its capped rasterized-width boost.
+                var widthBoost = 1 + Math.Min((textWidth / scale) * style.RasterizationScale * 0.0015, 0.2);
+                var duration = (width + textWidth) / (rollingSpeed * widthBoost);
+                end = start + duration;
                 var current = new RollingEvent(start, end, textWidth, (width + textWidth) / duration, item.Mode);
                 var lane = FindRollingLane(scrolling, span, current, width, outline + 2);
                 if (lane < 0) continue;
