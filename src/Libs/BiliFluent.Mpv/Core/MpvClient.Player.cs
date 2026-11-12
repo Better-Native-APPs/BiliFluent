@@ -2,12 +2,18 @@
 // Licensed under the MIT License.
 // Modified for BiliFluent: native calls go through HanumanInstitute.LibMpv, results use MpvResult.
 
+using System.Globalization;
+using Microsoft.Extensions.Logging;
 using static Richasy.MpvKernel.Core.Enums.MpvClientProperties;
 
 namespace Richasy.MpvKernel.Core;
 
 public sealed partial class MpvClient
 {
+    private static readonly bool SubtitleDiagnosticsEnabled = Environment.GetEnvironmentVariable("BILIFLUENT_SUBTITLE_DIAGNOSTICS") == "1";
+
+    private LogLevel SubtitleDiagnosticLevel => SubtitleDiagnosticsEnabled ? LogLevel.Information : LogLevel.Debug;
+
     /// <summary>
     /// 播放指定路径的文件.
     /// </summary>
@@ -132,7 +138,12 @@ public sealed partial class MpvClient
         }
 
         var cmd = string.Join(' ', commandArgs);
-        await Task.Run(() => errorCode = _handle.CommandString(cmd));
+        await Task.Run(() =>
+        {
+            TraceSubtitleState("loadfile", "before");
+            errorCode = _handle.CommandString(cmd);
+            TraceSubtitleState("loadfile", "after", errorCode.ToString());
+        });
         ThrowIfFailed(errorCode, "Mpv | loadfile failed");
     }
 
@@ -366,14 +377,18 @@ public sealed partial class MpvClient
     /// 设置字幕轨道.
     /// </summary>
     /// <param name="trackId">字幕ID.</param>
+    /// <param name="cancellationToken">当前媒体的取消信号.</param>
     /// <returns><see cref="Task"/>.</returns>
-    public async Task<MpvResult> SetSubtitleTrackAsync(int? trackId)
+    public async Task<MpvResult> SetSubtitleTrackAsync(int? trackId, CancellationToken cancellationToken = default)
     {
-        var errorCode = MpvError.Success;
-        await Task.Run(() => errorCode = trackId.HasValue
-            ? _handle.SetPropertyNode("sid", trackId.Value)
-            : _handle.SetPropertyNode("sid", "no"));
-        return WrapAsResult(errorCode, "Mpv | set subtitle track failed");
+        var selection = trackId?.ToString(CultureInfo.InvariantCulture) ?? "no";
+        return await Task.Run(() =>
+        {
+            var result = WrapAsResult(SetPropertyString("sid", selection), "Mpv | set subtitle track failed");
+            return result.IsSuccess && GetPropertyString("sid") != selection
+                ? MpvResult.Fail("Mpv | subtitle track selection did not take effect")
+                : result;
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -381,22 +396,136 @@ public sealed partial class MpvClient
     /// </summary>
     /// <param name="externalUrl">字幕路径.</param>
     /// <param name="flag">行为标记.</param>
+    /// <param name="cancellationToken">当前媒体的取消信号.</param>
     /// <returns><see cref="Task"/>.</returns>
-    public async Task<MpvResult> SetExternalSubtitleTrackAsync(string externalUrl, string flag = "select")
+    public async Task<MpvResult> SetExternalSubtitleTrackAsync(string externalUrl, string flag = "select", CancellationToken cancellationToken = default)
     {
-        var errorCode = MpvError.Success;
         try
         {
-            var waitTask = Task.Delay(TimeSpan.FromSeconds(8));
-            var subTask = Task.Run(() => errorCode = _handle.Command(["sub-add", externalUrl, flag]));
-            await Task.WhenAny(waitTask, subTask);
+            var subTask = Task.Run(() => LoadExternalSubtitleTrack(externalUrl, flag), cancellationToken);
+            var (result, trackId) = await subTask.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+            if (result.IsFailed || trackId is null)
+            {
+                return result;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return await SetSubtitleTrackAsync(trackId, cancellationToken);
         }
-        catch (Exception)
+        catch (TimeoutException)
         {
+            if (_logger.IsEnabled(SubtitleDiagnosticLevel))
+            {
+                _logger.Log(SubtitleDiagnosticLevel, "Subtitle load timed out: file={File}; the pending sub-add cannot select sid.",
+                    SubtitleDiagnosticText(externalUrl));
+            }
+
             return MpvResult.Fail("Mpv | set external subtitle track failed: operation timed out");
         }
+    }
 
-        return WrapAsResult(errorCode, "Mpv | set external subtitle track failed");
+    private (MpvResult Result, int? TrackId) LoadExternalSubtitleTrack(string externalUrl, string flag)
+    {
+        try
+        {
+            var separator = flag.IndexOf('+');
+            var selection = separator < 0 ? flag : flag[..separator];
+            var selectAfterLoad = selection is "select" or "cached";
+            if (selection == "cached")
+            {
+                var cached = FindExternalSubtitleTrack(externalUrl);
+                if (cached.Result.IsFailed || cached.TrackId is not null)
+                {
+                    return cached;
+                }
+            }
+
+            // A synchronous native command cannot be retracted by WaitAsync. Load without
+            // selection so a command completing after timeout/cancellation cannot change sid.
+            var loadFlag = selectAfterLoad ? "auto" + flag[selection.Length..] : flag;
+            var result = WrapAsResult(Command("sub-add", externalUrl, loadFlag), "Mpv | set external subtitle track failed");
+            if (result.IsFailed || !selectAfterLoad)
+            {
+                return (result, null);
+            }
+
+            var added = FindExternalSubtitleTrack(externalUrl);
+            return added.Result.IsSuccess && added.TrackId is null
+                ? (MpvResult.Fail("Mpv | added external subtitle track was not found"), null)
+                : added;
+        }
+        catch (Exception ex)
+        {
+            // Exception messages from file/native IO can contain private absolute paths.
+            return (MpvResult.Fail("Mpv | set external subtitle track failed: " + ex.GetType().Name), null);
+        }
+    }
+
+    private (MpvResult Result, int? TrackId) FindExternalSubtitleTrack(string externalUrl)
+    {
+        if (IsDisposed)
+        {
+            return (WrapAsResult(MpvError.Uninitialized, "Mpv | get external subtitle track failed"), null);
+        }
+
+        var result = WrapAsResult(_handle.GetPropertyNode("track-list", out var tracks), "Mpv | get external subtitle track failed");
+        if (result.IsFailed)
+        {
+            return (result, null);
+        }
+
+        if (tracks is not List<object?> trackList)
+        {
+            return (MpvResult.Fail("Mpv | get external subtitle track failed: invalid node format"), null);
+        }
+
+        int? newestId = null;
+        var filename = externalUrl.Replace('\\', '/');
+        foreach (var item in trackList)
+        {
+            if (item is Dictionary<string, object?> track
+                && track.GetString("type") == "sub"
+                && string.Equals(track.GetString("external-filename")?.Replace('\\', '/'), filename, StringComparison.OrdinalIgnoreCase)
+                && track.GetInteger("id") is long id
+                && (newestId is null || id > newestId))
+            {
+                newestId = Convert.ToInt32(id);
+            }
+        }
+
+        return (MpvResult.Ok(), newestId);
+    }
+
+    private void TraceSubtitleState(string operation, string phase, string? result = null)
+    {
+        var level = SubtitleDiagnosticLevel;
+        if (!_logger.IsEnabled(level) || IsDisposed) return;
+
+        var error = _handle.GetPropertyNode("track-list", out var value);
+        var tracks = new List<string>();
+        if (value is List<object?> trackList)
+        {
+            foreach (var item in trackList)
+            {
+                if (item is not Dictionary<string, object?> track || track.GetString("type") != "sub") continue;
+                tracks.Add(string.Create(CultureInfo.InvariantCulture,
+                    $"id={track.GetInteger("id")}; title={SubtitleDiagnosticText(track.GetString("title"))}; selected={track.GetFlag("selected")}; file={SubtitleDiagnosticText(track.GetString("external-filename"))}"));
+            }
+        }
+
+        _logger.Log(level,
+            "Subtitle state: {Operation} {Phase}; result={Result}; sid={Sid}; secondary-sid={SecondarySid}; sub-visibility={Visibility}; secondary-sub-visibility={SecondaryVisibility}; time={Position}; track-list-result={TrackResult}; tracks=[{Tracks}]",
+            operation, phase, result ?? "pending", _handle.GetPropertyString("sid"), _handle.GetPropertyString("secondary-sid"),
+            _handle.GetPropertyString("sub-visibility"), _handle.GetPropertyString("secondary-sub-visibility"),
+            _handle.GetPropertyString("time-pos"), error, string.Join(" | ", tracks));
+    }
+
+    private static string SubtitleDiagnosticText(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "<none>";
+        var query = value.IndexOfAny(['?', '#']);
+        if (query >= 0) value = value[..query];
+        return Path.GetFileName(value.Replace('\\', '/')).Replace('\r', ' ').Replace('\n', ' ');
     }
 
     /// <summary>

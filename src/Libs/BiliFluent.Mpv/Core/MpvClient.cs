@@ -76,6 +76,14 @@ public sealed partial class MpvClient : IAsyncDisposable
         await ObservePropertyAsync(TrackCount, NativeFormat.Int64);
         await ObservePropertyAsync(CacheSpeed, NativeFormat.Int64);
         await ObservePropertyAsync(DemuxerCacheState, NativeFormat.Node);
+        if (instance._logger.IsEnabled(instance.SubtitleDiagnosticLevel))
+        {
+            foreach (var name in new[] { "sid", "secondary-sid", "sub-visibility", "secondary-sub-visibility", "track-list" })
+            {
+                await ObservePropertyAsync(name, NativeFormat.Node);
+            }
+        }
+
         return instance;
 
         // 无法预期会出现怎样的错误，这里直接抛出异常.

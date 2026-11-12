@@ -54,9 +54,11 @@ public sealed partial class MpvClient
         switch (@event->EventId)
         {
             case NativeEventId.StartFile:
+                TraceSubtitleState("start-file", "event");
                 ReachFileLoading?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.EndFile:
+                TraceSubtitleState("end-file", "event");
                 ReachFileEnd?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.LogMessage:
@@ -71,6 +73,7 @@ public sealed partial class MpvClient
 
                 break;
             case NativeEventId.FileLoaded:
+                TraceSubtitleState("file-loaded", "event");
                 ReachFileLoaded?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.EventIdle:
@@ -183,6 +186,12 @@ public sealed partial class MpvClient
         }
 
         var name = Marshal.PtrToStringUTF8((nint)eventProp->Name);
+        if (name is "sid" or "secondary-sid" or "sub-visibility" or "secondary-sub-visibility" or "track-list")
+        {
+            TraceSubtitleState(name, "property-change");
+            return;
+        }
+
         if (name == Pause || name == CoreIdle || name == Seeking)
         {
             NotifyPlayerState();

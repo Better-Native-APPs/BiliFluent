@@ -7,6 +7,7 @@ using Microsoft.Windows.Storage;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models.Subtitle;
 using Richasy.WinUIKernel.Share.ViewModels;
+using System.Globalization;
 
 namespace BiliCopilot.UI.ViewModels.Items;
 
@@ -14,14 +15,19 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
 {
     private readonly Func<SubtitleItemViewModel, Task> _activeFunc;
     private readonly Func<SubtitleItemViewModel, Task> _deactiveFunc;
+    private readonly Action<string> _showError;
+    private readonly CancellationToken _cancellationToken;
     private List<SubtitleInformation>? _subtitles;
     internal string? _srtFilePath;
 
-    public SubtitleItemViewModel(SubtitleMeta meta, Func<SubtitleItemViewModel, Task> activeFunc, Func<SubtitleItemViewModel, Task> deactiveFunc)
+    public SubtitleItemViewModel(SubtitleMeta meta, Func<SubtitleItemViewModel, Task> activeFunc, Func<SubtitleItemViewModel, Task> deactiveFunc,
+        Action<string> showError, CancellationToken cancellationToken)
         : base(meta)
     {
         _activeFunc = activeFunc;
         _deactiveFunc = deactiveFunc;
+        _showError = showError;
+        _cancellationToken = cancellationToken;
         Name = meta.LanguageName;
     }
 
@@ -50,34 +56,53 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
     [RelayCommand]
     private async Task SelectAsync()
     {
-        if (_subtitles is null)
+        try
         {
-            try
+            _cancellationToken.ThrowIfCancellationRequested();
+            if (_subtitles is null)
             {
-                var subtitles = await this.Get<ISubtitleService>().GetSubtitleDetailAsync(Data);
+                var subtitles = await this.Get<ISubtitleService>().GetSubtitleDetailAsync(Data, _cancellationToken);
                 _subtitles = [.. subtitles];
             }
-            catch (Exception ex)
-            {
-                this.Get<ILogger<SubtitleItemViewModel>>().LogError(ex, "加载字幕失败");
-                return;
-            }
-        }
 
-        if (_subtitles?.Count > 0 && string.IsNullOrEmpty(_srtFilePath))
-        {
-            var srtContent = ConvertToSrt(_subtitles);
-            var folderPath = Path.Combine(ApplicationData.GetDefault().TemporaryPath, "Subtitles");
-            if (!Directory.Exists(folderPath))
+            if (string.IsNullOrEmpty(_srtFilePath))
             {
+                var subtitles = _subtitles.Where(subtitle => double.IsFinite(subtitle.StartPosition)
+                    && double.IsFinite(subtitle.EndPosition) && subtitle.StartPosition >= 0
+                    && subtitle.EndPosition > subtitle.StartPosition && !string.IsNullOrWhiteSpace(subtitle.Content)).ToList();
+                if (subtitles.Count == 0)
+                {
+                    _subtitles = null;
+                    _showError("字幕没有可显示的内容，请重试。");
+                    return;
+                }
+
+                var srtContent = ConvertToSrt(subtitles);
+                var folderPath = Path.Combine(ApplicationData.GetDefault().TemporaryPath, "Subtitles");
                 Directory.CreateDirectory(folderPath);
+                var filePath = Path.Combine(folderPath, $"{Data.Id}.srt");
+                await File.WriteAllTextAsync(filePath, srtContent, Encoding.UTF8, _cancellationToken);
+                // Publish the cache path only after a successful write, so IO failures can be retried.
+                _srtFilePath = filePath;
+                var logger = this.Get<ILogger<SubtitleItemViewModel>>();
+                var level = Environment.GetEnvironmentVariable("BILIFLUENT_SUBTITLE_DIAGNOSTICS") == "1" ? LogLevel.Information : LogLevel.Debug;
+                if (logger.IsEnabled(level))
+                {
+                    logger.Log(level, "Subtitle file prepared: file={File}; cues={Count}; skipped={Skipped}; first-start={Start}; last-end={End}.",
+                        Path.GetFileName(filePath), subtitles.Count, _subtitles.Count - subtitles.Count,
+                        subtitles.Min(subtitle => subtitle.StartPosition), subtitles.Max(subtitle => subtitle.EndPosition));
+                }
             }
 
-            _srtFilePath = Path.Combine(folderPath, $"{Data.Id}.srt");
-            await File.WriteAllTextAsync(_srtFilePath, srtContent, Encoding.UTF8);
+            _cancellationToken.ThrowIfCancellationRequested();
+            await _activeFunc(this);
         }
-
-        await _activeFunc(this);
+        catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<SubtitleItemViewModel>>().LogWarning("加载字幕失败：{ErrorType}", ex.GetType().Name);
+            _showError("字幕加载失败，请重试。");
+        }
     }
 
     /// <summary>
@@ -91,7 +116,7 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
         var index = 1;
         foreach (var subtitle in subtitles)
         {
-            sb.AppendLine(index.ToString());
+            sb.AppendLine(index.ToString(CultureInfo.InvariantCulture));
 
             var start = SecondsToSrtTime(subtitle.StartPosition);
             var end = SecondsToSrtTime(subtitle.EndPosition);
@@ -116,6 +141,6 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
         var millis = (int)((seconds - (int)seconds) * 1000);
 
         // 注意格式用逗号和前导零
-        return string.Format("{0:D2}:{1:D2}:{2:D2},{3:D3}", hours, minutes, secs, millis);
+        return string.Format(CultureInfo.InvariantCulture, "{0:D2}:{1:D2}:{2:D2},{3:D3}", hours, minutes, secs, millis);
     }
 }

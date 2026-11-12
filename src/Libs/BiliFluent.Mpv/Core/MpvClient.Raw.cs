@@ -23,7 +23,14 @@ public sealed partial class MpvClient
     /// Sets a property from its text form.
     /// </summary>
     public MpvError SetPropertyString(string name, string value)
-        => IsDisposed ? MpvError.Uninitialized : _handle.SetPropertyString(name, value);
+    {
+        var trace = name is "sid" or "secondary-sid" or "sub-visibility" or "secondary-sub-visibility";
+        var operation = trace ? "set " + name + "=" + SubtitleDiagnosticText(value) : string.Empty;
+        if (trace) TraceSubtitleState(operation, "before");
+        var error = IsDisposed ? MpvError.Uninitialized : _handle.SetPropertyString(name, value);
+        if (trace) TraceSubtitleState(operation, "after", error.ToString());
+        return error;
+    }
 
     /// <summary>
     /// Sets a yes/no property.
@@ -97,7 +104,13 @@ public sealed partial class MpvClient
     public MpvError Command(params string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        return IsDisposed ? MpvError.Uninitialized : _handle.Command(args);
+        var trace = args.Length > 0 && args[0] is "sub-add" or "sub-remove" or "sub-reload";
+        var operation = trace ? args[0] + " " + (args.Length > 1 ? SubtitleDiagnosticText(args[1]) : "current")
+            + (args.Length > 2 ? " flag=" + SubtitleDiagnosticText(args[2]) : string.Empty) : string.Empty;
+        if (trace) TraceSubtitleState(operation, "before");
+        var error = IsDisposed ? MpvError.Uninitialized : _handle.Command(args);
+        if (trace) TraceSubtitleState(operation, "after", error.ToString());
+        return error;
     }
 
     /// <summary>
