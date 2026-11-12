@@ -42,15 +42,19 @@ public sealed class ClassicMediaSourceService
     private readonly IPlayerService _player;
     private readonly IBiliCookiesResolver _cookies;
     private readonly Func<PlayerFormatInformation, bool> _canPlayFormat;
+    private readonly Func<bool> _preferLiveHdr;
     public ClassicSourcePreferences Preferences { get; }
 
     public ClassicMediaSourceService(IPlayerService player, IBiliCookiesResolver cookies,
-        ClassicSourcePreferences preferences, Func<PlayerFormatInformation, bool> canPlayFormat)
+        ClassicSourcePreferences preferences, Func<PlayerFormatInformation, bool> canPlayFormat,
+        Func<bool>? preferLiveHdr = null)
     {
         _player = player ?? throw new ArgumentNullException(nameof(player));
         _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies));
         Preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _canPlayFormat = canPlayFormat ?? throw new ArgumentNullException(nameof(canPlayFormat));
+        // Without a caller that knows the display, automatic live selection stays on SDR.
+        _preferLiveHdr = preferLiveHdr ?? (() => false);
     }
 
     public async Task<ClassicSourceResult> ResolveAsync(ClassicPlaybackRequest request,
@@ -250,8 +254,11 @@ public sealed class ClassicMediaSourceService
                 candidates = candidates.Where(format => format.Quality == item.PreferQuality);
             if (item.PreferLiveEotf.HasValue)
                 candidates = candidates.Where(format => format.Eotf == item.PreferLiveEotf.Value);
+            // Within one tier an automatic choice follows the display: HDR only where HDR output is active.
+            // An explicit SDR/PQ/HLG choice was already applied by the filter above.
+            var preferHdr = !item.PreferLiveEotf.HasValue && _preferLiveHdr();
             return candidates.OrderByDescending(format => format.Quality)
-                .ThenByDescending(format => format.IsHdr).ThenBy(format => format.Eotf).FirstOrDefault()
+                .ThenByDescending(format => format.IsHdr == preferHdr).ThenBy(format => format.Eotf).FirstOrDefault()
                 ?? throw new ClassicSourceException("Requested live quality or matching stream is unavailable.");
         }
 

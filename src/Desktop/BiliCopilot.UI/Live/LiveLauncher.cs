@@ -123,9 +123,12 @@ public sealed class LiveLauncher : IAsyncDisposable
             // The VOD own-video exemption is deliberately not applicable to Live formats.
             var loggedIn = _tokens.GetToken() is not null;
             var vip = _account.MyProfile?.IsVip == true;
+            // Set once the hosting window is known; the first resolve runs later, inside OpenAsync.
+            var hdrDisplay = false;
             var sources = new ClassicMediaSourceService(_player, _cookies,
                 new ClassicSourcePreferences(false, false, false),
-                format => (!format.NeedLogin || loggedIn) && (!format.NeedVip || vip));
+                format => (!format.NeedLogin || loggedIn) && (!format.NeedVip || vip),
+                () => hdrDisplay);
             var options = new ClassicSessionOptions(PlaybackExperience.Classic, ClassicBackendKind.Island,
                 ClassicDisplayMode.Default, decode, string.Empty, false, false);
             var architecture = RuntimeInformation.ProcessArchitecture switch
@@ -141,6 +144,7 @@ public sealed class LiveLauncher : IAsyncDisposable
             // Caller guards the actual existing main window. Never create/activate a top-level here.
             var mainWindow = _mainWindow()
                 ?? throw new InvalidOperationException("The existing main window is unavailable for Live.");
+            hdrDisplay = IsHdrDisplay(mainWindow);
             created = new LiveWindow(mainWindow, _dispatcher, Report);
             _current = created; // Retain managed partial-construction owner before any native allocation.
             created.Released += OnReleased;
@@ -258,6 +262,21 @@ public sealed class LiveLauncher : IAsyncDisposable
     private void CheckUi()
     {
         if (!_dispatcher.HasThreadAccess) throw new InvalidOperationException("Live launcher requires its UI dispatcher.");
+    }
+
+    // Live is hosted inside the main window, so its display decides whether HDR streams are chosen automatically.
+    private static bool IsHdrDisplay(MainWindow window)
+    {
+        try
+        {
+            using var display = Microsoft.Graphics.Display.DisplayInformation.CreateForWindowId(window.AppWindow.Id);
+            return display.GetAdvancedColorInfo().CurrentAdvancedColorKind
+                == Microsoft.Graphics.Display.DisplayAdvancedColorKind.HighDynamicRange;
+        }
+        catch (Exception)
+        {
+            return false; // Unknown display state: stay on the SDR stream.
+        }
     }
     private void Report(string message) { try { _registry.ReportSafeFailure(message); } catch { } }
     public ValueTask DisposeAsync()
