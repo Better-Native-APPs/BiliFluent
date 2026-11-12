@@ -21,13 +21,11 @@
     <UserControl.Resources>
         <DataTemplate x:Key="AppNavItemTemplate" x:DataType="viewmodels:AppNavigationItemViewModel">
             <NavigationViewItem
-                dev:StoreNavigationViewItemAttach.ShowNotificationDot="{x:Bind local:RootLayout.ShowNonMessageUnread(PageKey, ShowUnread), Mode=OneWay}"
+                dev:StoreNavigationViewItemAttach.ShowNotificationDot="{x:Bind ShowUnread, Mode=OneWay}"
                 Content="{x:Bind Title}"
                 IsSelected="{x:Bind IsSelected, Mode=TwoWay}"
-                Loaded="OnNavigationItemLoaded"
                 SelectsOnInvoked="True"
                 Tag="{x:Bind}"
-                Unloaded="OnNavigationItemUnloaded"
                 Visibility="{x:Bind IsVisible, Mode=OneWay}">
                 <!--  The Store presenter enters IconCollapsed when the native Icon is null, even with attached icons.  -->
                 <NavigationViewItem.Icon>

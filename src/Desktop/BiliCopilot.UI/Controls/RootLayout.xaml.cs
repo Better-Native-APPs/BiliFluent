@@ -1,18 +1,14 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using System.ComponentModel;
-using System.Globalization;
 using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Live;
-using BiliCopilot.UI.Pages;
 using BiliCopilot.UI.Pages.Overlay;
-using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
@@ -24,18 +20,12 @@ namespace BiliCopilot.UI.Controls;
 /// </summary>
 public sealed partial class RootLayout : RootLayoutBase
 {
-    /// <summary>数字徽标显示上限：数值更大时仅显示该紧凑值，完整数值由 tooltip/自动化文本承载.</summary>
-    private const int CompactBadgeValueCap = 99;
-
     /// <summary>与 App.xaml 的 <c>WindowNarrowMinWidth</c> 对齐的兜底值.</summary>
     private const double FallbackNarrowMinWidth = 850d;
 
     private const string NarrowMinWidthResourceKey = "WindowNarrowMinWidth";
 
-    private static readonly string MessagePageKey = typeof(MessagePage).FullName ?? string.Empty;
-
     private readonly AppViewModel _appViewModel;
-    private readonly AccountViewModel _account;
     private readonly double _narrowMinWidth;
     private readonly string _primaryTitle;
     private readonly DispatcherQueue _dispatcher;
@@ -49,11 +39,7 @@ public sealed partial class RootLayout : RootLayoutBase
     private PlayerViewModel? _embeddedViewModel;
     private Rect? _playerLayerBounds;
     private PropertyChangedEventHandler? _navigationChanged;
-    private PropertyChangedEventHandler? _accountChanged;
-    private EventHandler? _accountBoundaryChanged;
     private NavigationViewModel? _navigationOwner;
-    private readonly HashSet<NavigationViewItem> _loadedNavigationItems = new();
-    private readonly Dictionary<NavigationViewItem, NavigationItemState> _navigationItems = new();
     private long _scopeEpoch;
     private bool _stateLoaded;
     private bool _navigationInitialized;
@@ -71,7 +57,6 @@ public sealed partial class RootLayout : RootLayoutBase
     {
         InitializeComponent();
         _appViewModel = this.Get<AppViewModel>();
-        _account = this.Get<AccountViewModel>();
         _primaryTitle = ChromeTitle.Text ?? string.Empty;
         _narrowMinWidth = TryGetNarrowMinWidth();
         _dispatcher = DispatcherQueue;
@@ -432,19 +417,7 @@ public sealed partial class RootLayout : RootLayoutBase
                     if (ReferenceEquals(navigation, ViewModel)) ApplyTitleBarChrome();
                 });
         };
-        _accountChanged = (source, args) =>
-        {
-            if (ReferenceEquals(source, _account) && args.PropertyName == nameof(AccountViewModel.UnreadCount)) QueueScopeUpdate(scope, UpdateMessageBadges);
-        };
-        _accountBoundaryChanged = (source, args) =>
-        {
-            if (ReferenceEquals(source, _account)) QueueScopeUpdate(scope, UpdateMessageBadges);
-        };
         navigation.PropertyChanged += _navigationChanged;
-        _account.PropertyChanged += _accountChanged;
-        _account.AccountChanged += _accountBoundaryChanged;
-        foreach (var item in _loadedNavigationItems.ToArray())
-            if (item.IsLoaded) TrackNavigationItem(item);
         AttachChromeXamlRoot();
         UpdatePlayerLayerLayout();
         var shellWidth = LayoutGrid.Width > 0 ? LayoutGrid.Width : LayoutGrid.ActualWidth;
@@ -453,7 +426,6 @@ public sealed partial class RootLayout : RootLayoutBase
         SetChromeWindowActivation(_chromeWindowActive);
         ApplyTitleBarChrome();
         UpdateChromeRegionOwnership();
-        QueueScopeUpdate(scope, UpdateMessageBadges);
     }
 
     private void OnRootUnloaded(object sender, RoutedEventArgs e)
@@ -467,12 +439,8 @@ public sealed partial class RootLayout : RootLayoutBase
         _chromeRegions.Deactivate(clearNative: false);
         DetachChromeXamlRoot();
         if (_navigationOwner is not null) _navigationOwner.PropertyChanged -= _navigationChanged;
-        _account.PropertyChanged -= _accountChanged;
-        _account.AccountChanged -= _accountBoundaryChanged;
         _navigationOwner = null;
-        _navigationChanged = _accountChanged = null;
-        _accountBoundaryChanged = null;
-        foreach (var item in _navigationItems.Keys.ToArray()) UntrackNavigationItem(item);
+        _navigationChanged = null;
     }
 
     private bool IsCurrentScope(long scope) => _stateLoaded && IsLoaded && scope == _scopeEpoch;
@@ -859,114 +827,6 @@ public sealed partial class RootLayout : RootLayoutBase
                     "根布局外观更新失败 {Operation}，继续后续流程。Presentation={Presentation}", operation, TitleBarPresentation);
             }
         }
-    }
-
-    /// <summary>Keep the shared unread-dot source for every non-message navigation item.</summary>
-    public static bool ShowNonMessageUnread(string? pageKey, bool showUnread)
-        => pageKey != MessagePageKey && showUnread;
-
-    private void OnNavigationItemLoaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not NavigationViewItem item) return;
-        _loadedNavigationItems.Add(item);
-        if (_stateLoaded) TrackNavigationItem(item);
-    }
-
-    private void OnNavigationItemUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not NavigationViewItem item) return;
-        _loadedNavigationItems.Remove(item);
-        UntrackNavigationItem(item);
-    }
-
-    private void TrackNavigationItem(NavigationViewItem item)
-    {
-        if (_navigationItems.ContainsKey(item)) return;
-        var scope = _scopeEpoch;
-        var state = new NavigationItemState();
-        _navigationItems.Add(item, state);
-        state.TagToken = item.RegisterPropertyChangedCallback(FrameworkElement.TagProperty, (sender, property) =>
-        {
-            if (!IsCurrentItem(item, state, scope)) return;
-            BindNavigationItemOwner(item, state, scope);
-            // Run after template x:Bind has applied ShowUnread to the recycled item.
-            QueueScopeUpdate(scope, () => UpdateMessageBadge(item, state, scope));
-        });
-        BindNavigationItemOwner(item, state, scope);
-        QueueScopeUpdate(scope, () => UpdateMessageBadge(item, state, scope));
-    }
-
-    private bool IsCurrentItem(NavigationViewItem item, NavigationItemState state, long scope)
-        => IsCurrentScope(scope) && item.IsLoaded && _navigationItems.TryGetValue(item, out var current) && ReferenceEquals(current, state);
-
-    private void BindNavigationItemOwner(NavigationViewItem item, NavigationItemState state, long scope)
-    {
-        var owner = item.Tag as AppNavigationItemViewModel;
-        if (ReferenceEquals(owner, state.Owner)) return;
-        if (state.Owner is not null) state.Owner.PropertyChanged -= state.OwnerChanged;
-        ClearOwnedBadge(item, state);
-        state.Owner = owner;
-        state.OwnerChanged = null;
-        if (owner is null) return;
-        state.OwnerChanged = (sender, args) =>
-        {
-            if (ReferenceEquals(sender, owner) && args.PropertyName == nameof(AppNavigationItemViewModel.PageKey))
-                QueueScopeUpdate(scope, () =>
-                {
-                    if (ReferenceEquals(state.Owner, owner)) UpdateMessageBadge(item, state, scope);
-                });
-        };
-        owner.PropertyChanged += state.OwnerChanged;
-    }
-
-    private void UntrackNavigationItem(NavigationViewItem item)
-    {
-        if (!_navigationItems.Remove(item, out var state)) return;
-        item.UnregisterPropertyChangedCallback(FrameworkElement.TagProperty, state.TagToken);
-        if (state.Owner is not null) state.Owner.PropertyChanged -= state.OwnerChanged;
-        ClearOwnedBadge(item, state);
-    }
-
-    private static void ClearOwnedBadge(NavigationViewItem item, NavigationItemState state)
-    {
-        if (state.Badge is not { } badge) return;
-        if (ReferenceEquals(item.InfoBadge, badge)) item.InfoBadge = null;
-        ToolTipService.SetToolTip(badge, null);
-        AutomationProperties.SetName(badge, string.Empty);
-        state.Badge = null;
-    }
-
-    private void UpdateMessageBadges()
-    {
-        foreach (var (item, state) in _navigationItems.ToArray()) UpdateMessageBadge(item, state, _scopeEpoch);
-    }
-
-    /// <summary>Revalidate every recycled container; never clear somebody else's badge or item tooltip.</summary>
-    private void UpdateMessageBadge(NavigationViewItem item, NavigationItemState state, long scope)
-    {
-        if (!IsCurrentItem(item, state, scope)) return;
-        if (item.Tag is not AppNavigationItemViewModel owner || !ReferenceEquals(owner, state.Owner)
-            || owner.PageKey != MessagePageKey || _account.UnreadCount <= 0)
-        {
-            ClearOwnedBadge(item, state);
-            return;
-        }
-
-        var count = _account.UnreadCount;
-        var badge = state.Badge ??= new InfoBadge();
-        if (!ReferenceEquals(item.InfoBadge, badge)) item.InfoBadge = badge;
-        badge.Value = Math.Min(count, CompactBadgeValueCap);
-        var fullValue = count.ToString(CultureInfo.InvariantCulture);
-        AutomationProperties.SetName(badge, fullValue);
-        ToolTipService.SetToolTip(badge, fullValue);
-    }
-
-    private sealed class NavigationItemState
-    {
-        internal long TagToken;
-        internal AppNavigationItemViewModel? Owner;
-        internal PropertyChangedEventHandler? OwnerChanged;
-        internal InfoBadge? Badge;
     }
 
     private void OnNavViewItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
