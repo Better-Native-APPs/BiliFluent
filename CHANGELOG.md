@@ -5,17 +5,40 @@
 ## [Unreleased]
 
 ### 新增
+- 直播支持 HDR：可获取 PQ 与 HLG 的 HDR 流，由 mpv（gpu-next）输出；画质菜单分别列出 HDR 与 SDR 档位。自动选择画质时，仅当显示器已开启 HDR 才选用 HDR，两者均可手动切换。
+- 用户主页增加直播入口：主播开播时，个人主页显示“正在直播”，点击即可进入直播间。
 - 安装包内置分发 Microsoft.WindowsAppRuntime.2 (2.6.5) 框架包：安装脚本在部署应用前离线安装该依赖（若系统已存在相同或更高版本则自动跳过），解决此前因缺失运行时导致安装终止的问题。
 - 发布 CI 流水线增加安装器自动化测试。
 
 ### 变更
-- 运行时迁移至 .NET 10，Windows App SDK 升级至 2.6.5，并同步更新其余 NuGet 依赖与 CI Actions。
-- FluentIcons.WinUI 升级至 2.x，CommunityToolkit 系列组件统一至 8.2.251219，更新 Richasy 核心包。
+- 侧栏导航改用 DevWinUI 的 Store 风格；“消息”项的未读提示由数字徽标改为圆点。
+- 播放器的清晰度与字幕列表、直播间的清晰度列表改为单击即切换，此前需要双击。
+- 内容列表改用 WinUI 内置的 ItemsView 与 ItemsRepeater，内容卡片改用原生 Button，封面缩略图改用内置 Image。
+- 设置页改用 CommunityToolkit 的设置控件（SettingsCard / SettingsExpander）；“关于”中的说明与仓库链接收进应用卡片下方默认折叠的展开项。
+- 侧边面板宽度改用 CommunityToolkit 的 PropertySizer 拖动调整（主面板 220–300 px，副面板 180–300 px），显示与隐藏改用普通按钮；直播分区加载失败时以 InfoBar 提示并提供重试。
+- 文字截断、加载提示与空列表改用内置控件：TextBlock 自带省略（仅在文字确实被截断时显示悬浮提示）、ProgressRing 与 ProgressBar、内置的空状态面板。
+- 应用自定义样式改为在 WinUI 默认样式的基础上扩展。
+- 主窗口、图片查看、启动与网页登录四个窗口改为基于 WinUIEx 的 WindowEx，自行设置标题栏与 Mica 背景；三个副窗口使用 WinUI 内置的 TitleBar 控件。
+- 播放器的 mpv 绑定层改为仓库内实现（`src/Libs/BiliFluent.Mpv`，基于 HanumanInstitute.LibMpv），不再依赖 Richasy.MpvKernel。
 - 内置 libmpv 升级至 mpv v0.42.0（shinchiro 20261109 构建）。
+- 依赖注入容器换为 Microsoft.Extensions.DependencyInjection。
+- BiliKernel 改为直接引用仓库内的项目（`src/Libs/BiliKernel`），不再混用 NuGet 包与本地打包的包。
+- 运行时迁移至 .NET 10，Windows App SDK 升级至 2.6.5，FluentIcons.WinUI 升级至 2.x，CommunityToolkit 系列组件统一至 8.2.251219，并同步更新其余 NuGet 依赖与 CI Actions。
+- 启用集中包管理的传递依赖固定（`CentralPackageTransitivePinningEnabled`），间接依赖也按统一声明的版本解析；包源只保留 nuget.org，删除没有项目使用的版本声明与分析器（Flurl.Http、NLog、Polly、SourceLink、StyleCop 及测试相关包）。
 
 ### 移除
+- 移除 DirectX 弹幕渲染器及其依赖的 Danmaku.Core 预览包。弹幕渲染方式保留 mpv 内嵌（默认）与 Win2D 两种；此前选择 DirectX 的设置会自动改用 mpv 内嵌。
 - 移除未被使用的内置 `ffmpeg.exe`（约 102 MiB），安装包体积相应减小。
 - 移除未使用的 CommunityToolkit Labs 依赖（SegmentedControl、Shimmer）与 System.Linq.Async，清理重复的 Windows App SDK 版本声明。
+- 移除不再使用的自定义控件与样式。
+
+### 修复
+- 修复 mpv 内嵌弹幕滚动过快的问题：滚动速度与 Win2D 渲染器保持一致。
+- 修复字幕打开后消失的问题：字幕加载成功后才应用选择，重播、切换清晰度或自动重试后恢复此前选中的字幕。
+- 修复空降助手在“标记开始”之后拖动进度或播放跨过片段边界时，“标记结束”失败、面板无法继续操作的问题。
+- 修复列表所在页面被隐藏后仍不断触发“加载更多”、持续发起请求的问题。
+- 修复视频加载失败后（例如播放地址过期后重播）点击返回，播放器无法关闭、此后任何视频都打不开的问题。
+- 修复离开直播间后立即再次进入时，直播间可能一直停在“准备中”的问题。
 
 ## [2.2611.7.0] - 2026-11-09
 
