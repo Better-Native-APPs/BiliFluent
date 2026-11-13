@@ -44,7 +44,7 @@ Invoke-Case 'shared validation region byte-identical in both scripts' {
 $script:NativePackageDeployment = ${function:Invoke-PackageDeployment}
 $untrustedRootMessage = (New-Object System.ComponentModel.Win32Exception ([int]-2146762487)).Message
 $publisherId = Get-PublisherId 'CN=BiliFluent'
-$fullName = 'BiliFluent_2.2611.7.0_x64__' + $publisherId
+$fullName = 'BiliFluent_2.2611.8.0_x64__' + $publisherId
 $familyName = 'BiliFluent_' + $publisherId
 $fixtureThumbprint = '0123456789ABCDEF0123456789ABCDEF01234567'
 $msixSignature = [Text.Encoding]::ASCII.GetBytes('PKCX-INERT-FIXTURE-NOT-A-SIGNATURE')
@@ -99,7 +99,7 @@ function Invoke-PackageDeployment([string]$PackagePath, [string[]]$DependencyPat
     $script:M.DeployArgs = @{ Path = $PackagePath; Dependencies = @($DependencyPaths) }
     if ($script:M.DeployThrow) { throw (New-Object System.Exception $script:M.DeployThrow) }
     foreach ($old in @($script:M.Packages | Where-Object { $_.Name -ceq 'BiliFluent' })) { $script:M.Packages.Remove($old) }
-    $record = New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.7.0' $familyName $fullName 'Developer' $false 'X64'
+    $record = New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.8.0' $familyName $fullName 'Developer' $false 'X64'
     [void]$script:M.Packages.Add($record)
 }
 # 核心流程共用的惰性夹具
@@ -132,8 +132,8 @@ function New-Fixture([hashtable]$Options) {
     [void][IO.Directory]::CreateDirectory((Join-Path $dir 'payload'))
     [IO.File]::Copy($installSource, (Join-Path $dir 'Install.ps1'))
     [IO.File]::Copy($trustSource, (Join-Path $dir 'Trust-Certificate.ps1'))
-    $id = @{ Name = 'BiliFluent'; Publisher = 'CN=BiliFluent'; Version = '2.2611.7.0'; Arch = 'x64'; AppId = 'App'; MinOs = '10.0.19041.0' }
-    $msixPath = Join-Path $dir 'payload\BiliFluent_2.2611.7.0_x64.msix'
+    $id = @{ Name = 'BiliFluent'; Publisher = 'CN=BiliFluent'; Version = '2.2611.8.0'; Arch = 'x64'; AppId = 'App'; MinOs = '10.0.19041.0' }
+    $msixPath = Join-Path $dir 'payload\BiliFluent_2.2611.8.0_x64.msix'
     $withDependency = $Options.ContainsKey('Dependency') -and $Options.Dependency
     Write-InertZip $msixPath (Get-AppxXml $id -WithDependency:$withDependency) $msixSignature
     $cerPath = Join-Path $dir 'payload\BiliFluent.cer'
@@ -142,7 +142,7 @@ function New-Fixture([hashtable]$Options) {
     $script:M.CerBytes = $cerBytes
     $manifest = [ordered]@{
         schemaVersion = 1
-        package       = [ordered]@{ relativePath = 'payload\BiliFluent_2.2611.7.0_x64.msix'; sha256 = (Get-FileSha $msixPath); name = 'BiliFluent'; publisher = 'CN=BiliFluent'; version = '2.2611.7.0'; architecture = 'x64'
+        package       = [ordered]@{ relativePath = 'payload\BiliFluent_2.2611.8.0_x64.msix'; sha256 = (Get-FileSha $msixPath); name = 'BiliFluent'; publisher = 'CN=BiliFluent'; version = '2.2611.8.0'; architecture = 'x64'
             packageFamilyName = $familyName; packageFullName = $fullName; applicationId = 'App'; minOsVersion = '10.0.19041.0' }
         certificate   = [ordered]@{ relativePath = 'payload\BiliFluent.cer'; sha256 = (Get-FileSha $cerPath); derSha256 = (Get-FileSha $cerPath); thumbprint = $fixtureThumbprint; subject = 'CN=BiliFluent'
             notBeforeUtc = '2026-01-01T00:00:00Z'; notAfterUtc = '2027-12-31T00:00:00Z'; codeSigningEku = '1.3.6.1.5.5.7.3.3'; digitalSignature = $true; isCertificateAuthority = $false }
@@ -183,14 +183,14 @@ Invoke-Case 'valid inert fixture default precheck passes without any writes' {
 }
 Invoke-Case 'MSIX digest mismatch blocks before trust/deploy' {
     Reset-Mock
-    $dir = New-Fixture @{ After = { param($d) $p = Join-Path $d 'payload\BiliFluent_2.2611.7.0_x64.msix'; $b = [IO.File]::ReadAllBytes($p); $b[$b.Length - 1] = $b[$b.Length - 1] -bxor 1; [IO.File]::WriteAllBytes($p, $b) } }
+    $dir = New-Fixture @{ After = { param($d) $p = Join-Path $d 'payload\BiliFluent_2.2611.8.0_x64.msix'; $b = [IO.File]::ReadAllBytes($p); $b[$b.Length - 1] = $b[$b.Length - 1] -bxor 1; [IO.File]::WriteAllBytes($p, $b) } }
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match 'MSIX SHA-256 不匹配') $r.failure
     Assert-NoChanges $r
 }
 Invoke-Case 'same version + identical signature reports AlreadyPresent (no trust/deploy, even with -Install)' {
     Reset-Mock; $dir = New-Fixture @{}
-    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.7.0' $familyName $fullName 'Developer' $false 'X64'))
+    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.8.0' $familyName $fullName 'Developer' $false 'X64'))
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'AlreadyPresent' -and $r.phases.AlreadyPresent.status -ceq 'Yes') ('outcome=' + $r.outcome + ' ' + $r.failure)
     Assert-NoChanges $r

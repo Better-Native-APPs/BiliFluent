@@ -12,7 +12,7 @@ BiliFluent 是采用 Fluent UI 与 WinUI 3 原生控件、专为 Windows 优化�
 
 ### 便捷安装
 
-1. 从 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases) 下载 `BiliFluent-2.2611.7.0.zip` 并完整解压。
+1. 从 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases) 下载 `BiliFluent-2.2611.8.0.zip` 并完整解压。
 2. 双击解压目录中的 `安装 BiliFluent.cmd`。
 3. 弹出 UAC 提权提示时确认允许。脚本会自动将公钥证书导入 `LocalMachine\TrustedPeople` 并安装应用。
 4. 安装完成后，在「开始」菜单启动 **BiliFluent**。

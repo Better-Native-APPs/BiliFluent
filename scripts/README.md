@@ -56,7 +56,7 @@ Copy-Item .\artifacts\visor\BiliCopilot.Visor.exe .\src\Desktop\BiliCopilot.UI\A
 .\scripts\Build-Release.ps1 -CertificateThumbprint <证书指纹>
 ```
 
-产物生成至 `artifacts/release/BiliFluent_2.2611.7.0_x64.msix`。包名固定为 `BiliFluent`，发布者主体必须精确为 `CN=BiliFluent`。
+产物生成至 `artifacts/release/BiliFluent_2.2611.8.0_x64.msix`。包名固定为 `BiliFluent`，发布者主体必须精确为 `CN=BiliFluent`。
 
 正式签名证书指纹为：`6727300457DD924DAD363FDD27C5166E0E62CF32`。本地个人调试开发可使用 PowerShell 创建自签名测试证书进行签名：
 
@@ -77,16 +77,16 @@ $cert = New-SelfSignedCertificate -Type Custom `
 .\scripts\local-release\Make-Delivery.ps1 -CertificateThumbprint <证书指纹>
 ```
 
-脚本将自动计算包哈希、提取证书公钥、生成 `release-artifacts.json` 清单并压缩为可供用户直接下载的发布包 `artifacts/release/BiliFluent-2.2611.7.0.zip`。解压目录结构如下：
+脚本将自动计算包哈希、提取证书公钥、生成 `release-artifacts.json` 清单并压缩为可供用户直接下载的发布包 `artifacts/release/BiliFluent-2.2611.8.0.zip`。解压目录结构如下：
 
 ```text
-BiliFluent-2.2611.7.0/
+BiliFluent-2.2611.8.0/
   安装 BiliFluent.cmd          # 一键安装脚本（.cmd，UAC 提权信任证书并部署）
   Install.ps1                  # PowerShell 安装与预检主脚本
   Trust-Certificate.ps1        # 证书导入辅助脚本（仅导入 LocalMachine\TrustedPeople）
   release-artifacts.json       # 发布包文件清单与 SHA-256 签名摘要
   payload/
-    BiliFluent_2.2611.7.0_x64.msix  # 已签名的应用主包
+    BiliFluent_2.2611.8.0_x64.msix  # 已签名的应用主包
     BiliFluent.cer                  # 发布者公钥证书（CN=BiliFluent）
 ```
 
@@ -102,7 +102,7 @@ BiliFluent-2.2611.7.0/
 - **预发布自动构建（Pre-Release）**：
   - 每次代码推送到 `main` 分支时，GitHub Actions 自动执行完整编译、下载核验原生资产、以 NativeAOT 构建 Visor、签名 MSIX 并生成交付 ZIP，自动发布为带有预发布标记的 Pre-Release。
 - **正式版本发布（Release）**：
-  - 当在仓库推送符合版本格式的 Git Tag（如 `v2.2611.7.0`）时，流水线自动构建、签名并发布正式的 GitHub Release。
+  - 当在仓库推送符合版本格式的 Git Tag（如 `v2.2611.8.0`）时，流水线自动构建、签名并发布正式的 GitHub Release。
 - **密钥管理（Secrets）**：
   - 代码签名私钥由仓库 Actions Secrets 保护：
     - `SIGNING_PFX_BASE64`：PFX 证书二进制的 Base64 编码字符串。

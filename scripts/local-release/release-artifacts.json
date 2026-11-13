@@ -1,14 +1,14 @@
 ﻿{
     "schemaVersion":  1,
     "package":  {
-                    "relativePath":  "payload/BiliFluent_2.2611.7.0_x64.msix",
+                    "relativePath":  "payload/BiliFluent_2.2611.8.0_x64.msix",
                     "sha256":  "__PENDING_PACKAGE_SHA256__",
                     "name":  "BiliFluent",
                     "publisher":  "CN=BiliFluent",
-                    "version":  "2.2611.7.0",
+                    "version":  "2.2611.8.0",
                     "architecture":  "x64",
                     "packageFamilyName":  "BiliFluent_7rrwb2e69v8er",
-                    "packageFullName":  "BiliFluent_2.2611.7.0_x64__7rrwb2e69v8er",
+                    "packageFullName":  "BiliFluent_2.2611.8.0_x64__7rrwb2e69v8er",
                     "applicationId":  "App",
                     "minOsVersion":  "10.0.19041.0"
                 },

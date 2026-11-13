@@ -23,7 +23,7 @@
         "sha256": { "$ref": "#/$defs/sha256" },
         "name": { "const": "BiliFluent" },
         "publisher": { "const": "CN=BiliFluent" },
-        "version": { "const": "2.2611.7.0" },
+        "version": { "const": "2.2611.8.0" },
         "architecture": { "const": "x64" },
         "packageFamilyName": { "type": "string", "pattern": "^BiliFluent_[0-9a-hjkmnp-tv-z]{13}$" },
         "packageFullName": { "type": "string", "pattern": "^BiliFluent_2\\.2611\\.7\\.0_x64__[0-9a-hjkmnp-tv-z]{13}$" },

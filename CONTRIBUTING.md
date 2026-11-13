@@ -7,7 +7,7 @@
 - **`dev` 分支**：日常开发分支。所有新功能开发、性能优化与缺陷修复均提交至 `dev` 分支（或在个人 Fork 中以 `dev` 为基线创建特性分支后向 `dev` 发起 PR）。
 - **`main` 分支**：受保护的发布主分支。仅通过审查后的 Pull Request 从 `dev` 分支合并。
 - **预发布（Pre-Release）**：向 `main` 分支推送提交时，GitHub Actions 自动构建并发布已签名的预发布包（`v<version>-pre.<run_number>`）。
-- **正式发布（Release）**：在 `main` 分支创建并推送符合版本格式的 Git Tag（`v<version>`，例如 `v2.2611.7.0`），触发自动构建、签名并发布正式 GitHub Release。
+- **正式发布（Release）**：在 `main` 分支创建并推送符合版本格式的 Git Tag（`v<version>`，例如 `v2.2611.8.0`），触发自动构建、签名并发布正式 GitHub Release。
 
 ## Git 提交规范
 

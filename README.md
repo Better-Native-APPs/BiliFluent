@@ -49,9 +49,9 @@
 
 ## 安装
 
-当前版本：`2.2611.7.0`。支持 Windows 10（Build 19041 及以上）与 Windows 11（x64）。
+当前版本：`2.2611.8.0`。支持 Windows 10（Build 19041 及以上）与 Windows 11（x64）。
 
-1. 从 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases) 下载 `BiliFluent-2.2611.7.0.zip` 并完整解压。
+1. 从 [BiliFluent Releases](https://github.com/Better-Native-APPs/BiliFluent/releases) 下载 `BiliFluent-2.2611.8.0.zip` 并完整解压。
 2. 双击解压目录中的 `安装 BiliFluent.cmd`。
 3. 在 UAC 提示窗口中确认允许。脚本会自动将公钥证书导入 `LocalMachine\TrustedPeople` 并安装应用。
 

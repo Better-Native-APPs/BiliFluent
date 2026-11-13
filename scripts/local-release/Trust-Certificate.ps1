@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 $script:ReleaseFixed = @{
     Name                 = 'BiliFluent'
     Publisher            = 'CN=BiliFluent'
-    Version              = '2.2611.7.0'
+    Version              = '2.2611.8.0'
     Architecture         = 'x64'
     CodeSigningEku       = '1.3.6.1.5.5.7.3.3'
     ManifestFileName     = 'release-artifacts.json'
