@@ -33,6 +33,9 @@ public partial class App : Application
 
     public new void Exit() => _ = RequestExitAsync();
 
+    /// <summary>Debug builds record interop failures raised on the UI thread; release builds do nothing.</summary>
+    partial void InitializeFirstChanceTrace();
+
     /// <summary>False never forces exit. Later explicit requests may retry terminal work, never playback release.</summary>
     public Task<bool> RequestExitAsync()
     {
@@ -126,6 +129,7 @@ public partial class App : Application
         InitializeComponent();
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         UnhandledException += OnUnhandledException;
+        InitializeFirstChanceTrace();
         _notificationManager = AppNotificationManager.Default;
         _notificationManager.NotificationInvoked += OnAppNotificationInvoked;
         _notificationManager.Register();
