@@ -8,7 +8,9 @@ namespace BiliCopilot.UI.Resolvers;
 
 /// <summary>
 /// Debug-only reproduction aid, active only when BILIFLUENT_DEBUG_FAIL_REPLAY is 1.
-/// The second source request of one resolver (its first replay/reload) gets media that cannot load.
+/// Every source request of one resolver after its first (replay, reload and the automatic retry
+/// that follows a failed load) gets media that cannot load. A resolver serves one media, so other
+/// videos are unaffected.
 /// </summary>
 internal sealed class PlaybackFailureInjection
 {
@@ -19,7 +21,7 @@ internal sealed class PlaybackFailureInjection
 
     internal bool TryReplace(ref string location, MpvPlayOptions options)
     {
-        if (!Enabled || ++_requests != 2) return false;
+        if (!Enabled || ++_requests < 2) return false;
         location = UnplayableLocation;
         options.AudioTracks = null;
         // The injected source carries no cookie or request header of the real stream.
