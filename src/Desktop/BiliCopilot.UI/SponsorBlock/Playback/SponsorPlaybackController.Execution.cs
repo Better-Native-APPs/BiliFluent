@@ -60,6 +60,7 @@ internal sealed partial class SponsorPlaybackController
         {
             CloseAdmission(RetirementReason.InvalidSnapshot);
             await RestoreBothAsync();
+            RecordWorkFailure(readOnly: false);
             _failure = "Sponsor claim capacity reached; explicit reconciliation/new binding required.";
             Publish();
             return;

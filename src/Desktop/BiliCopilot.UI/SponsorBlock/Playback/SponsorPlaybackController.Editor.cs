@@ -199,7 +199,13 @@ internal sealed partial class SponsorPlaybackController
             CheckEditorFrame(reservation);
         }
         catch (EditorAdmissionException ex) { outcome = ex.Outcome; reason = ex.Message; }
-        catch (Exception ex) { outcome = SponsorEditorOutcome.NeedsReconciliation; reason = ex.Message; _failure = reason; }
+        catch (Exception ex)
+        {
+            outcome = SponsorEditorOutcome.NeedsReconciliation;
+            reason = ex.Message;
+            RecordWorkFailure(IsReadFailure(ex));
+            _failure = reason;
+        }
         finally { _intents.Remove(reservation.Ticket.IntentId); }
         RequestObservation();
         Publish();
@@ -263,6 +269,7 @@ internal sealed partial class SponsorPlaybackController
         catch (Exception ex)
         {
             outcome = SponsorEditorOutcome.NeedsReconciliation;
+            RecordWorkFailure(IsReadFailure(ex));
             reason = _failure = ex.Message;
             if (_mute is { } lease && lease.Owner == reservation.Owner && lease.Token == reservation.LeaseToken)
                 _mute = lease with
@@ -372,6 +379,7 @@ internal sealed partial class SponsorPlaybackController
         session.Stage = PreviewStage.Recovery;
         session.ProbeDue = null;
         session.Status = session.Status with { Phase = SponsorPreviewPhase.NeedsReconciliation, Reason = reason };
+        RecordWorkFailure(readOnly: false);
         _failure = reason;
         CancelWake();
     }

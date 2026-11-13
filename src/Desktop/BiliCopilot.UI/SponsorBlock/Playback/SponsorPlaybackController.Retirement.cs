@@ -25,14 +25,23 @@ internal sealed partial class SponsorPlaybackController
         && expected.Generation == _generation && _generation > 0 && _issuer is not null
         && _sealed && _retiring && !_sponsorOpen && !_running && !_observationQueued
         && _jobs.Count == 0 && _intents.Count == 0 && _request is null && _wake is null
-        && (_actualCompletion is null || _actualCompletion.IsCompletedSuccessfully)
-        && _failure is null && (_actual is null || _actual.NativeGeneration == _generation)
+        && (_actual is null || _actual.NativeGeneration == _generation)
+        && (NativeRetirementHasSuccessfulWork() || NativeRetirementHasOnlyReadFailure())
+        && _mute is null && _rate is null && _physical is null && _preview is null
+        && _rateClaims.All(claim => claim.Phase == PlaybackLeasePhase.Confirmed)
+        && _seekClaims.All(claim => claim.Phase is SponsorOperationPhase.Confirmed or SponsorOperationPhase.Reconciled);
+
+    private bool NativeRetirementHasSuccessfulWork() => (_actualCompletion is null || _actualCompletion.IsCompletedSuccessfully)
+        && _failure is null
         && (_operation is null || _operation.Generation == _generation && _operation.Failure is null
             && (_operation.Phase is SponsorOperationPhase.Confirmed or SponsorOperationPhase.Reconciled
                 || _operation.Kind == NativeOperationKind.Read && _operation.Phase == SponsorOperationPhase.SucceededUnobserved
                 || _operation.Purpose == NativeAdmissionPurpose.User && _operation.Kind == NativeOperationKind.SetPaused
-                    && _operation.Phase == SponsorOperationPhase.SucceededUnobserved))
-        && _mute is null && _rate is null && _physical is null && _preview is null
-        && _rateClaims.All(claim => claim.Phase == PlaybackLeasePhase.Confirmed)
-        && _seekClaims.All(claim => claim.Phase is SponsorOperationPhase.Confirmed or SponsorOperationPhase.Reconciled);
+                    && _operation.Phase == SponsorOperationPhase.SucceededUnobserved));
+
+    private bool NativeRetirementHasOnlyReadFailure() => !_nonReadDispatched && _readFailureRecorded
+        && !_nonReadFailureRecorded && _failure is not null && _actualCompletion is { IsCompleted: true }
+        && _operation is { Kind: NativeOperationKind.Read } read && read.Generation == _generation
+        && (read.Phase == SponsorOperationPhase.Failed && read.Failure is not null
+            || read.Phase == SponsorOperationPhase.SucceededUnobserved && read.Failure is null);
 }

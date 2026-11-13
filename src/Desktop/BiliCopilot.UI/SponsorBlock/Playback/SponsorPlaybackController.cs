@@ -93,7 +93,19 @@ internal sealed partial class SponsorPlaybackController
     private SponsorOperation? _operation;
     private Task? _actualCompletion;
     private string? _failure;
+    // Only Bind resets provenance; a later Read cannot hide an earlier mutation or unclassified fault.
+    private bool _nonReadDispatched;
+    private bool _readFailureRecorded;
+    private bool _nonReadFailureRecorded;
+    private WorkFailureSource? _activeWorkFailure;
     private enum ObservedWorkFailureKind { Observation, Lane, Wake, WakeCallback, Subscriber }
+    private sealed class WorkFailureSource
+    {
+        internal Exception? NativeException { get; set; }
+        internal long Generation { get; set; }
+        internal NativeOperationKind? Kind { get; set; }
+        internal bool ReadOnlyFailure { get; set; }
+    }
     private PlaybackAppliedEffect? _applied;
     private PlaybackRateReceipt? _rateReceipt;
     private long _receiptId;
@@ -159,6 +171,7 @@ internal sealed partial class SponsorPlaybackController
         _rateReceipt = null;
         _appliedId = _rateReceiptId = 0;
         _failure = null;
+        _nonReadDispatched = _readFailureRecorded = _nonReadFailureRecorded = false;
         _rateClaims = [];
         _cooldowns = [];
         _seekClaims = [];
@@ -255,6 +268,7 @@ internal sealed partial class SponsorPlaybackController
         _observationQueued = true;
         var owner = _issuer;
         var version = ++_observationWorkVersion;
+        var failureSource = new WorkFailureSource();
         var task = Enqueue(async () =>
         {
             _observationQueued = false;
@@ -273,10 +287,10 @@ internal sealed partial class SponsorPlaybackController
                     if (CanUseBinding && !_observationQueued) QueueObservation();
                 }
             }
-        });
+        }, failureSource);
         // An injected synchronous/reentrant post may already have scheduled the follow-up.
         if (version == _observationWorkVersion) _observationTask = task;
-        Forget(task, owner, ObservedWorkFailureKind.Observation);
+        Forget(task, owner, ObservedWorkFailureKind.Observation, failureSource);
     }
 
     // A bounded join for N4 capture/UI callers. It joins a reread, not a waiter-cancellable native task.
@@ -545,21 +559,31 @@ internal sealed partial class SponsorPlaybackController
         : new(_owner, _input.Policy.Revision, _observationRevision, _visit, _muteEpoch, _rateEpoch);
 
     private Task Enqueue(Func<Task> action) => Enqueue<object?>(async () => { await action(); return null; });
-    private Task<T> Enqueue<T>(Func<Task<T>> action)
+    private Task<T> Enqueue<T>(Func<Task<T>> action, WorkFailureSource? failureSource = null)
     {
         VerifyAccess();
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = failureSource ?? new WorkFailureSource();
         _jobs.Enqueue(async () =>
         {
+            _activeWorkFailure = source;
             try { completion.SetResult(await action()); }
             catch (Exception ex)
             {
+                source.ReadOnlyFailure = IsReadFailure(ex);
+                RecordWorkFailure(source.ReadOnlyFailure);
                 if (_requestResult is { Phase: SponsorRequestPhase.Pending } pending)
                 {
                     ConsumeRequest(pending.Id);
                     ResolveRequest(pending.Id, SponsorRequestPhase.Failed, "PlaybackRequestFailed");
                 }
                 _failure = ex.Message; Publish(); completion.SetException(ex);
+            }
+            finally
+            {
+                // Observers retain the frozen source, not exception payloads or the current operation.
+                source.NativeException = null;
+                _activeWorkFailure = null;
             }
         });
         if (!_running)
@@ -595,9 +619,14 @@ internal sealed partial class SponsorPlaybackController
             || purpose == NativeAdmissionPurpose.Sponsor && (!_sponsorOpen || _preview is not null || stamp != CurrentStamp || _intents.Count != 0))
             throw new InvalidOperationException("Native dispatch lost its complete binding/stamp.");
         var id = ++_operationId;
+        var generation = _generation;
+        // Dispatch outside a lane job has no provenance and is classified as a non-Read fault below.
+        var failureSource = _activeWorkFailure;
+        failureSource?.NativeException = null;
+        if (kind != NativeOperationKind.Read) _nonReadDispatched = true;
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         _actualCompletion = completion.Task;
-        _operation = new(id, _generation, kind, purpose, stamp, SponsorOperationPhase.Pending);
+        _operation = new(id, generation, kind, purpose, stamp, SponsorOperationPhase.Pending);
         // Claims and immutable leases are installed by the caller before entering this method.
         try
         {
@@ -612,6 +641,13 @@ internal sealed partial class SponsorPlaybackController
         catch (Exception ex)
         {
             VerifyAccess();
+            if (failureSource is not null)
+            {
+                failureSource.NativeException = ex;
+                failureSource.Generation = generation;
+                failureSource.Kind = kind;
+            }
+            RecordWorkFailure(IsReadFailure(ex));
             _operation = _operation! with { Phase = ex is OperationCanceledException
                 ? SponsorOperationPhase.Unknown : SponsorOperationPhase.Failed, Failure = ex.Message };
             completion.SetException(ex);
@@ -679,7 +715,8 @@ internal sealed partial class SponsorPlaybackController
         catch (Exception) { RecordObservedWorkFailure(owner, ObservedWorkFailureKind.Subscriber); }
     }
 
-    private async void Forget(Task task, NativeAdmission.Issuer? owner, ObservedWorkFailureKind kind)
+    private async void Forget(Task task, NativeAdmission.Issuer? owner, ObservedWorkFailureKind kind,
+        WorkFailureSource? failureSource = null)
     {
         // Keep observing the actual task, including wake work that runs outside the native lane.
         // Expected wake cancellation is handled by WakeAsync's source-specific filter above.
@@ -689,14 +726,25 @@ internal sealed partial class SponsorPlaybackController
             await task;
             #pragma warning restore VSTHRD003
         }
-        catch (Exception) { RecordObservedWorkFailure(owner, kind); }
+        catch (Exception) { RecordObservedWorkFailure(owner, kind, failureSource); }
     }
 
-    private void RecordObservedWorkFailure(NativeAdmission.Issuer? owner, ObservedWorkFailureKind kind)
+    private bool IsReadFailure(Exception error) => _activeWorkFailure is { Kind: NativeOperationKind.Read } source
+        && source.Generation == _generation && ReferenceEquals(source.NativeException, error);
+
+    private void RecordWorkFailure(bool readOnly)
     {
-        if (!_sealed && ReferenceEquals(owner, _issuer))
+        if (readOnly) _readFailureRecorded = true;
+        else _nonReadFailureRecorded = true;
+    }
+
+    private void RecordObservedWorkFailure(NativeAdmission.Issuer? owner, ObservedWorkFailureKind kind,
+        WorkFailureSource? failureSource = null)
+    {
+        if (ReferenceEquals(owner, _issuer))
         {
-            _failure ??= kind switch
+            RecordWorkFailure(failureSource is { ReadOnlyFailure: true } && failureSource.Generation == _generation);
+            if (!_sealed) _failure ??= kind switch
             {
                 ObservedWorkFailureKind.Observation => "ObservationWorkFailure",
                 ObservedWorkFailureKind.Lane => "NativeLaneFailure",
