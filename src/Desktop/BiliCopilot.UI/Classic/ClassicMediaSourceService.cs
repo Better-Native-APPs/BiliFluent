@@ -254,11 +254,12 @@ public sealed class ClassicMediaSourceService
                 candidates = candidates.Where(format => format.Quality == item.PreferQuality);
             if (item.PreferLiveEotf.HasValue)
                 candidates = candidates.Where(format => format.Eotf == item.PreferLiveEotf.Value);
-            // Within one tier an automatic choice follows the display: HDR only where HDR output is active.
-            // An explicit SDR/PQ/HLG choice was already applied by the filter above.
+            // An automatic choice follows the display before the tier: HDR only where HDR output is active,
+            // even when the other kind is offered at a higher tier. The other kind is used only when
+            // nothing else is playable. An explicit SDR/PQ/HLG choice was already applied by the filter above.
             var preferHdr = !item.PreferLiveEotf.HasValue && _preferLiveHdr();
-            return candidates.OrderByDescending(format => format.Quality)
-                .ThenByDescending(format => format.IsHdr == preferHdr).ThenBy(format => format.Eotf).FirstOrDefault()
+            return candidates.OrderByDescending(format => format.IsHdr == preferHdr)
+                .ThenByDescending(format => format.Quality).ThenBy(format => format.Eotf).FirstOrDefault()
                 ?? throw new ClassicSourceException("Requested live quality or matching stream is unavailable.");
         }
 
