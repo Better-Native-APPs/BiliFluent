@@ -15,6 +15,9 @@ namespace BiliCopilot.UI.Live.Hosting;
 /// </summary>
 public sealed class LiveIslandSurface
 {
+    private static readonly TimeSpan ReadyPollInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(10);
+
     private WindowEx? _owner;
     private nint _handle;
     private DesktopWindowXamlSource? _source;
@@ -132,7 +135,23 @@ public sealed class LiveIslandSurface
         await using var registration = token.Register(() => _ready.TrySetCanceled(token));
         UpdateBounds();
         // T3-01: Layout events complete _ready while the dispatcher is alive; this wait does not abandon backend/native ownership.
+        // Visibility, opacity and window state can make the layout usable without raising another
+        // layout event, so the wait also re-checks on a timer and gives up after a bounded time
+        // instead of leaving the room on its initial "preparing" state forever.
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         #pragma warning disable VSTHRD003
+        while (!_ready.Task.IsCompleted)
+        {
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) > ReadyTimeout)
+            {
+                _ready.TrySetException(new TimeoutException("Live video layout did not become ready."));
+                break;
+            }
+
+            await Task.WhenAny(_ready.Task, Task.Delay(ReadyPollInterval, CancellationToken.None));
+            SafeUpdate();
+        }
+
         await _ready.Task; // Only a layout-event waiter; no backend/native task is abandoned.
         #pragma warning restore VSTHRD003
         token.ThrowIfCancellationRequested();
