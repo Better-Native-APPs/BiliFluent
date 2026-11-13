@@ -210,7 +210,7 @@ public sealed partial class PlayerViewModel
         try
         {
             if (Window is MainPlayerHost host) await host.PrepareForCloseAsync();
-            await AwaitSponsorApplicationCleanupAsync();
+            await TrySponsorApplicationCleanupAsync();
             RetireSponsorBinding(RetirementReason.Closing);
             var media = _mediaCancellation;
             CancelOpeningForClose(cancelOpening);
