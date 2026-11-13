@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Input;
 using System.ComponentModel;
 
 namespace BiliCopilot.UI.Controls.Player.StoreIsland;
@@ -22,6 +23,9 @@ public sealed partial class IslandFormatButton : PlayerControlBase
     private bool _loaded;
     private bool _synchronizing;
     private long _epoch;
+    private SourceItemViewModel? _activating;
+    private SourceItemViewModel? _tapped;
+    private long _tappedAt;
 
     public bool IsActive
     {
@@ -120,14 +124,34 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         Synchronize();
     }
 
-    private async void OnFormatItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    private void OnFormatItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
     {
         // ItemInvoked is user activation. Select/Deselect/ItemsSource never dispatch commands.
+        // The second click of a double click arrives here after the first one was already
+        // handled as a tap; it is the same activation, not another one.
+        if (IslandPopupClaims.IsDoubleTapEcho(args.InvokedItem, _tapped, _tappedAt)) return;
+        Activate(args.InvokedItem);
+    }
+
+    private void OnFormatItemTapped(object sender, TappedRoutedEventArgs args)
+    {
+        // While the list tracks a selection, ItemsView raises ItemInvoked only for a double tap
+        // or Enter. A single click or tap on an item activates it here.
+        var item = (sender as FrameworkElement)?.Tag;
+        _tapped = item as SourceItemViewModel;
+        _tappedAt = Environment.TickCount64;
+        Activate(item);
+    }
+
+    private async void Activate(object? item)
+    {
         if (_synchronizing || !CanInteract || !_popups.IsCurrent(_popups.Get(FormatFlyout), ViewModel, _epoch)
-            || !ReferenceEquals(sender.ItemsSource, ViewModel.Sources)
-            || args.InvokedItem is not SourceItemViewModel { IsEnabled: true } format
-            || !ViewModel.Sources.Any(item => ReferenceEquals(item, format))
-            || ReferenceEquals(format, ViewModel.SelectedSource)) return;
+            || !ReferenceEquals(FormatView.ItemsSource, ViewModel.Sources)
+            || item is not SourceItemViewModel { IsEnabled: true } format
+            || !ViewModel.Sources.Any(source => ReferenceEquals(source, format))
+            || ReferenceEquals(format, ViewModel.SelectedSource)
+            || ReferenceEquals(format, _activating)) return;
+        _activating = format;
         try
         {
             await format.ActiveCommand.ExecuteAsync(null);
@@ -135,6 +159,10 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Island format selection failed: {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_activating, format)) _activating = null;
         }
     }
 }

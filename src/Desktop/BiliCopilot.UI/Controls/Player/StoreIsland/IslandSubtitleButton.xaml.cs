@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Xaml.Input;
 using System.ComponentModel;
 
 namespace BiliCopilot.UI.Controls.Player.StoreIsland;
@@ -22,6 +23,9 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
     private bool _loaded;
     private bool _synchronizing;
     private long _epoch;
+    private SubtitleItemViewModel? _activating;
+    private SubtitleItemViewModel? _tapped;
+    private long _tappedAt;
 
     public bool IsActive
     {
@@ -119,13 +123,33 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
         Synchronize();
     }
 
-    private async void OnSubtitleItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    private void OnSubtitleItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    {
+        // The second click of a double click arrives here after the first one was already
+        // handled as a tap; activating again would switch the chosen track off.
+        if (IslandPopupClaims.IsDoubleTapEcho(args.InvokedItem, _tapped, _tappedAt)) return;
+        Activate(args.InvokedItem);
+    }
+
+    private void OnSubtitleItemTapped(object sender, TappedRoutedEventArgs args)
+    {
+        // While the list tracks a selection, ItemsView raises ItemInvoked only for a double tap
+        // or Enter. A single click or tap on an item activates it here.
+        var item = (sender as FrameworkElement)?.Tag;
+        _tapped = item as SubtitleItemViewModel;
+        _tappedAt = Environment.TickCount64;
+        Activate(item);
+    }
+
+    private async void Activate(object? item)
     {
         var claim = _popups.Get(SubtitleFlyout);
         if (_synchronizing || !CanInteract || !_popups.IsCurrent(claim, ViewModel, _epoch)
-            || !ReferenceEquals(sender.ItemsSource, ViewModel.Subtitles)
-            || args.InvokedItem is not SubtitleItemViewModel meta
-            || !ViewModel.Subtitles.Any(item => ReferenceEquals(item, meta))) return;
+            || !ReferenceEquals(SubtitleView.ItemsSource, ViewModel.Subtitles)
+            || item is not SubtitleItemViewModel meta
+            || !ViewModel.Subtitles.Any(subtitle => ReferenceEquals(subtitle, meta))
+            || ReferenceEquals(meta, _activating)) return;
+        _activating = meta;
         try
         {
             // Only explicit activation toggles an already selected track off.
@@ -135,6 +159,10 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Island subtitle selection failed: {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_activating, meta)) _activating = null;
         }
     }
 }

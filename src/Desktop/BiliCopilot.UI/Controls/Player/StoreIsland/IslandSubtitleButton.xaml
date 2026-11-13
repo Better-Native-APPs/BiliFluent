@@ -59,7 +59,11 @@
                             <ItemsView.ItemTemplate>
                                 <DataTemplate x:DataType="items:SubtitleItemViewModel">
                                     <ItemContainer Style="{StaticResource AppItemContainerStyle}">
-                                        <Grid Padding="12,8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                        <Grid
+                                            Padding="12,8"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            Tag="{x:Bind}"
+                                            Tapped="OnSubtitleItemTapped">
                                             <base:TrimTextBlock MaxLines="1" Text="{x:Bind Name}" />
                                         </Grid>
                                     </ItemContainer>

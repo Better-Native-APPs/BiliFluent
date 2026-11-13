@@ -208,6 +208,14 @@ internal sealed class IslandPopupClaims
         else if (popup is TeachingTip tip) tip.IsOpen = false;
     }
 
+    /// <summary>
+    /// Whether an ItemInvoked for <paramref name="item"/> is the second click of a double click
+    /// whose first click was already handled as a tap on the same item.
+    /// </summary>
+    internal static bool IsDoubleTapEcho(object? item, object? tapped, long tappedAt)
+        => item is not null && ReferenceEquals(item, tapped)
+            && Environment.TickCount64 - tappedAt <= PInvoke.GetDoubleClickTime();
+
     private void CompleteClose(Claim claim, Action<Claim>? closed)
     {
         if (ReferenceEquals(_closing.GetValueOrDefault(claim.Popup), claim))

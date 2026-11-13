@@ -524,10 +524,19 @@ public sealed partial class LiveView : UserControl
         }
     }
 
-    private async void OnQualityItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    private void OnQualityItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+        => SelectQuality(args.InvokedItem);
+
+    // While the list tracks a selection, ItemsView raises ItemInvoked only for a double tap or
+    // Enter. A single click or tap on an item selects the quality here; the second click of a
+    // double click finds the session busy or the quality already current and does nothing.
+    private void OnQualityItemTapped(object sender, TappedRoutedEventArgs args)
+        => SelectQuality((sender as FrameworkElement)?.Tag);
+
+    private async void SelectQuality(object? item)
     {
         if (_syncingQuality || !_attached || !_session.CanChangeQuality
-            || args.InvokedItem is not PlayerFormatInformation quality
+            || item is not PlayerFormatInformation quality
             || !_session.Qualities.Contains(quality)) return;
         if (_session.SelectedQuality is { } current && current.Equals(quality))
         {
