@@ -33,6 +33,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         if (_closeCancellationErrors.Count > 0)
             throw new AggregateException("Player cancellation failed; ownership retained.", _closeCancellationErrors);
 
+        await AwaitSponsorApplicationCleanupAsync();
         await DisposeMpvDanmakuAsync();
 
         if (_playerOverlay is not null)

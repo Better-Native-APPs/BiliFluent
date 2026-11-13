@@ -139,9 +139,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 fileUrl = audioUrl;
             }
 
+            InjectDebugReplayFailure(ref fileUrl, options);
             return new MpvMediaSource(fileUrl, _snapshot.Video.Identifier.Id, _snapshot.Video.Identifier.Title, options);
         }
     }
+
+    // Implemented only in Debug builds; Release drops this declaration together with its call.
+    partial void InjectDebugReplayFailure(ref string location, MpvPlayOptions options);
 
     public async Task<List<PlayerFormatInformation>?> GetSourcesAsync()
     {

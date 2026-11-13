@@ -3,6 +3,7 @@ using BiliCopilot.UI.SponsorBlock.Application;
 using BiliCopilot.UI.SponsorBlock.Integration;
 using BiliCopilot.UI.SponsorBlock.Persistence;
 using BiliCopilot.UI.SponsorBlock.Rules;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -41,19 +42,27 @@ public sealed partial class PlayerViewModel
             _sponsorApplicationCleanup ??= _sponsorRuntime.DetachPlayerAsync(this);
     }
 
-    private async Task AwaitSponsorApplicationCleanupAsync()
+    private async Task TrySponsorApplicationCleanupAsync()
     {
         if (_sponsorRuntime is null) return; // Genuinely never admitted/created an application binding.
         await AwaitSponsorApplicationBindingAsync();
         _sponsorApplicationCleanup ??= _sponsorRuntime.DetachPlayerAsync(this);
         SponsorApplicationResult = await _sponsorApplicationCleanup;
-        if (SponsorApplicationResult.Status != ApplicationStatus.Success)
-        {
-            // Retain the real close worker, native binding, UI and dispatcher while explicit cleanup
-            // is needed. The wait is never cancelled or converted into successful teardown.
-            _sponsorApplicationCleanup = _sponsorRuntime.WaitForPlayerCleanupAsync(this);
-            SponsorApplicationResult = await _sponsorApplicationCleanup;
-        }
+        if (SponsorApplicationResult.Status != ApplicationStatus.Success && logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Initial Sponsor detach completed with status {Status}; retrying after player drain.",
+                SponsorApplicationResult.Status);
+    }
+
+    private async Task AwaitSponsorApplicationCleanupAsync()
+    {
+        if (_sponsorRuntime is null) return;
+        if (_sponsorApplicationCleanup is { } initial && (await initial).Status == ApplicationStatus.Success) return;
+        // A sealed retirement receipt may now be available; retry the real detach, not its release waiter.
+        _sponsorApplicationCleanup = _sponsorRuntime.DetachPlayerAsync(this);
+        SponsorApplicationResult = await _sponsorApplicationCleanup;
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Final Sponsor detach after player drain completed with status {Status}.",
+                SponsorApplicationResult.Status);
         if (SponsorApplicationResult.Status != ApplicationStatus.Success)
             throw new InvalidOperationException("Sponsor cleanup retained player ownership.");
     }
