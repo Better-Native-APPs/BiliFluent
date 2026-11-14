@@ -120,6 +120,7 @@
         <Setter Property="CornerRadius" Value="18" />
     </Style>
 
+    <!--  An avatar covers the whole button and hides the stock hover and pressed fills, so the button shrinks instead.  -->
     <Style
         x:Key="AvatarButtonStyle"
         BasedOn="{StaticResource SubtleButtonStyle}"
@@ -127,6 +128,7 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="controls:PressScale.IsEnabled" Value="True" />
     </Style>
 
     <!--  The chevron tab on a side panel's divider. "Show" is always visible, so a hidden panel can be found again.  -->
