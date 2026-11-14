@@ -46,6 +46,10 @@ public sealed class DanmakuService : IDanmakuService
         => _client.LikeDanmakuAsync(danmakuId, cid, isLike, cancellationToken);
 
     /// <inheritdoc/>
+    public Task GradeDanmakuAsync(string aid, string cid, int progressMs, string gradeId, int gradeScore, CancellationToken cancellationToken = default)
+        => _client.GradeDanmakuAsync(aid, cid, progressMs, gradeId, gradeScore, cancellationToken);
+
+    /// <inheritdoc/>
     public Task<IReadOnlyDictionary<string, (int Likes, bool UserLiked)>> GetDanmakuLikeStatesAsync(string cid, IEnumerable<string> danmakuIds, CancellationToken cancellationToken = default)
         => _client.GetDanmakuLikeStatesAsync(cid, danmakuIds, cancellationToken);
 

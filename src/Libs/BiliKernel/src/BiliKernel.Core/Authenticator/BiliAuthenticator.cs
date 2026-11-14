@@ -3,7 +3,6 @@
 
 using Richasy.BiliKernel.Bili;
 using Richasy.BiliKernel.Bili.Authorization;
-using RichasyKernel;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;

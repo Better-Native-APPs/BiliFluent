@@ -6,7 +6,6 @@ using Richasy.BiliKernel.Bili;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models.Authorization;
-using RichasyKernel;
 using System.Text.Json;
 
 namespace Richasy.BiliKernel.Authorizers.TV.Core;

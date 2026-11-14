@@ -11,7 +11,6 @@ using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.Media.Core.Models;
-using RichasyKernel;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.WebSockets;

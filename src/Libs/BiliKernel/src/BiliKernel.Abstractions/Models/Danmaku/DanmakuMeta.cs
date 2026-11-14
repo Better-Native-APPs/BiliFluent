@@ -17,4 +17,9 @@ public sealed class DanmakuMeta
     /// 弹幕总数.
     /// </summary>
     public int Total { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timed interactive danmakus, including unsupported commands.
+    /// </summary>
+    public IReadOnlyList<CommandDanmakuInformation> CommandDanmakus { get; set; } = Array.Empty<CommandDanmakuInformation>();
 }
