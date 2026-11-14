@@ -26,13 +26,19 @@
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Command="{x:Bind ViewModel.ShowUserSpaceCommand, Mode=OneWay}"
+            IsEnabled="{x:Bind ViewModel.CanSendMessage, Mode=OneWay}"
             Style="{StaticResource AvatarButtonStyle}">
-            <controls:BasicCoverImage
-                Width="36"
-                Height="36"
-                CornerRadius="18"
-                DecodeWidth="100"
-                Source="{x:Bind ViewModel.Avatar, Mode=OneWay}" />
+            <Grid Width="36" Height="36">
+                <SymbolIcon
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Symbol="Mail"
+                    Visibility="{x:Bind ViewModel.ShowSystemAvatarFallback, Mode=OneWay}" />
+                <controls:BasicCoverImage
+                    CornerRadius="18"
+                    DecodeWidth="100"
+                    Source="{x:Bind ViewModel.Avatar, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.ShowSystemAvatarFallback, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+            </Grid>
         </Button>
 
         <Grid
@@ -60,13 +66,25 @@
                 Text="{x:Bind ViewModel.LastMessageTime, Mode=OneWay}" />
         </Grid>
 
-        <TextBlock
+        <Grid
             Grid.Row="1"
             Grid.Column="1"
-            FontSize="12"
-            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-            Text="{x:Bind ViewModel.LastMessage, Mode=OneWay}"
-            TextTrimming="CharacterEllipsis"
-            TextWrapping="NoWrap" />
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Text="{x:Bind ViewModel.LastMessage, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <InfoBadge
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Value="{x:Bind ViewModel.UnreadCount, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.UnreadCount, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+        </Grid>
     </Grid>
 </local:ChatMessageControlBase>

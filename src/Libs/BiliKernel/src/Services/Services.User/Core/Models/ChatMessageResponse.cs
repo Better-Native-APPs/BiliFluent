@@ -44,7 +44,7 @@ internal sealed class ChatMessageResponse
     /// 最小消息序号.
     /// </summary>
     [JsonPropertyName("min_seqno")]
-    public long MinSeqNo { get; set; }
+    public ulong MinSeqNo { get; set; }
 
     /// <summary>
     /// 最大消息序号.
@@ -122,7 +122,7 @@ internal sealed class BiliChatSession
     /// 会话类型.
     /// </summary>
     [JsonPropertyName("session_type")]
-    public int SessionType { get; set; }
+    public int SessionType { get; set; } = 1;
 
     /// <summary>
     /// 是否关注（0：未关注，1：已关注）.
@@ -159,6 +159,21 @@ internal sealed class BiliChatSession
     /// </summary>
     [JsonPropertyName("system_msg_type")]
     public int SystemMessageType { get; set; }
+
+    /// <summary>
+    /// Server-provided system conversation identity.
+    /// </summary>
+    [JsonPropertyName("account_info")]
+    public BiliChatAccountInfo? AccountInfo { get; set; }
+}
+
+internal sealed class BiliChatAccountInfo
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("pic_url")]
+    public string? PictureUrl { get; set; }
 }
 
 /// <summary>

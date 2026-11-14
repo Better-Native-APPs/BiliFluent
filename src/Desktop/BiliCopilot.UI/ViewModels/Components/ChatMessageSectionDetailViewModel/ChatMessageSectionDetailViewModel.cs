@@ -12,6 +12,7 @@ using Richasy.BiliKernel.Bili.User;
 using Richasy.BiliKernel.Models.User;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
+using Richasy.WinUIKernel.Share.Toolkits;
 using BiliCopilot.UI.ViewModels.View;
 
 namespace BiliCopilot.UI.ViewModels.Components;
@@ -33,10 +34,12 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
         _account = account;
         _logger = this.Get<ILogger<ChatMessageSectionDetailViewModel>>();
 
-        Avatar = session.User?.Avatar?.Uri;
-        UserName = session.User?.Name;
+        Avatar = (session.Avatar ?? session.User?.Avatar)?.Uri;
+        UserName = session.Name ?? session.User?.Name ?? string.Empty;
+        if (session.IsSystemSession && string.IsNullOrWhiteSpace(UserName))
+            UserName = this.Get<IResourceToolkit>().GetLocalizedString("SystemChatSession");
         UnreadCount = session.UnreadCount;
-        LastMessage = Data.LastMessage;
+        LastMessage = Data.LastMessage ?? string.Empty;
         LastMessageTime = Data.Time.Humanize(default, new System.Globalization.CultureInfo("zh-CN"));
     }
 
@@ -44,16 +47,19 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
     private Task InitializeAsync() => _operation is { Task.IsCompleted: false } pending && IsCurrent(pending, _operation)
         ? pending.Task : _needsRefresh ? StartLoad(refresh: true) : IsInitialized ? Task.CompletedTask : StartLoad(refresh: false);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSendMessage))]
     private void ShowUserSpace()
-        => this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), Data.User);
+    {
+        if (CanSendMessage) this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), Data.User);
+    }
 
     [RelayCommand]
     private Task RefreshAsync() => StartLoad(refresh: true);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSendMessage))]
     private Task SendMessageAsync()
     {
+        if (!CanSendMessage) return Task.CompletedTask;
 #pragma warning disable VSTHRD003
         if (_sendOwner is { Task.IsCompleted: false } pending && IsCurrent(pending, _sendOwner)) return pending.Task;
 #pragma warning restore VSTHRD003
@@ -112,6 +118,7 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
         if (_active == active) return;
         _active = active;
         _activationEpoch++;
+        MarkAsReadCommand.NotifyCanExecuteChanged();
     }
 
     internal Task Retire()
@@ -119,14 +126,15 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
         _retired = true;
         _generation++;
         SetActive(false);
-        return Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask);
+        return Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask, _readOwner?.Task ?? Task.CompletedTask);
     }
 
     internal Task InvalidateData()
     {
         _generation++;
         _needsRefresh = true;
-        return Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask);
+        MarkAsReadCommand.NotifyCanExecuteChanged();
+        return Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask, _readOwner?.Task ?? Task.CompletedTask);
     }
 
     private bool IsCurrent(MessageRequestOwner owner, MessageRequestOwner? slot) => !_retired
@@ -139,16 +147,17 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
         if (_operation is { Task.IsCompleted: false } pending && IsCurrent(pending, _operation) && (!refresh || pending.Refresh)) return pending.Task;
 #pragma warning restore VSTHRD003
         if (!refresh && _preventLoadMore) return Task.CompletedTask;
-        var previous = Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask);
+        var previous = Task.WhenAll(_operation?.Task ?? Task.CompletedTask, _sendOwner?.Task ?? Task.CompletedTask, _readOwner?.Task ?? Task.CompletedTask);
         if (refresh) _generation++;
         var owner = new MessageRequestOwner(_generation, _account.AccountGeneration, _account.AccountId, previous, refresh);
-        var user = Data.User;
+        var session = Data;
         _operation = owner;
-        _ = CompleteLoadAsync(owner, user, _activationEpoch);
+        MarkAsReadCommand.NotifyCanExecuteChanged();
+        _ = CompleteLoadAsync(owner, session, _activationEpoch);
         return owner.Task;
     }
 
-    private async Task CompleteLoadAsync(MessageRequestOwner owner, Richasy.BiliKernel.Models.User.UserProfile user, long epoch)
+    private async Task CompleteLoadAsync(MessageRequestOwner owner, ChatSession session, long epoch)
     {
         var success = false;
         try
@@ -160,8 +169,9 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
             if (!IsCurrent(owner, _operation)) return;
             IsLoading = true;
             if (!IsCurrent(owner, _operation)) return;
-            var (messages, maxCount, hasMore) = await _service.GetChatMessagesAsync(user);
+            var (messages, maxCount, hasMore) = await _service.GetChatMessagesAsync(session.User);
             if (!IsCurrent(owner, _operation)) return;
+            _maxSequence = maxCount;
             if (owner.Refresh) Messages = new();
             if (!IsCurrent(owner, _operation)) return;
             if (messages is not null)
@@ -169,15 +179,17 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
                 foreach (var item in messages)
                 {
                     if (!IsCurrent(owner, _operation)) return;
-                    Messages.Add(new ChatMessageItemViewModel(item));
+                    Messages.Add(new ChatMessageItemViewModel(item, session.IsSystemSession));
                 }
 
                 if (!IsCurrent(owner, _operation)) return;
-                if (messages.Count > 0 && LastMessage != messages.Last().Content.Text)
+                var last = messages.LastOrDefault();
+                var preview = session.IsSystemSession ? last?.PreviewText ?? last?.Content?.Text : last?.Content?.Text;
+                if (last is not null && LastMessage != preview)
                 {
-                    LastMessage = messages.Last().Content.Text;
+                    LastMessage = preview ?? string.Empty;
                     if (!IsCurrent(owner, _operation)) return;
-                    LastMessageTime = messages.Last().Time.Humanize(default, new System.Globalization.CultureInfo("zh-CN"));
+                    LastMessageTime = last.Time.Humanize(default, new System.Globalization.CultureInfo("zh-CN"));
                 }
 
                 if (IsCurrent(owner, _operation) && _active && epoch == _activationEpoch) RequestScrollToBottom?.Invoke(this, EventArgs.Empty);
@@ -202,6 +214,54 @@ public sealed partial class ChatMessageSectionDetailViewModel : ViewModelBase<Ch
             if (IsCurrent(owner, _operation)) IsLoading = false;
             if (IsCurrent(owner, _operation)) IsEmpty = Messages.Count == 0;
             owner.Complete(success);
+            if (IsCurrent(owner, _operation)) MarkAsReadCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMarkAsRead))]
+    private Task MarkAsReadAsync()
+    {
+#pragma warning disable VSTHRD003
+        if (_readOwner is { Task.IsCompleted: false } pending && IsCurrent(pending, _readOwner)) return pending.Task;
+#pragma warning restore VSTHRD003
+        if (!CanMarkAsRead) return Task.CompletedTask;
+        var owner = new MessageRequestOwner(_generation, _account.AccountGeneration, _account.AccountId, _readOwner?.Task ?? Task.CompletedTask);
+        _readOwner = owner;
+        MarkAsReadCommand.NotifyCanExecuteChanged();
+        _ = CompleteMarkAsReadAsync(owner, _maxSequence, _activationEpoch);
+        return owner.Task;
+    }
+
+    private async Task CompleteMarkAsReadAsync(MessageRequestOwner owner, long maxSequence, long epoch)
+    {
+        var success = false;
+        try
+        {
+#pragma warning disable VSTHRD003
+            await owner.Previous;
+#pragma warning restore VSTHRD003
+            if (!IsCurrent(owner, _readOwner) || !_active || epoch != _activationEpoch) return;
+            IsMarkingRead = true;
+            if (!IsCurrent(owner, _readOwner)) return;
+            await _service.MarkChatMessagesAsReadAsync(Data.User, maxSequence);
+            if (!IsCurrent(owner, _readOwner)) return;
+            UnreadCount = 0;
+            if (!IsCurrent(owner, _readOwner)) return;
+            Data.UnreadCount = 0;
+            if (_active && epoch == _activationEpoch) await _account.UpdateUnreadSnapshotAsync();
+            success = true;
+        }
+        catch (Exception ex)
+        {
+            if (!IsCurrent(owner, _readOwner)) return;
+            _logger.LogError("更新会话已读游标失败 ({ErrorType})", ex.GetType().Name);
+            this.Get<AppViewModel>().ShowTipCommand.Execute((this.Get<IResourceToolkit>().GetLocalizedString("FailedToMarkChatRead"), InfoType.Error));
+        }
+        finally
+        {
+            if (IsCurrent(owner, _readOwner)) IsMarkingRead = false;
+            owner.Complete(success);
+            if (IsCurrent(owner, _readOwner)) MarkAsReadCommand.NotifyCanExecuteChanged();
         }
     }
 }

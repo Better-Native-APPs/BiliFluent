@@ -1713,4 +1713,16 @@
   <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
     <value>{0}，AI 生成</value>
   </data>
+  <data name="SystemChatSession" xml:space="preserve">
+    <value>系统会话</value>
+  </data>
+  <data name="NotificationViewDetails" xml:space="preserve">
+    <value>查看详情</value>
+  </data>
+  <data name="FailedToMarkChatRead" xml:space="preserve">
+    <value>标记会话已读失败，请重试</value>
+  </data>
+  <data name="FailedToOpenMessageLink" xml:space="preserve">
+    <value>无法打开消息链接，请重试</value>
+  </data>
 </root>

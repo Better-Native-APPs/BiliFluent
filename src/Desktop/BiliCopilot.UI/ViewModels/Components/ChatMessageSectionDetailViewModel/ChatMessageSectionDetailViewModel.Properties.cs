@@ -21,6 +21,8 @@ public sealed partial class ChatMessageSectionDetailViewModel
     private readonly AccountViewModel _account;
     private MessageRequestOwner? _operation;
     private MessageRequestOwner? _sendOwner;
+    private MessageRequestOwner? _readOwner;
+    private long _maxSequence;
     private long _generation;
     private bool _retired;
     private bool _needsRefresh;
@@ -35,13 +37,19 @@ public sealed partial class ChatMessageSectionDetailViewModel
     private string _lastMessageTime;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MarkAsReadCommand))]
     private bool _isLoading;
 
     [ObservableProperty]
     private bool _isEmpty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MarkAsReadCommand))]
     private int _unreadCount;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MarkAsReadCommand))]
+    private bool _isMarkingRead;
 
     [ObservableProperty]
     private bool _isSending;
@@ -69,4 +77,18 @@ public sealed partial class ChatMessageSectionDetailViewModel
     /// 用户名.
     /// </summary>
     public string UserName { get; init; }
+
+    /// <summary>Gets whether this conversation is read-only.</summary>
+    public bool IsSystemSession => Data.IsSystemSession;
+
+    /// <summary>Gets whether ordinary private-message operations are available.</summary>
+    public bool CanSendMessage => !IsSystemSession;
+
+    /// <summary>Gets whether the server omitted the system conversation avatar.</summary>
+    public bool ShowSystemAvatarFallback => IsSystemSession && Avatar is null;
+
+    /// <summary>Gets whether a visible, loaded system conversation can update its read cursor.</summary>
+    public bool CanMarkAsRead => IsSystemSession && _active && !_retired && !_needsRefresh && IsInitialized
+        && _maxSequence > 0 && UnreadCount > 0 && !IsLoading && !IsMarkingRead
+        && _operation?.Task.IsCompleted != false && _readOwner?.Task.IsCompleted != false;
 }
