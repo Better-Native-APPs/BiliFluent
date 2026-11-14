@@ -7,6 +7,7 @@ param(
 
 # Only copy the exact, hash-pinned frameworks declared by the built app. No downloads.
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'ReleaseMetadata.psm1') -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Get-ReleaseAppxManifest([string]$Path) {
@@ -28,7 +29,7 @@ function Get-ReleaseAppxManifest([string]$Path) {
     } finally { $zip.Dispose() }
 }
 
-$template = Get-Content (Join-Path $PSScriptRoot 'release-artifacts.json') -Raw | ConvertFrom-Json
+$template = Get-ReleaseArtifactsTemplate
 $pins = @($template.dependencies)
 $app = Get-ReleaseAppxManifest $PackagePath
 $ns = New-Object System.Xml.XmlNamespaceManager($app.NameTable)

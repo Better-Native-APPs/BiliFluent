@@ -10,23 +10,14 @@ param(
 # The delivery root contains the user-facing one-click installer (<"An Zhuang" BiliFluent>.cmd -> Install-BiliFluent.ps1),
 # which runs Install.ps1 -Install with the manifest SHA-256 embedded below.
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'ReleaseMetadata.psm1') -Force
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'artifacts/release' }
-if (-not $Version) {
-    [xml]$manifest = Get-Content (Join-Path $root 'src/Desktop/BiliCopilot.UI/Package.appxmanifest') -Raw
-    $Version = $manifest.Package.Identity.Version
-}
+if (-not $Version) { $Version = Get-ReleasePackageVersion }
 if ($Version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Invalid package version: $Version" }
 
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
 function Get-Sha([string]$p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() }
-function Set-PinnedVersion([string]$Path, [string]$Value) {
-    # Install.ps1 / Trust-Certificate.ps1 pin the package version in $script:ReleaseFixed; stamp the delivered copy.
-    $text = [IO.File]::ReadAllText($Path)
-    $pattern = "(?m)^(\s*Version\s*=\s*')[0-9.]+(')"
-    if ([regex]::Matches($text, $pattern).Count -ne 1) { throw "Expected exactly one pinned Version line in $Path" }
-    [IO.File]::WriteAllText($Path, [regex]::Replace($text, $pattern, ('${1}' + $Value + '${2}')), $utf8Bom)
-}
 
 $dl = Join-Path $OutputDirectory "BiliFluent-$Version"
 if (Test-Path $dl) { Remove-Item $dl -Recurse -Force }
@@ -42,10 +33,10 @@ $cerPath = Join-Path $payload 'BiliFluent.cer'
 [IO.File]::WriteAllBytes($cerPath, $cert.RawData)
 foreach ($s in 'Install.ps1', 'Trust-Certificate.ps1') {
     Copy-Item (Join-Path $PSScriptRoot $s) (Join-Path $dl $s)
-    Set-PinnedVersion (Join-Path $dl $s) $Version
+    Set-ReleaseScriptVersion (Join-Path $dl $s) $Version
 }
 
-$m = Get-Content (Join-Path $PSScriptRoot 'release-artifacts.json') -Raw | ConvertFrom-Json
+$m = Get-ReleaseArtifactsTemplate $Version
 $m.dependencies = @(& (Join-Path $PSScriptRoot 'Copy-ReleaseDependencies.ps1') -PackagePath $msixSource `
     -SourceDirectory (Join-Path $OutputDirectory 'dependencies') -DestinationDirectory $payload)
 $m.package.relativePath = "payload/$msixName"
@@ -61,7 +52,9 @@ $m.certificate.notBeforeUtc = $cert.NotBefore.ToUniversalTime().ToString("yyyy-M
 $m.certificate.notAfterUtc = $cert.NotAfter.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
 $m.scripts.installSha256 = Get-Sha (Join-Path $dl 'Install.ps1')
 $m.scripts.trustSha256 = Get-Sha (Join-Path $dl 'Trust-Certificate.ps1')
-$m | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $dl 'release-artifacts.json') -Encoding UTF8
+$manifestText = $m | ConvertTo-Json -Depth 6
+Assert-ReleaseTemplateComplete $manifestText
+$manifestText | Set-Content -Path (Join-Path $dl 'release-artifacts.json') -Encoding UTF8
 $manifestSha = Get-Sha (Join-Path $dl 'release-artifacts.json')
 
 # One-click installer: wrapper gets the manifest digest embedded; .cmd is copied byte-for-byte (ASCII).
