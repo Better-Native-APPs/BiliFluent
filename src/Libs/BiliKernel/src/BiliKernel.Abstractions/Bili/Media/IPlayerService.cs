@@ -19,7 +19,7 @@ public interface IPlayerService
     /// <summary>
     /// 获取视频播放信息.
     /// </summary>
-    Task<DashMediaInformation> GetVideoPlayDetailAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default);
+    Task<DashMediaInformation> GetVideoPlayDetailAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default, string? curLanguage = default);
 
     /// <summary>
     /// 获取直播页面详情.

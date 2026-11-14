@@ -27,6 +27,21 @@ public interface IDanmakuService
     Task<IReadOnlyList<DanmakuInformation>> GetSegmentDanmakusWithWebAsync(string aid, string cid, int segmentIndex, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Adds or removes a like on a video danmaku.
+    /// </summary>
+    Task LikeDanmakuAsync(string danmakuId, string cid, bool isLike, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the like counts and the current user's like states for the requested danmakus.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, (int Likes, bool UserLiked)>> GetDanmakuLikeStatesAsync(string cid, IEnumerable<string> danmakuIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports a video danmaku with an optional description.
+    /// </summary>
+    Task ReportDanmakuAsync(string danmakuId, string cid, int reason, string? content = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 发送视频弹幕.
     /// </summary>
     Task SendVideoDanmakuAsync(string content, string aid, string cid, int progress, string color, bool isStandardSize = true, DanmakuLocation location = DanmakuLocation.Scroll, CancellationToken cancellationToken = default);

@@ -97,7 +97,7 @@ internal sealed class PlayerClient
         return pageResponse.ToVideoPlayerView(progress, operation);
     }
 
-    public async Task<DashMediaInformation> GetVideoPlayDetailWithRestAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken)
+    public async Task<DashMediaInformation> GetVideoPlayDetailWithRestAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken, string? curLanguage = default)
     {
         var idType = GetVideoIdType(video.Id, out var videoId);
         if (idType == "bv")
@@ -117,12 +117,17 @@ internal sealed class PlayerClient
             { "mid", _tokenResolver.GetToken().UserId.ToString() },
         };
 
+        if (!string.IsNullOrEmpty(curLanguage))
+        {
+            queryParameters.Add("cur_language", curLanguage);
+        }
+
         var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri(BiliApis.Video.PlayInformation));
         _authenticator.AuthorizeRestRequest(request, queryParameters);
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponsePlayerInformation).ConfigureAwait(false)
             ?? throw new KernelException("解析视频播放详情失败");
-        return responseObj.Data.ToDashMediaInformation();
+        return responseObj.Data.ToDashMediaInformation(includeAiDubbing: true, requestedLanguage: curLanguage);
     }
 
     public async Task<DashMediaInformation> GetVideoPlayDetailWithGrpcAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken)

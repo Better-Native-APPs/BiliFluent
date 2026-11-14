@@ -51,8 +51,8 @@ public sealed class PlayerService : IPlayerService
     }
 
     /// <inheritdoc/>
-    public Task<DashMediaInformation> GetVideoPlayDetailAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default)
-        => _client.GetVideoPlayDetailWithRestAsync(video, cid, cancellationToken);
+    public Task<DashMediaInformation> GetVideoPlayDetailAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default, string? curLanguage = default)
+        => _client.GetVideoPlayDetailWithRestAsync(video, cid, cancellationToken, curLanguage);
 
     /// <inheritdoc/>
     public Task<LivePlayerView> GetLivePageDetailAsync(MediaIdentifier live, CancellationToken cancellationToken = default)
