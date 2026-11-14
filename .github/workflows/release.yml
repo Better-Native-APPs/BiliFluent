@@ -1,12 +1,13 @@
 name: Build & Release
 
 # dev  -> daily pushes (no workflow run)          PR dev -> main : build + package only (required check "build")
-# main -> signed pre-release v<version>-pre.<run>  tag v<version>  : signed full release
+# main -> signed pre-release v<version>-pre when the fourth version part > 0; otherwise build only.
+# tag v<version> -> signed full release (matching manifest, fourth version part = 0).
 # Docs-only pushes/PRs skip the build (see job "changes").
 on:
   push:
     branches: [main]
-    tags: ['v*', '!v*-pre*']
+    tags: ['v*', '!v*-pre', '!v*-pre.*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,7 +16,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Serialize publishing refs so a release cannot race the remote version ceiling check.
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -35,7 +37,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
       - id: filter
         uses: dorny/paths-filter@v4
         with:
@@ -68,14 +70,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve release info
+        id: info
+        run: ./scripts/ci/Get-ReleaseInfo.ps1
+
       - name: Setup .NET (global.json)
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-
-      - name: Resolve release info
-        id: info
-        run: ./scripts/ci/Get-ReleaseInfo.ps1
 
       - name: Restore native assets cache
         uses: actions/cache@v6

@@ -5,13 +5,13 @@ param(
     [Parameter(Mandatory)] [string]$Version,
     [Parameter(Mandatory)] [string[]]$Assets,
     [string]$ManifestSha256,
-    [switch]$Prerelease,
-    [int]$KeepPrereleases = 3
+    [switch]$Prerelease
 )
-# CI: creates or updates the GitHub release for $Tag with the delivery ZIP + public .cer, then prunes old pre-releases.
+# CI: creates or updates the GitHub release for $Tag with the delivery ZIP + public .cer.
 # Requires the gh CLI with GH_TOKEN (contents: write) and GITHUB_REPOSITORY / GITHUB_SHA.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+. (Join-Path $PSScriptRoot 'ReleaseVersion.ps1')
 $changelogPath = Join-Path $root 'CHANGELOG.md'
 $getChangelogNotes = Join-Path $PSScriptRoot 'Get-ChangelogNotes.ps1'
 $repo = $env:GITHUB_REPOSITORY
@@ -23,41 +23,23 @@ function Invoke-Gh([string[]]$GhArgs) {
     if ($LASTEXITCODE) { throw "gh $($GhArgs -join ' ') failed ($LASTEXITCODE)" }
 }
 
-$tags = @(& git -C $root tag --sort=-v:refname --list 'v*')
+$tags = @(& git -C $root tag --list 'v*')
 if ($LASTEXITCODE) { throw 'git tag failed.' }
-$previousReleaseTag = $null
-$currentTagSeen = $Prerelease.IsPresent
-foreach ($existingTag in $tags) {
-    if ($existingTag -eq $Tag) {
-        $currentTagSeen = $true
-        continue
-    }
-    if ($currentTagSeen -and $existingTag -notlike '*-pre*') {
-        $previousReleaseTag = $existingTag
-        break
-    }
-}
+$releaseTags = @(ConvertFrom-ReleaseTags $tags)
+$previousReleaseTag = Get-PreviousReleaseTag -Version (ConvertTo-PackageVersion $Version) -ReleaseTags $releaseTags -IncludePrereleases:$Prerelease
+$changelogNotes = & $getChangelogNotes -Path $changelogPath -Version $Version
 
 $notesParts = @()
 if ($Prerelease) {
     $notesParts += '> [!WARNING]' + "`n" + '> 这是由 `main` 分支自动构建的**预发布版**，可能不稳定。正式版请使用标记为 Latest 的 Release。'
-    $changelogNotes = & $getChangelogNotes -Path $changelogPath -Version $Version -Unreleased
-    if (-not $changelogNotes) {
-        try {
-            $changelogNotes = & $getChangelogNotes -Path $changelogPath -Version $Version
-        } catch [System.Collections.Generic.KeyNotFoundException] {
-            # A pre-release may precede the first versioned changelog entry.
-            $changelogNotes = ''
-        }
-    }
-    if ($changelogNotes) { $notesParts += $changelogNotes }
+    $notesParts += $changelogNotes
     # Before the first release, list only this project's commits (upstream base = last Bili Copilot commit).
     $range = if ($previousReleaseTag) { "$previousReleaseTag..HEAD" } else { '896a06290ba440cb17776d292dff119bbd3383d6..HEAD' }
     $commits = @(& git -C $root log --no-merges --format='- %s (%h)' --max-count=100 $range)
     if ($LASTEXITCODE) { throw 'git log failed.' }
     $notesParts += (@('### 提交记录') + $commits) -join "`n"
 } else {
-    $notesParts += & $getChangelogNotes -Path $changelogPath -Version $Version
+    $notesParts += $changelogNotes
 }
 
 $zipName = Split-Path ($Assets | Where-Object { $_ -like '*.zip' } | Select-Object -First 1) -Leaf
@@ -93,14 +75,4 @@ if ($LASTEXITCODE -eq 0) {
     Invoke-Gh $createArgs
 }
 
-if ($Prerelease) {
-    $json = & gh release list --repo $repo --limit 200 --json tagName,isPrerelease,createdAt
-    if ($LASTEXITCODE) { throw 'gh release list failed.' }
-    $old = @($json | ConvertFrom-Json | Where-Object { $_.isPrerelease -and $_.tagName -match '^v\d+(\.\d+){3}-pre\.\d+$' } |
-            Sort-Object { [DateTime]$_.createdAt } -Descending | Select-Object -Skip $KeepPrereleases)
-    foreach ($release in $old) {
-        Write-Host "Pruning old pre-release $($release.tagName)"
-        Invoke-Gh @('release', 'delete', $release.tagName, '--repo', $repo, '--yes', '--cleanup-tag')
-    }
-}
 Write-Host "Published $Tag"

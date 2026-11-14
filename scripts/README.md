@@ -56,7 +56,7 @@ Copy-Item .\artifacts\visor\BiliCopilot.Visor.exe .\src\Desktop\BiliCopilot.UI\A
 .\scripts\Build-Release.ps1 -CertificateThumbprint <证书指纹>
 ```
 
-产物生成至 `artifacts/release/BiliFluent_2.2611.8.0_x64.msix`。包名固定为 `BiliFluent`，发布者主体必须精确为 `CN=BiliFluent`。
+产物生成至 `artifacts/release/BiliFluent_<version>_x64.msix`，`<version>` 自动读取 `src/Desktop/BiliCopilot.UI/Package.appxmanifest` 的 `Identity Version`。包名固定为 `BiliFluent`，发布者主体必须精确为 `CN=BiliFluent`。
 
 正式签名证书指纹为：`6727300457DD924DAD363FDD27C5166E0E62CF32`。本地个人调试开发可使用 PowerShell 创建自签名测试证书进行签名：
 
@@ -77,16 +77,16 @@ $cert = New-SelfSignedCertificate -Type Custom `
 .\scripts\local-release\Make-Delivery.ps1 -CertificateThumbprint <证书指纹>
 ```
 
-脚本将自动计算包哈希、提取证书公钥、生成 `release-artifacts.json` 清单并压缩为可供用户直接下载的发布包 `artifacts/release/BiliFluent-2.2611.8.0.zip`。解压目录结构如下：
+脚本从清单读取版本，自动计算包哈希、提取证书公钥、生成 `release-artifacts.json` 清单并压缩为可供用户直接下载的发布包 `artifacts/release/BiliFluent-<version>.zip`。解压目录结构如下：
 
 ```text
-BiliFluent-2.2611.8.0/
+BiliFluent-<version>/
   安装 BiliFluent.cmd          # 一键安装脚本（.cmd，UAC 提权信任证书并部署）
   Install.ps1                  # PowerShell 安装与预检主脚本
   Trust-Certificate.ps1        # 证书导入辅助脚本（仅导入 LocalMachine\TrustedPeople）
   release-artifacts.json       # 发布包文件清单与 SHA-256 签名摘要
   payload/
-    BiliFluent_2.2611.8.0_x64.msix  # 已签名的应用主包
+    BiliFluent_<version>_x64.msix  # 已签名的应用主包
     BiliFluent.cer                  # 发布者公钥证书（CN=BiliFluent）
 ```
 
@@ -94,15 +94,33 @@ BiliFluent-2.2611.8.0/
 
 ## GitHub Actions 自动构建与发布策略
 
-仓库配置了严谨的分支管理与全自动化 CI 流水线：
+应用版本只在 `src/Desktop/BiliCopilot.UI/Package.appxmanifest` 的 `Identity Version` 填写，CI 从清单派生 tag、标题与产物名，不按构建次数自动编号：
 
 - **分支策略**：
   - 日常开发与 Bug 修复在 `dev` 分支进行。
-  - 通过 Pull Request 合并至受保护的 `main` 分支。
+  - 集中完成一批工作后开 `dev` → `main` PR，待 `build` 通过后，在本地 fast-forward 并推送 `main`，不使用 GitHub 网页合并。
+- **四段版本 `a.b.c.d`**：
+  - `d = 0` 为正式版，`d > 0` 为预发布版。`a.b.c.0` 正式版后依次发布 `a.b.c.1`、`a.b.c.2`…，下一正式版为 `a.b.(c+1).0`，确保可直接覆盖升级。
+  - 清单版本必须严格大于所有已有发布 tag 代表的包版本；旧格式 `v<version>-pre.<run_number>` 的包版本仍按 `<version>` 比较，不能复用。
 - **预发布自动构建（Pre-Release）**：
-  - 每次代码推送到 `main` 分支时，GitHub Actions 自动执行完整编译、下载核验原生资产、以 NativeAOT 构建 Visor、签名 MSIX 并生成交付 ZIP，自动发布为带有预发布标记的 Pre-Release。
+  - 向 `main` 推送代码且清单第四段大于 0 时，自动构建、签名并发布 `v<version>-pre`，标题为 `BiliFluent <version> 预发布版`。CI 创建的 `-pre` tag 不再触发正式版流程。
+  - 说明只取 `## [<version>] - YYYY-MM-DD` 小节，只记录相对上一个发布的变化；旧预发布 Release 与 tag 保留。
 - **正式版本发布（Release）**：
-  - 当在仓库推送符合版本格式的 Git Tag（如 `v2.2611.8.0`）时，流水线自动构建、签名并发布正式的 GitHub Release。
+  - 清单第四段为 0 时，向 `main` 推送只构建打包。推送匹配清单的 `v<version>` 正式 tag 才发布，第四段非 0、版本不匹配或 tag 目标不是本次提交都会失败。
+  - 说明只取对应正式版小节，汇总上一个正式版之后的全部变化。
+- **合并至 main 前检查单**：
+  1. 在 `dev` 显式提升清单版本；预发布递增第四段。
+  2. 将 `[Unreleased]` 改名为与清单同名、有日期且非空的版本小节，可在日期后加“（预发布）”；重新保留空的 `[Unreleased]` 并更新底部链接。
+  3. PR 的 `build` 通过后，执行 `git fetch origin`、`git merge-base --is-ancestor origin/main dev`，确认可快进，再执行 `git push origin dev:main`。
+  4. CI 在构建前检查远端 tag、版本递增和 CHANGELOG 小节；非纯文档 PR 未提升版本会失败，纯文档变更仍跳过构建。不要复用已有 tag。
+- **正式版步骤**：
+  1. 将清单改为 `a.b.(c+1).0`，合并本周期预发布小节及未发布条目到正式版小节，删除文件中已合并的预发布小节；它们的 GitHub Release 页面保留。
+  2. PR 构建通过后在本地 fast-forward `main`，等待该次打包完成。
+  3. 在最新 `main` 提交从清单读取版本并打 tag：`[xml]$manifest = Get-Content ./src/Desktop/BiliCopilot.UI/Package.appxmanifest -Raw; $tag = 'v' + $manifest.Package.Identity.Version; git tag -s $tag; git push origin $tag`。
+  4. 校验历史版本时只排除本次已推送且提交匹配的正式 tag 自身，其余 tag 仍参与比较。
+- **手动运行与脚本自检**：
+  - `workflow_dispatch` 按所选 ref 使用相同规则；不要选择预发布 tag 来发布正式版。
+  - 运行 `./scripts/ci/Test-ReleaseInfo.ps1` 可离线模拟事件和版本门禁；脚本只修改临时清单副本，注入 tag 列表，不访问远端。
 - **密钥管理（Secrets）**：
   - 代码签名私钥由仓库 Actions Secrets 保护：
     - `SIGNING_PFX_BASE64`：PFX 证书二进制的 Base64 编码字符串。
