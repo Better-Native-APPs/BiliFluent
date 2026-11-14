@@ -9,6 +9,7 @@ using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Danmaku;
 using RichasyKernel;
+using System.Globalization;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
 
@@ -51,7 +52,12 @@ internal sealed class DanmakuClient
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         reply = await BiliHttpClient.ParseAsync(response, DmWebViewReply.Parser).ConfigureAwait(false);
 
-        return new DanmakuMeta { SegmentCount = Convert.ToInt32(reply.DmSge?.Total ?? 0), Total = Convert.ToInt32(reply.Count) };
+        return new DanmakuMeta
+        {
+            SegmentCount = Convert.ToInt32(reply.DmSge?.Total ?? 0),
+            Total = Convert.ToInt32(reply.Count),
+            CommandDanmakus = reply.CommandDms.Select(CommandDanmakuParser.Parse).ToList(),
+        };
     }
 
     public async Task<IReadOnlyList<DanmakuInformation>> GetSegmentDanmakusWithWebAsync(string aid, string cid, int segmentIndex, CancellationToken cancellationToken)
@@ -162,6 +168,53 @@ internal sealed class DanmakuClient
         };
 
         var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.LikeDanmaku));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.None,
+            NeedCSRF = true,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task GradeDanmakuAsync(string aid, string cid, int progressMs, string gradeId, int gradeScore, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(aid))
+        {
+            throw new ArgumentException("The video aid is required.", nameof(aid));
+        }
+
+        if (string.IsNullOrEmpty(cid))
+        {
+            throw new ArgumentException("The video cid is required.", nameof(cid));
+        }
+
+        if (string.IsNullOrEmpty(gradeId))
+        {
+            throw new ArgumentException("The grade identifier is required.", nameof(gradeId));
+        }
+
+        if (progressMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(progressMs), "The playback progress must not be negative.");
+        }
+
+        if (gradeScore < 2 || gradeScore > 10 || gradeScore % 2 != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(gradeScore), "The grade score must be 2, 4, 6, 8, or 10.");
+        }
+
+        var parameters = new Dictionary<string, string>
+        {
+            { "aid", aid },
+            { "cid", cid },
+            { "progress", progressMs.ToString(CultureInfo.InvariantCulture) },
+            { "grade_id", gradeId },
+            { "grade_score", gradeScore.ToString(CultureInfo.InvariantCulture) },
+        };
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.GradeDanmaku));
         _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
         {
             ApiType = BiliApiType.None,

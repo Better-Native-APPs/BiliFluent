@@ -673,6 +673,11 @@ public static class BiliApis
         public const string LikeDanmaku = _apiBase + "/x/v2/dm/thumbup/add";
 
         /// <summary>
+        /// Submits a score for a rating danmaku.
+        /// </summary>
+        public const string GradeDanmaku = _apiBase + "/x/v2/dm/command/grade/post";
+
+        /// <summary>
         /// Gets like counts and the current user's danmaku like states.
         /// </summary>
         public const string DanmakuLikeStats = _apiBase + "/x/v2/dm/thumbup/stats";

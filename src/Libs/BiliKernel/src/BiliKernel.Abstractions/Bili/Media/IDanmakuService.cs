@@ -32,6 +32,18 @@ public interface IDanmakuService
     Task LikeDanmakuAsync(string danmakuId, string cid, bool isLike, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Submits a rating at the specified playback progress in milliseconds.
+    /// </summary>
+    /// <param name="aid">The video aid.</param>
+    /// <param name="cid">The video cid.</param>
+    /// <param name="progressMs">The playback progress in milliseconds.</param>
+    /// <param name="gradeId">The rating identifier from the command payload.</param>
+    /// <param name="gradeScore">An even score: 2, 4, 6, 8, or 10.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when the score is submitted.</returns>
+    Task GradeDanmakuAsync(string aid, string cid, int progressMs, string gradeId, int gradeScore, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the like counts and the current user's like states for the requested danmakus.
     /// </summary>
     Task<IReadOnlyDictionary<string, (int Likes, bool UserLiked)>> GetDanmakuLikeStatesAsync(string cid, IEnumerable<string> danmakuIds, CancellationToken cancellationToken = default);
