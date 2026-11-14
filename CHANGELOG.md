@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.2611.8.0] - 2026-11-14 （预发布）
+
 ### 新增
 - 直播支持 HDR：可获取 PQ 与 HLG 的 HDR 流，由 mpv（gpu-next）输出；画质菜单分别列出 HDR 与 SDR 档位。自动选择画质时，仅当显示器已开启 HDR 才选用 HDR，两者均可手动切换。
 - 用户主页增加直播入口：主播开播时，个人主页显示“正在直播”，点击即可进入直播间。
@@ -101,5 +103,6 @@
 - 优化动态流多图展示：改进动态图片画廊与大图查看窗口的交互展示。
 - 优化界面过渡动画与交互响应。
 
-[Unreleased]: https://github.com/Better-Native-APPs/BiliFluent/compare/v2.2611.7.0...HEAD
+[Unreleased]: https://github.com/Better-Native-APPs/BiliFluent/compare/v2.2611.8.0-pre.19...HEAD
+[2.2611.8.0]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.8.0-pre.19
 [2.2611.7.0]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.7.0
