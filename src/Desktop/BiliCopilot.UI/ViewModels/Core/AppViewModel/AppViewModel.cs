@@ -4,6 +4,7 @@ using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
@@ -22,6 +23,10 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// </summary>
 public sealed partial class AppViewModel : ViewModelBase
 {
+    /// <summary>Whether the signed-in shell can be shown independently of profile loading.</summary>
+    [ObservableProperty]
+    public partial bool IsMainContentReady { get; set; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AppViewModel"/> class.
     /// </summary>
@@ -95,6 +100,7 @@ public sealed partial class AppViewModel : ViewModelBase
         if (_tokenResolver.GetToken() is not null)
         {
             IsInitialLoading = true;
+            IsMainContentReady = true;
             var mainWindow = new MainWindow();
             BindSponsorMainWindow(mainWindow);
             mainWindow.Activate();
