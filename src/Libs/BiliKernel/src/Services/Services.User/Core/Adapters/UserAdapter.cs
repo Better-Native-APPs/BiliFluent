@@ -51,33 +51,7 @@ internal static class UserAdapter
     public static ChatMessage ToChatMessage(this BiliChatMsg msg, IList<ChatEmoteInfo>? emoteInfos)
     {
         var emoteDict = emoteInfos?.ToDictionary(p => p.Text!, p => p.Url.ToImage());
-        var message = new ChatMessage();
-        message.SenderId = msg.SenderUid.ToString();
-        message.Time = DateTimeOffset.FromUnixTimeSeconds(msg.Timestamp);
-        message.Key = msg.Key;
-        var json = JsonNode.Parse(msg.Content);
-        if (msg.Type == 1)
-        {
-            message.Type = BiliKernel.Models.ChatMessageType.Text;
-            message.Content = new BiliKernel.Models.Appearance.EmoteText(json["content"]?.GetValue<string>() ?? string.Empty, emoteDict);
-        }
-        else if (msg.Type == 2)
-        {
-            message.Type = BiliKernel.Models.ChatMessageType.Image;
-            var url = json["url"]?.GetValue<string>() ?? string.Empty;
-            message.Content = new BiliKernel.Models.Appearance.EmoteText(default, emoteDict, [url.ToImage()]);
-        }
-        else if (msg.Type == 5)
-        {
-            message.Type = BiliKernel.Models.ChatMessageType.Withdrawn;
-        }
-        else
-        {
-            message.Type = BiliKernel.Models.ChatMessageType.Unknown;
-            message.Content = new BiliKernel.Models.Appearance.EmoteText(string.Empty, emoteDict);
-        }
-
-        return message;
+        return ChatMessageContentDecoder.Decode(msg, emoteDict);
     }
 
     public static ChatMessage ToChatMessage(this SendMessageResponse response)
@@ -92,22 +66,24 @@ internal static class UserAdapter
         return message;
     }
 
-    public static ChatSession ToChatSession(this BiliChatSession session, UserProfile user)
+    public static ChatSession ToChatSession(this BiliChatSession session, UserProfile? user)
     {
-        var s = new ChatSession();
-        s.User = user;
-        if (!string.IsNullOrEmpty(session.LastMessage.Content))
+        if (session.SystemMessageType != 0)
+            user = new UserProfile(session.TalkerId.ToString(), session.AccountInfo?.Name, ChatMessageContentDecoder.TryImage(session.AccountInfo?.PictureUrl));
+        var lastMessage = session.SystemMessageType != 0 ? session.LastMessage?.ToChatMessage(default) : null;
+        return new ChatSession
         {
-            var json = JsonNode.Parse(session.LastMessage.Content);
-            var content = json["content"]?.GetValue<string>() ?? string.Empty;
-            s.LastMessage = content;
-        }
-
-        s.Time = DateTimeOffset.FromUnixTimeSeconds(session.LastMessage.Timestamp);
-        s.UnreadCount = session.UnreadCount;
-        s.DoNotDisturb = session.DoNotDisturb == 1;
-        s.IsFollow = session.IsFollow == 1;
-        return s;
+            User = user ?? new UserProfile(session.TalkerId.ToString()),
+            Name = user?.Name,
+            Avatar = user?.Avatar,
+            SessionType = session.SessionType,
+            SystemMessageType = session.SystemMessageType,
+            LastMessage = session.SystemMessageType != 0 ? lastMessage?.PreviewText : ChatMessageContentDecoder.ReadUserPreview(session.LastMessage?.Content),
+            Time = ChatMessageContentDecoder.FromTimestamp(session.LastMessage?.Timestamp ?? (session.SessionTimestamp ?? 0) / 1_000_000) ?? DateTimeOffset.FromUnixTimeSeconds(0),
+            UnreadCount = session.UnreadCount,
+            DoNotDisturb = session.DoNotDisturb == 1,
+            IsFollow = session.IsFollow == 1,
+        };
     }
 
     public static IReadOnlyList<NotifyMessage> ToNotifyMessages(this LikeMessageResponse response)

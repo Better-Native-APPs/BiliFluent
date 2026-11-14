@@ -35,6 +35,26 @@ public sealed class ChatMessage
     /// </summary>
     public ChatMessageType Type { get; set; }
 
+    /// <summary>
+    /// Gets or sets the original protocol message type, including unsupported values.
+    /// </summary>
+    public int MessageType { get; set; }
+
+    /// <summary>
+    /// Gets or sets the unmodified message body for unsupported or malformed content.
+    /// </summary>
+    public string? RawContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the plain-text conversation preview.
+    /// </summary>
+    public string? PreviewText { get; set; }
+
+    /// <summary>
+    /// Gets or sets a supported notification card, or null when the body cannot be decoded.
+    /// </summary>
+    public ChatNotificationCard? NotificationCard { get; set; }
+
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is ChatMessage message && Key == message.Key;
 
