@@ -8,6 +8,7 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Danmaku;
+using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
 
@@ -95,7 +96,7 @@ internal sealed class DanmakuClient
         while (reply == null);
 
         return reply.Elems.Select(p => new DanmakuInformation(
-            p.Id.ToString(),
+            string.IsNullOrEmpty(p.IdStr) ? p.Id.ToString() : p.IdStr,
             p.Content,
             p.Mode,
             p.Progress / 1000.0,
@@ -142,12 +143,86 @@ internal sealed class DanmakuClient
         while (reply == null);
 
         return reply.Elems.Select(p => new DanmakuInformation(
-            p.Id.ToString(),
+            string.IsNullOrEmpty(p.IdStr) ? p.Id.ToString() : p.IdStr,
             p.Content,
             p.Mode,
             p.Progress / 1000.0,
             (uint)p.Color,
             p.Fontsize)).ToList();
+    }
+
+    public async Task LikeDanmakuAsync(string danmakuId, string cid, bool isLike, CancellationToken cancellationToken = default)
+    {
+        var parameters = new Dictionary<string, string>
+        {
+            { "dmid", danmakuId },
+            { "oid", cid },
+            { "op", isLike ? "1" : "2" },
+            { "platform", "web_player" },
+        };
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.LikeDanmaku));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.None,
+            NeedCSRF = true,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyDictionary<string, (int Likes, bool UserLiked)>> GetDanmakuLikeStatesAsync(string cid, IEnumerable<string> danmakuIds, CancellationToken cancellationToken = default)
+    {
+        var ids = string.Join(",", danmakuIds);
+        if (string.IsNullOrEmpty(ids))
+        {
+            return new Dictionary<string, (int Likes, bool UserLiked)>();
+        }
+
+        var parameters = new Dictionary<string, string>
+        {
+            { "oid", cid },
+            { "ids", ids },
+        };
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri(BiliApis.Video.DanmakuLikeStats));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.Web,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseDictionaryStringDanmakuLikeState).ConfigureAwait(false)
+            ?? throw new KernelException("解析弹幕点赞状态失败");
+        return responseObj.Data?.ToDictionary(p => p.Key, p => (Likes: p.Value.Likes, UserLiked: p.Value.UserLike == 1))
+            ?? new Dictionary<string, (int Likes, bool UserLiked)>();
+    }
+
+    public async Task ReportDanmakuAsync(string danmakuId, string cid, int reason, string? content = null, CancellationToken cancellationToken = default)
+    {
+        var parameters = new Dictionary<string, string>
+        {
+            { "cid", cid },
+            { "dmid", danmakuId },
+            { "reason", reason.ToString() },
+        };
+
+        if (content != null)
+        {
+            parameters.Add("content", content);
+        }
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.ReportDanmaku));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.Web,
+            NeedCSRF = true,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SendVideoDanmakuAsync(string content, string aid, string cid, int progress, string color, bool isStandardSize = true, DanmakuLocation location = DanmakuLocation.Scroll, CancellationToken cancellationToken = default)

@@ -668,6 +668,21 @@ public static class BiliApis
         public const string SendDanmaku = _apiBase + "/x/v2/dm/post";
 
         /// <summary>
+        /// Adds or removes a danmaku like.
+        /// </summary>
+        public const string LikeDanmaku = _apiBase + "/x/v2/dm/thumbup/add";
+
+        /// <summary>
+        /// Gets like counts and the current user's danmaku like states.
+        /// </summary>
+        public const string DanmakuLikeStats = _apiBase + "/x/v2/dm/thumbup/stats";
+
+        /// <summary>
+        /// Reports a danmaku.
+        /// </summary>
+        public const string ReportDanmaku = _apiBase + "/x/dm/report/add";
+
+        /// <summary>
         /// 获取视频字幕.
         /// </summary>
         public const string Subtitle = _apiBase + "/x/player/wbi/v2";

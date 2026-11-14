@@ -42,6 +42,18 @@ public sealed class DanmakuService : IDanmakuService
         => _client.GetSegmentDanmakusWithWebAsync(aid, cid, segmentIndex, cancellationToken);
 
     /// <inheritdoc/>
+    public Task LikeDanmakuAsync(string danmakuId, string cid, bool isLike, CancellationToken cancellationToken = default)
+        => _client.LikeDanmakuAsync(danmakuId, cid, isLike, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyDictionary<string, (int Likes, bool UserLiked)>> GetDanmakuLikeStatesAsync(string cid, IEnumerable<string> danmakuIds, CancellationToken cancellationToken = default)
+        => _client.GetDanmakuLikeStatesAsync(cid, danmakuIds, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task ReportDanmakuAsync(string danmakuId, string cid, int reason, string? content = null, CancellationToken cancellationToken = default)
+        => _client.ReportDanmakuAsync(danmakuId, cid, reason, content, cancellationToken);
+
+    /// <inheritdoc/>
     public Task SendLiveDanmakuAsync(string content, string roomId, string color, bool isStandardSize = true, DanmakuLocation location = DanmakuLocation.Scroll, CancellationToken cancellationToken = default)
         => _client.SendLiveDanmakuAsync(content, roomId, color, isStandardSize, location, cancellationToken);
 
