@@ -2,5 +2,16 @@
   "files": {
     "libmpv/x64/libmpv-2.dll": "v0.42.0-11-g8bc468896",
     "visor/x64/BiliCopilot.Visor.exe": "1.0.0"
-  }
+  },
+  "downloads": [
+    {
+      "repository": "shinchiro/mpv-winbuild-cmake",
+      "releaseTag": "20261109",
+      "archiveName": "mpv-dev-x86_64-20261109-git-8bc468896e.7z",
+      "archiveSha256": "4e888424015f7146893d03c4d40e2aaf9474d8d47e761bcc6a97489008a7e425",
+      "fileName": "libmpv-2.dll",
+      "fileSha256": "4598835ced121fd7acbe0f4bdadfee19bf3de28b1b96867e5aa829e0bbedb637",
+      "targetPath": "libmpv/x64/libmpv-2.dll"
+    }
+  ]
 }
