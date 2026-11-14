@@ -1710,4 +1710,7 @@
   <data name="NoMoreContent" xml:space="preserve">
     <value>没有更多内容了</value>
   </data>
+  <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
+    <value>{0}，AI 生成</value>
+  </data>
 </root>

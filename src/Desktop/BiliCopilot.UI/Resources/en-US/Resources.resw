@@ -27,4 +27,7 @@
   <data name="MpvDanmakuRenderer" xml:space="preserve">
     <value>mpv (power saving)</value>
   </data>
+  <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
+    <value>{0}, AI generated</value>
+  </data>
 </root>

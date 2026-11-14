@@ -131,6 +131,24 @@
         <Setter Property="controls:PressScale.IsEnabled" Value="True" />
     </Style>
 
+    <!--  A small neutral tag with accent text, such as the "AI" mark on generated subtitles.  -->
+    <Style x:Key="TagBorderStyle" TargetType="Border">
+        <Setter Property="Padding" Value="5,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+    </Style>
+
+    <Style
+        x:Key="TagTextStyle"
+        BasedOn="{StaticResource CaptionTextBlockStyle}"
+        TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+    </Style>
+
     <!--  The chevron tab on a side panel's divider. "Show" is always visible, so a hidden panel can be found again.  -->
     <Style
         x:Key="SidePanelShowButtonStyle"
