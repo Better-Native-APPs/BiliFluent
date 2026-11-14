@@ -61,6 +61,12 @@ public sealed class MediaSnapshot
     public int? PreferQuality { get; set; }
 
     /// <summary>
+    /// The stable ID of the audio track the user picked (for example "std:30280", "dolby:30250" or "ai:en").
+    /// Only the ID is kept, never a signed address. Null plays the default track.
+    /// </summary>
+    public string? PreferAudioTrackId { get; set; }
+
+    /// <summary>
     /// 偏好的起始位置（秒）.
     /// </summary>
     public double? StartPosition { get; set; }

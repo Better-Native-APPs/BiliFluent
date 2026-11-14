@@ -44,6 +44,7 @@ public sealed partial class PlayerViewModel
             {
                 PreferPart = part,
                 PreferQuality = SelectedSource?.Data.Quality,
+                PreferAudioTrackId = snapshot.PreferAudioTrackId,
                 StartPosition = double.IsFinite(position) && position >= 0 ? position : 0d,
             };
             var prepared = false;

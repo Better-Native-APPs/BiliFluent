@@ -491,6 +491,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
         // 取消两条传输条尚未触发的延迟调度/浮出；供关闭、失活、换媒体与模式切换复用.
         IslandTransport?.CancelPendingInput();
+        IslandAudioTrackButton?.CancelPendingInput();
         TransportControls?.CancelPendingInput();
     }
 

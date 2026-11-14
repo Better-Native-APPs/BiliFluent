@@ -1725,4 +1725,31 @@
   <data name="FailedToOpenMessageLink" xml:space="preserve">
     <value>无法打开消息链接，请重试</value>
   </data>
+  <data name="AudioTrack" xml:space="preserve">
+    <value>声轨</value>
+  </data>
+  <data name="AudioTrackStandard" xml:space="preserve">
+    <value>常规音质</value>
+  </data>
+  <data name="AudioTrackDolby" xml:space="preserve">
+    <value>杜比</value>
+  </data>
+  <data name="AudioTrackDolbyAtmos" xml:space="preserve">
+    <value>杜比全景声</value>
+  </data>
+  <data name="AudioTrackHiRes" xml:space="preserve">
+    <value>Hi-Res 无损</value>
+  </data>
+  <data name="AudioTrackVip" xml:space="preserve">
+    <value>大会员</value>
+  </data>
+  <data name="AudioTrackAITemplate" xml:space="preserve">
+    <value>{0}，AI 配音</value>
+  </data>
+  <data name="AudioTrackVipTemplate" xml:space="preserve">
+    <value>{0}，需要大会员</value>
+  </data>
+  <data name="AudioTrackSwitchFailed" xml:space="preserve">
+    <value>这条声轨暂时播放不了，已切回原来的声轨。</value>
+  </data>
 </root>

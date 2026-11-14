@@ -46,6 +46,19 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         }
     }
 
+    /// <summary>
+    /// The audio tracks of the loaded media and the ID of the one that plays. Empty until the media is loaded.
+    /// </summary>
+    internal (List<AudioTrackInformation> Tracks, string? CurrentId) GetAudioTracks()
+    {
+        lock (InitializationSync)
+        {
+            return _playbackInfo?.AudioTracks is { Count: > 0 } loaded
+                ? ([.. loaded], GetSelectedAudioTrack()?.Id ?? GetDefaultAudioTrackId())
+                : ([], default);
+        }
+    }
+
     internal PlayerFormatInformation? GetCurrentFormat()
     {
         var preferFormatSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.PreferQuality, PreferQualityType.Auto);
@@ -214,7 +227,9 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var preferCodec = AppToolkit.GetPreferCodecId();
         var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
             ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
-        var aSeg = audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
+        // The track the user picked, or the highest standard quality when nothing (available) is picked.
+        var aSeg = GetSelectedAudioTrack()?.Segment
+            ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
         var videoUrl = vSeg?.BaseUrl;
         var audioUrl = aSeg?.BaseUrl;
@@ -237,4 +252,16 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedPgcQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
     }
+
+    // The picked track, when the loaded media has it and it comes with an address.
+    private AudioTrackInformation? GetSelectedAudioTrack()
+    {
+        var id = _snapshot.PreferAudioTrackId;
+        return string.IsNullOrEmpty(id)
+            ? default
+            : _playbackInfo?.AudioTracks?.FirstOrDefault(p => p.Id == id && !string.IsNullOrEmpty(p.Segment?.BaseUrl));
+    }
+
+    private string? GetDefaultAudioTrackId()
+        => _playbackInfo?.Audios is { Count: > 0 } audios ? $"std:{audios.Max(p => Convert.ToInt32(p.Id))}" : default;
 }

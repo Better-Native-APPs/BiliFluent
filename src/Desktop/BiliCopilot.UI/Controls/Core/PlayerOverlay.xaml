@@ -290,6 +290,11 @@
                     <local:IslandTransportControls.RightContent>
                         <StackPanel Orientation="Horizontal">
                             <store:IslandFormatButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                            <!--  The audio track button takes the island's activity from this binding; the island only drives the slots it knows.  -->
+                            <store:IslandAudioButton
+                                x:Name="IslandAudioTrackButton"
+                                IsActive="{x:Bind local:PlayerOverlay.IsIslandActive(ViewModel.IsControlsVisible, ViewModel.IsWindowDeactivated, ViewModel.IsConnecting, ViewModel.IsPlaybackClosing, ViewModel.Presentation), Mode=OneWay}"
+                                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                             <store:IslandSubtitleButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                         </StackPanel>
                     </local:IslandTransportControls.RightContent>

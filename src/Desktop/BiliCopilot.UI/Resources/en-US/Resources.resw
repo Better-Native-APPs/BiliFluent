@@ -42,4 +42,31 @@
   <data name="FailedToOpenMessageLink" xml:space="preserve">
     <value>Could not open the message link. Try again.</value>
   </data>
+  <data name="AudioTrack" xml:space="preserve">
+    <value>Audio track</value>
+  </data>
+  <data name="AudioTrackStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="AudioTrackDolby" xml:space="preserve">
+    <value>Dolby</value>
+  </data>
+  <data name="AudioTrackDolbyAtmos" xml:space="preserve">
+    <value>Dolby Atmos</value>
+  </data>
+  <data name="AudioTrackHiRes" xml:space="preserve">
+    <value>Hi-Res lossless</value>
+  </data>
+  <data name="AudioTrackVip" xml:space="preserve">
+    <value>Premium</value>
+  </data>
+  <data name="AudioTrackAITemplate" xml:space="preserve">
+    <value>{0}, AI dubbing</value>
+  </data>
+  <data name="AudioTrackVipTemplate" xml:space="preserve">
+    <value>{0}, needs a premium membership</value>
+  </data>
+  <data name="AudioTrackSwitchFailed" xml:space="preserve">
+    <value>This audio track can't be played right now. The previous one is back.</value>
+  </data>
 </root>
