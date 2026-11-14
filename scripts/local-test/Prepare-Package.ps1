@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
     [Parameter(Mandatory = $true)][string]$ApprovedInventory,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedInventorySha256,
-    [string]$Version = '2.2611.2.0',
+    [string]$Version,
     [switch]$Prepare,
     [switch]$Pack,
     [string]$MakeAppxPath,
@@ -15,6 +15,7 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'LocalTest.psm1') -Force
 Assert-LTWindows
+if (-not $PSBoundParameters.ContainsKey('Version')) { $Version = Get-LTDefaultVersion }
 Assert-LTVersion $Version
 if ($Pack -and -not $Prepare) { Stop-LT 'Consent' '-Pack requires explicit -Prepare as well.' }
 
@@ -118,9 +119,13 @@ try {
             $check.Dispose()
         }
     }
-    foreach ($name in @('Install.ps1', 'LocalTest.psm1', 'channel.json')) {
+    foreach ($name in @('Install.ps1', 'LocalTest.psm1')) {
         [IO.File]::Copy((Join-Path $PSScriptRoot $name), (Join-Path $delivery $name), $false)
     }
+    # Resolve source-only metadata before copying the self-contained installer support files.
+    $channelJson = Get-LTChannel | ConvertTo-Json -Depth 4
+    if ($channelJson.Contains('__WINDOWS_APP_SDK_VERSION__')) { Stop-LT 'Channel' 'Unresolved Windows App SDK version placeholder.' }
+    [IO.File]::WriteAllText((Join-Path $delivery 'channel.json'), $channelJson, (New-Object Text.UTF8Encoding($false)))
     $package = Join-Path $delivery ("BiliFluent.LocalTest_${Version}_x64.msix")
     if ($Pack) {
         & $MakeAppxPath pack /d $layout /p $package

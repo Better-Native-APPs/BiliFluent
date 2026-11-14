@@ -4,13 +4,14 @@ param(
     [Parameter(Mandatory = $true)][string]$LooseExePath,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedLooseExeSha256,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedSignerCertificateSha256,
-    [string]$Version = '2.2611.2.0'
+    [string]$Version
 )
 # FINAL BATCH ONLY. Does not sign, find keys, import trust, install or extract a package.
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'LocalTest.psm1') -Force
 Assert-LTWindows
+if (-not $PSBoundParameters.ContainsKey('Version')) { $Version = Get-LTDefaultVersion }
 Assert-LTVersion $Version
 $root = [IO.Path]::GetFullPath($DeliveryRoot)
 Assert-LTPlainPath $root

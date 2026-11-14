@@ -9,10 +9,10 @@
   "toastActivatorClsid": "CF0E1EDD-C7F4-56B5-BFD8-C6D8EFBCC0FE",
   "toastGuidAlgorithm": "uuid5(NAMESPACE_URL, name)",
   "toastGuidName": "https://github.com/Better-Native-APPs/BiliFluent/channels/LocalTest/toast-activator",
-  "defaultVersion": "2.2611.2.0",
+  "minimumVersion": "2.2611.2.0",
   "architecture": "x64",
   "executable": "BiliCopilot.UI.exe",
   "activationArguments": "----AppNotificationActivated:",
-  "windowsAppSdkVersion": "2.6.5",
+  "windowsAppSdkVersion": "__WINDOWS_APP_SDK_VERSION__",
   "windowsSdkBuildToolsVersion": "10.0.28000.2957"
 }
