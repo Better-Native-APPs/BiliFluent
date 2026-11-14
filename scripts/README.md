@@ -28,15 +28,17 @@ BiliKernel SDK 源码已作为 Monorepo 纳入仓库目录 `src/Libs/BiliKernel`
 
 ## 2. 准备固定的原生运行时依赖
 
-CI 流程与发布脚本固定从 [shinchiro/mpv-winbuild-cmake 20261109 Release](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261109) 下载并核验以下原生资产。手工编译时请务必使用哈希完全一致的输入，严禁随意替换为其他版本。
+CI 流程与发布脚本以 [`scripts/native-assets.json`](native-assets.json) 为原生资产的唯一固定来源，下载并核验其中指定的资产。手工编译时请务必使用哈希完全一致的输入，严禁随意替换为其他版本。
 
 ### libmpv 运行时
-- **归档名称**：`mpv-dev-x86_64-20261109-git-8bc468896e.7z`
-- **归档 SHA-256**：`4e888424015f7146893d03c4d40e2aaf9474d8d47e761bcc6a97489008a7e425`
-- **提取目标**：`libmpv-2.dll`
-- **文件 SHA-256**：`4598835ced121fd7acbe0f4bdadfee19bf3de28b1b96867e5aa829e0bbedb637`
-- **放置路径**：`src/Desktop/BiliCopilot.UI/Assets/libmpv/x64/libmpv-2.dll`
-- **版本标识**：`v0.42.0-11-g8bc468896`
+`native-assets.json` 的 `files` 保留资产相对路径到版本标识的映射，路径相对于 `src/Desktop/BiliCopilot.UI/Assets`；`downloads` 中各字段含义如下：
+
+- **`repository` / `releaseTag`**：下载来源的 GitHub 仓库与固定发布 tag。
+- **`archiveName` / `archiveSha256`**：归档文件名与归档 SHA-256。
+- **`fileName` / `fileSha256`**：归档中唯一的提取目标文件名与文件 SHA-256。
+- **`targetPath`**：资产放置路径，同样相对于应用的 `Assets` 目录；其版本标识由 `files` 中同名路径给出。
+
+`scripts/ci/Provision-NativeAssets.ps1` 读取这些字段，归档或提取文件哈希不匹配时立即失败。
 
 ### Visor 原生二进制
 Visor 直接基于仓库源码通过 NativeAOT 编译，保证纯原生无外部运行时依赖：
@@ -48,7 +50,7 @@ New-Item -ItemType Directory -Force .\src\Desktop\BiliCopilot.UI\Assets\visor\x6
 Copy-Item .\artifacts\visor\BiliCopilot.Visor.exe .\src\Desktop\BiliCopilot.UI\Assets\visor\x64\BiliCopilot.Visor.exe
 ```
 
-构建脚本在打包前会按 `scripts/native-assets.json` 严格核验上述三个原生资产文件的存在性。
+构建脚本在打包前会按 `scripts/native-assets.json` 的 `files` 严格核验原生资产文件的存在性。
 
 ## 3. 构建与签名 MSIX
 

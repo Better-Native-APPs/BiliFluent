@@ -7,6 +7,9 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
+Import-Module (Join-Path $SourceRoot 'ReleaseMetadata.psm1') -Force
+$baselineVersion = Get-ReleasePackageVersion
+$runtimeVersion = Get-ReleaseRuntimeVersion
 
 $script:Results = New-Object System.Collections.Generic.List[string]
 $script:Failures = 0
@@ -18,6 +21,18 @@ function Add-Result([string]$Name, [bool]$Pass, [string]$Detail) {
     Write-Host $line
 }
 function Assert-That([bool]$Condition, [string]$Message) { if (-not $Condition) { throw ('ASSERT: ' + $Message) } }
+function Get-AdjacentVersion([version]$Version, [int]$Step) {
+    $parts = @($Version.Major, $Version.Minor, $Version.Build, $Version.Revision)
+    for ($i = 2; $i -ge 0; $i--) {
+        $next = $parts[$i] + $Step
+        if ($next -ge 0 -and $next -le 65535) { $parts[$i] = $next; return ($parts -join '.') }
+        $parts[$i] = $(if ($Step -gt 0) { 0 } else { 65535 })
+    }
+    throw 'No adjacent MSIX version is available.'
+}
+$olderVersion = Get-AdjacentVersion ([version]$baselineVersion) -1
+$olderRuntimeVersion = Get-AdjacentVersion ([version]$runtimeVersion) -1
+$higherRuntimeVersion = Get-AdjacentVersion ([version]$runtimeVersion) 1
 function Invoke-Case([string]$Name, [scriptblock]$Body) {
     try { $detail = & $Body; Add-Result $Name $true ([string]($detail | Select-Object -First 1)) }
     catch { Add-Result $Name $false $_.Exception.Message }
@@ -40,17 +55,25 @@ Invoke-Case 'shared validation region byte-identical in both scripts' {
     Assert-That ($a.Length -gt 1000 -and $a -ceq $b) 'region differs'
     'length=' + $a.Length
 }
-. $installSource
+$stampedRoot = Join-Path $WorkRoot 'templates'
+[void][IO.Directory]::CreateDirectory($stampedRoot)
+foreach ($file in @($installSource, $trustSource)) {
+    $stamped = Join-Path $stampedRoot ([IO.Path]::GetFileName($file))
+    [IO.File]::Copy($file, $stamped)
+    Set-ReleaseScriptVersion $stamped $baselineVersion
+}
+. (Join-Path $stampedRoot 'Install.ps1')
 $script:NativePackageDeployment = ${function:Invoke-PackageDeployment}
 $untrustedRootMessage = (New-Object System.ComponentModel.Win32Exception ([int]-2146762487)).Message
 $publisherId = Get-PublisherId 'CN=BiliFluent'
-$fullName = 'BiliFluent_2.2611.8.0_x64__' + $publisherId
+$fullName = "BiliFluent_${baselineVersion}_x64__" + $publisherId
+$msixRelativePath = "payload\BiliFluent_${baselineVersion}_x64.msix"
 $familyName = 'BiliFluent_' + $publisherId
 $fixtureThumbprint = '0123456789ABCDEF0123456789ABCDEF01234567'
 $msixSignature = [Text.Encoding]::ASCII.GetBytes('PKCX-INERT-FIXTURE-NOT-A-SIGNATURE')
-$runtimeName = 'Microsoft.WindowsAppRuntime.2'
+$runtimeName = 'Microsoft.WindowsAppRuntime.' + ([version]$runtimeVersion).Major
+$runtimeFileName = "$runtimeName.msix"
 $runtimePublisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
-$runtimeVersion = '2.6.5.0'
 function Reset-Mock {
     $script:M = @{
         Elevated = $false; Sid = 'S-1-5-21-1000-1000-1000-1001'
@@ -72,7 +95,7 @@ function Get-CertificateFacts([byte[]]$Bytes) {
     return [pscustomobject]$facts
 }
 function Get-NativeSignature([string]$Path) {
-    if ([IO.Path]::GetFileName($Path) -ceq 'Microsoft.WindowsAppRuntime.2.msix') {
+    if ([IO.Path]::GetFileName($Path) -ceq $runtimeFileName) {
         return [pscustomobject]@{ Status = $script:M.DependencySignatureStatus; StatusMessage = 'INERT'; SignerRawData = $null }
     }
     return [pscustomobject]@{ Status = 'UnknownError'; StatusMessage = $untrustedRootMessage; SignerRawData = $script:M.CerBytes }
@@ -99,7 +122,7 @@ function Invoke-PackageDeployment([string]$PackagePath, [string[]]$DependencyPat
     $script:M.DeployArgs = @{ Path = $PackagePath; Dependencies = @($DependencyPaths) }
     if ($script:M.DeployThrow) { throw (New-Object System.Exception $script:M.DeployThrow) }
     foreach ($old in @($script:M.Packages | Where-Object { $_.Name -ceq 'BiliFluent' })) { $script:M.Packages.Remove($old) }
-    $record = New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.8.0' $familyName $fullName 'Developer' $false 'X64'
+    $record = New-PackageRecord 'BiliFluent' 'CN=BiliFluent' $baselineVersion $familyName $fullName 'Developer' $false 'X64'
     [void]$script:M.Packages.Add($record)
 }
 # 核心流程共用的惰性夹具
@@ -132,8 +155,10 @@ function New-Fixture([hashtable]$Options) {
     [void][IO.Directory]::CreateDirectory((Join-Path $dir 'payload'))
     [IO.File]::Copy($installSource, (Join-Path $dir 'Install.ps1'))
     [IO.File]::Copy($trustSource, (Join-Path $dir 'Trust-Certificate.ps1'))
-    $id = @{ Name = 'BiliFluent'; Publisher = 'CN=BiliFluent'; Version = '2.2611.8.0'; Arch = 'x64'; AppId = 'App'; MinOs = '10.0.19041.0' }
-    $msixPath = Join-Path $dir 'payload\BiliFluent_2.2611.8.0_x64.msix'
+    Set-ReleaseScriptVersion (Join-Path $dir 'Install.ps1') $baselineVersion
+    Set-ReleaseScriptVersion (Join-Path $dir 'Trust-Certificate.ps1') $baselineVersion
+    $id = @{ Name = 'BiliFluent'; Publisher = 'CN=BiliFluent'; Version = $baselineVersion; Arch = 'x64'; AppId = 'App'; MinOs = '10.0.19041.0' }
+    $msixPath = Join-Path $dir $msixRelativePath
     $withDependency = $Options.ContainsKey('Dependency') -and $Options.Dependency
     Write-InertZip $msixPath (Get-AppxXml $id -WithDependency:$withDependency) $msixSignature
     $cerPath = Join-Path $dir 'payload\BiliFluent.cer'
@@ -142,7 +167,7 @@ function New-Fixture([hashtable]$Options) {
     $script:M.CerBytes = $cerBytes
     $manifest = [ordered]@{
         schemaVersion = 1
-        package       = [ordered]@{ relativePath = 'payload\BiliFluent_2.2611.8.0_x64.msix'; sha256 = (Get-FileSha $msixPath); name = 'BiliFluent'; publisher = 'CN=BiliFluent'; version = '2.2611.8.0'; architecture = 'x64'
+        package       = [ordered]@{ relativePath = $msixRelativePath; sha256 = (Get-FileSha $msixPath); name = 'BiliFluent'; publisher = 'CN=BiliFluent'; version = $baselineVersion; architecture = 'x64'
             packageFamilyName = $familyName; packageFullName = $fullName; applicationId = 'App'; minOsVersion = '10.0.19041.0' }
         certificate   = [ordered]@{ relativePath = 'payload\BiliFluent.cer'; sha256 = (Get-FileSha $cerPath); derSha256 = (Get-FileSha $cerPath); thumbprint = $fixtureThumbprint; subject = 'CN=BiliFluent'
             notBeforeUtc = '2026-01-01T00:00:00Z'; notAfterUtc = '2027-12-31T00:00:00Z'; codeSigningEku = '1.3.6.1.5.5.7.3.3'; digitalSignature = $true; isCertificateAuthority = $false }
@@ -150,13 +175,13 @@ function New-Fixture([hashtable]$Options) {
         scripts       = [ordered]@{ installSha256 = (Get-FileSha (Join-Path $dir 'Install.ps1')); trustSha256 = (Get-FileSha (Join-Path $dir 'Trust-Certificate.ps1')) }
     }
     if ($withDependency -and -not $Options.ContainsKey('OmitDependencyPin')) {
-        $runtimePath = Join-Path $dir 'payload\Microsoft.WindowsAppRuntime.2.msix'
+        $runtimePath = Join-Path $dir "payload\$runtimeFileName"
         $runtimeId = @{ Name = $runtimeName; Publisher = $runtimePublisher; Version = $runtimeVersion; Arch = 'x64'; AppId = ''; MinOs = '10.0.17763.0' }
         if ($Options.ContainsKey('DependencyIdentity')) {
             foreach ($key in $Options.DependencyIdentity.Keys) { $runtimeId[$key] = $Options.DependencyIdentity[$key] }
         }
         Write-InertZip $runtimePath (Get-AppxXml $runtimeId -Framework) $msixSignature
-        $manifest.dependencies = @([ordered]@{ relativePath = 'payload/Microsoft.WindowsAppRuntime.2.msix'; sha256 = (Get-FileSha $runtimePath)
+        $manifest.dependencies = @([ordered]@{ relativePath = "payload/$runtimeFileName"; sha256 = (Get-FileSha $runtimePath)
             name = $runtimeName; publisher = $runtimePublisher; version = $runtimeVersion; architecture = 'x64'; declaredMinVersion = $runtimeVersion })
     }
     $json = ConvertTo-Json -InputObject $manifest -Depth 6
@@ -183,14 +208,14 @@ Invoke-Case 'valid inert fixture default precheck passes without any writes' {
 }
 Invoke-Case 'MSIX digest mismatch blocks before trust/deploy' {
     Reset-Mock
-    $dir = New-Fixture @{ After = { param($d) $p = Join-Path $d 'payload\BiliFluent_2.2611.8.0_x64.msix'; $b = [IO.File]::ReadAllBytes($p); $b[$b.Length - 1] = $b[$b.Length - 1] -bxor 1; [IO.File]::WriteAllBytes($p, $b) } }
+    $dir = New-Fixture @{ After = { param($d) $p = Join-Path $d $msixRelativePath; $b = [IO.File]::ReadAllBytes($p); $b[$b.Length - 1] = $b[$b.Length - 1] -bxor 1; [IO.File]::WriteAllBytes($p, $b) } }
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match 'MSIX SHA-256 不匹配') $r.failure
     Assert-NoChanges $r
 }
 Invoke-Case 'same version + identical signature reports AlreadyPresent (no trust/deploy, even with -Install)' {
     Reset-Mock; $dir = New-Fixture @{}
-    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.8.0' $familyName $fullName 'Developer' $false 'X64'))
+    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' $baselineVersion $familyName $fullName 'Developer' $false 'X64'))
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'AlreadyPresent' -and $r.phases.AlreadyPresent.status -ceq 'Yes') ('outcome=' + $r.outcome + ' ' + $r.failure)
     Assert-NoChanges $r
@@ -214,7 +239,7 @@ Invoke-Case 'install: exact certificate already trusted -> no UAC helper' {
 Invoke-Case 'install: older own version is upgraded (old version removal allowed)' {
     Reset-Mock; $script:M.Trusted = $true; $dir = New-Fixture @{}
     $script:M.OldSigner = $script:M.CerBytes
-    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' '2.2611.0.0' $familyName ('BiliFluent_2.2611.0.0_x64__' + $publisherId) 'Developer' $false 'X64'))
+    [void]$script:M.Packages.Add((New-PackageRecord 'BiliFluent' 'CN=BiliFluent' $olderVersion $familyName ("BiliFluent_${olderVersion}_x64__" + $publisherId) 'Developer' $false 'X64'))
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Installed' -and $r.phases.Preflight.existingPackage -ceq 'Upgrade') ('outcome=' + $r.outcome + ' ' + $r.failure)
 }
@@ -239,9 +264,9 @@ Invoke-Case 'missing runtime is resolved from the pinned offline payload and pas
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Installed') ('outcome=' + $r.outcome + ' ' + $r.failure)
     Assert-That ($r.phases.Preflight.dependencies[0].state -ceq 'WillAddPinnedLocal') 'dependency plan'
-    Assert-That ($script:M.DeployArgs.Dependencies.Count -eq 1 -and [IO.Path]::GetFileName($script:M.DeployArgs.Dependencies[0]) -ceq 'Microsoft.WindowsAppRuntime.2.msix') 'pinned dependency passed to deployment'
+    Assert-That ($script:M.DeployArgs.Dependencies.Count -eq 1 -and [IO.Path]::GetFileName($script:M.DeployArgs.Dependencies[0]) -ceq $runtimeFileName) 'pinned dependency passed to deployment'
 }
-foreach ($installedVersion in @('2.6.5.0', '2.6.6.0')) {
+foreach ($installedVersion in @($runtimeVersion, $higherRuntimeVersion)) {
     Invoke-Case ('runtime ' + $installedVersion + ' already installed is skipped without downgrade') {
         Reset-Mock; $dir = New-Fixture @{ Dependency = $true }
         [void]$script:M.Packages.Add((New-PackageRecord $runtimeName $runtimePublisher $installedVersion 'INERT' 'INERT' 'Store' $true 'X64'))
@@ -251,9 +276,9 @@ foreach ($installedVersion in @('2.6.5.0', '2.6.6.0')) {
     }
 }
 foreach ($record in @(
-    @{ Version = '2.6.4.0'; Publisher = $runtimePublisher; Arch = 'X64'; Label = 'older' },
-    @{ Version = '2.6.5.0'; Publisher = 'CN=OTHER'; Arch = 'X64'; Label = 'wrong publisher' },
-    @{ Version = '2.6.5.0'; Publisher = $runtimePublisher; Arch = 'X86'; Label = 'wrong architecture' }
+    @{ Version = $olderRuntimeVersion; Publisher = $runtimePublisher; Arch = 'X64'; Label = 'older' },
+    @{ Version = $runtimeVersion; Publisher = 'CN=OTHER'; Arch = 'X64'; Label = 'wrong publisher' },
+    @{ Version = $runtimeVersion; Publisher = $runtimePublisher; Arch = 'X86'; Label = 'wrong architecture' }
 )) {
     Invoke-Case ('runtime ' + $record.Label + ' does not satisfy the dependency') {
         Reset-Mock; $dir = New-Fixture @{ Dependency = $true }
@@ -271,13 +296,13 @@ Invoke-Case 'missing runtime without a local pin blocks before trust or deployme
 }
 Invoke-Case 'modified offline runtime blocks on its SHA-256 before trust or deployment' {
     Reset-Mock
-    $dir = New-Fixture @{ Dependency = $true; After = { param($d) [IO.File]::AppendAllText((Join-Path $d 'payload/Microsoft.WindowsAppRuntime.2.msix'), 'TAMPERED') } }
+    $dir = New-Fixture @{ Dependency = $true; After = { param($d) [IO.File]::AppendAllText((Join-Path $d "payload/$runtimeFileName"), 'TAMPERED') } }
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match 'SHA-256 不匹配') $r.failure
     Assert-NoChanges $r
 }
 Invoke-Case 'offline runtime identity mismatch blocks even with a matching file digest' {
-    Reset-Mock; $dir = New-Fixture @{ Dependency = $true; DependencyIdentity = @{ Version = '2.6.6.0' } }
+    Reset-Mock; $dir = New-Fixture @{ Dependency = $true; DependencyIdentity = @{ Version = $higherRuntimeVersion } }
     $r = Invoke-Fixture $dir $true ''
     Assert-That ($r.outcome -ceq 'Blocked' -and $r.failure -match '本地依赖包身份与清单不一致') $r.failure
     Assert-NoChanges $r
@@ -299,6 +324,32 @@ Invoke-Case 'native deployment uses local DependencyPath so Windows deploys fram
         Assert-That ($script:M.NativeDeployArgs.Path -ceq 'INERT-APP.msix' -and $script:M.NativeDeployArgs.Dependencies.Count -eq 1 -and $script:M.NativeDeployArgs.Dependencies[0] -ceq 'INERT-RUNTIME.msix') 'local framework must be supplied to Add-AppxPackage'
         Assert-That ($script:M.NativeDeployArgs.ErrorAction -ceq 'Stop') 'deployment errors must stop installation'
     } finally { Remove-Item Function:\Add-AppxPackage }
+}
+Invoke-Case 'release template derives application and runtime identities from repository manifests' {
+    $template = Get-ReleaseArtifactsTemplate
+    Assert-That ($template.package.version -ceq $baselineVersion -and $template.package.packageFullName -ceq $fullName) 'application version'
+    Assert-That ($template.dependencies[0].version -ceq $runtimeVersion -and $template.dependencies[0].declaredMinVersion -ceq $runtimeVersion) 'runtime version'
+    Assert-That ($template.dependencies[0].name -ceq $runtimeName -and $template.dependencies[0].relativePath -ceq "payload/$runtimeFileName") 'runtime identity'
+}
+Invoke-Case 'explicit application version override stamps scripts and artifact names consistently' {
+    $version = Get-AdjacentVersion ([version]$baselineVersion) 1
+    $path = Join-Path $WorkRoot 'Install-override.ps1'
+    [IO.File]::Copy($installSource, $path)
+    Set-ReleaseScriptVersion $path $version
+    $text = [IO.File]::ReadAllText($path)
+    Assert-That (-not $text.Contains('__VERSION__') -and $text -cmatch ("Version\s*=\s*'" + [regex]::Escape($version) + "'")) 'script stamp'
+    $template = Get-ReleaseArtifactsTemplate $version
+    Assert-That ($template.package.version -ceq $version -and $template.package.relativePath -ceq "payload/BiliFluent_${version}_x64.msix") 'artifact stamp'
+}
+Invoke-Case 'extra version placeholders prevent delivery script stamping' {
+    $path = Join-Path $WorkRoot 'Install-unresolved.ps1'
+    [IO.File]::WriteAllText($path, ([IO.File]::ReadAllText($installSource) + "`n# __VERSION__"), (New-Object Text.UTF8Encoding($true)))
+    try { Set-ReleaseScriptVersion $path $baselineVersion; throw 'Expected stamping to fail.' }
+    catch { Assert-That ($_.Exception.Message -match 'Unresolved version placeholder') $_.Exception.Message }
+}
+Invoke-Case 'unresolved manifest placeholders prevent delivery sealing' {
+    try { Assert-ReleaseTemplateComplete '{"version":"__VERSION__","sha256":"__PENDING_PACKAGE_SHA256__"}'; throw 'Expected sealing to fail.' }
+    catch { Assert-That ($_.Exception.Message -match 'Unresolved delivery manifest placeholder') $_.Exception.Message }
 }
 Write-Host ('TOTAL_PASS={0} TOTAL_FAIL={1}' -f ($script:Results.Count - $script:Failures), $script:Failures)
 if ($script:Failures -gt 0) { exit 1 }

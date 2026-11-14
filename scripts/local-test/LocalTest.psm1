@@ -7,6 +7,25 @@ function Stop-LT([string]$Code, [string]$Message) {
     throw $exception
 }
 
+function Get-LTChannel {
+    $channel = Get-Content (Join-Path $PSScriptRoot 'channel.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($channel.windowsAppSdkVersion -ceq '__WINDOWS_APP_SDK_VERSION__') {
+        [xml]$packages = Get-Content (Join-Path $PSScriptRoot '../../src/Directory.Packages.props') -Raw -Encoding UTF8
+        $sdk = $packages.SelectSingleNode('/Project/ItemGroup/PackageVersion[@Include="Microsoft.WindowsAppSDK"]')
+        if ($null -eq $sdk) { Stop-LT 'Channel' 'Microsoft.WindowsAppSDK must be pinned in src/Directory.Packages.props.' }
+        $channel.windowsAppSdkVersion = $sdk.GetAttribute('Version')
+    }
+    return $channel
+}
+
+function Get-LTDefaultVersion {
+    $stream = [IO.File]::OpenRead((Join-Path $PSScriptRoot '../../src/Desktop/BiliCopilot.UI/Package.appxmanifest'))
+    try { $manifest = Read-LTXml $stream } finally { $stream.Dispose() }
+    $version = [string]$manifest.Package.Identity.Version
+    Assert-LTVersion $version
+    return $version
+}
+
 function Get-LTIdentity {
     [pscustomobject]@{
         Name = 'BiliFluent.LocalTest'; Publisher = 'CN=BiliFluent'
@@ -24,7 +43,8 @@ function Assert-LTVersion([string]$Version) {
     foreach ($part in $Version.Split('.')) {
         if ([int]$part -gt 65535) { Stop-LT 'Version' 'MSIX version components must be <= 65535.' }
     }
-    if ([version]$Version -lt [version]'2.2611.2.0') { Stop-LT 'Version' 'The new channel starts at 2.2611.2.0 or later; no installed baseline is assumed.' }
+    $minimum = (Get-LTChannel).minimumVersion
+    if ([version]$Version -lt [version]$minimum) { Stop-LT 'Version' ("The new channel starts at $minimum or later; no installed baseline is assumed.") }
 }
 
 function Assert-LTWindows {
@@ -221,4 +241,4 @@ function Assert-LTSignature([string]$Path, [string]$SignerSha256) {
     }
 }
 
-Export-ModuleMember -Function Stop-LT, Get-LTIdentity, Assert-LTVersion, Assert-LTWindows, Assert-LTPlainPath, Get-LTSha256, Open-LTPinned, Read-LTJson, Read-LTXml, Get-LTManifestNodes, Assert-LTManifest, Assert-LTNativePe, Assert-LTPeVersion, Read-LTPackage, Assert-LTSignature
+Export-ModuleMember -Function Stop-LT, Get-LTChannel, Get-LTDefaultVersion, Get-LTIdentity, Assert-LTVersion, Assert-LTWindows, Assert-LTPlainPath, Get-LTSha256, Open-LTPinned, Read-LTJson, Read-LTXml, Get-LTManifestNodes, Assert-LTManifest, Assert-LTNativePe, Assert-LTPeVersion, Read-LTPackage, Assert-LTSignature

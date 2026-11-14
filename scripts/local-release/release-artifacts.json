@@ -1,14 +1,14 @@
 ﻿{
     "schemaVersion":  1,
     "package":  {
-                    "relativePath":  "payload/BiliFluent_2.2611.8.0_x64.msix",
+                    "relativePath":  "payload/BiliFluent___VERSION___x64.msix",
                     "sha256":  "__PENDING_PACKAGE_SHA256__",
                     "name":  "BiliFluent",
                     "publisher":  "CN=BiliFluent",
-                    "version":  "2.2611.8.0",
+                    "version":  "__VERSION__",
                     "architecture":  "x64",
                     "packageFamilyName":  "BiliFluent_7rrwb2e69v8er",
-                    "packageFullName":  "BiliFluent_2.2611.8.0_x64__7rrwb2e69v8er",
+                    "packageFullName":  "BiliFluent___VERSION___x64__7rrwb2e69v8er",
                     "applicationId":  "App",
                     "minOsVersion":  "10.0.19041.0"
                 },
@@ -26,13 +26,13 @@
                     },
     "dependencies":  [
                          {
-                             "relativePath": "payload/Microsoft.WindowsAppRuntime.2.msix",
+                             "relativePath": "payload/__WINDOWS_APP_RUNTIME_NAME__.msix",
                              "sha256": "a0b8a226c0c993843f5bb6936037d4970e6e5b8e31c0e6f98497d8dd421a4709",
-                             "name": "Microsoft.WindowsAppRuntime.2",
+                             "name": "__WINDOWS_APP_RUNTIME_NAME__",
                              "publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
-                             "version": "2.6.5.0",
+                             "version": "__WINDOWS_APP_RUNTIME_VERSION__",
                              "architecture": "x64",
-                             "declaredMinVersion": "2.6.5.0"
+                             "declaredMinVersion": "__WINDOWS_APP_RUNTIME_VERSION__"
                          }
                      ],
     "scripts":  {
