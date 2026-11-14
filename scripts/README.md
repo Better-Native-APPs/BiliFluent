@@ -99,28 +99,36 @@ BiliFluent-<version>/
 - **分支策略**：
   - 日常开发与 Bug 修复在 `dev` 分支进行。
   - 集中完成一批工作后开 `dev` → `main` PR，待 `build` 通过后，在本地 fast-forward 并推送 `main`，不使用 GitHub 网页合并。
+- **编译产物复用**：
+  - PR 的 `build` 检出实际头 SHA，运行 Build-Release（不传证书），编译未签名 MSIX 并暂存固定版本离线框架。编译 artifact 保留 14 天，仅含这些文件及记录来源、版本、SHA-256 的 `compiled-artifacts.json`。
+  - 推送 `main` 或正式 tag 时，只复用本仓库、非 fork、同工作流、同头 SHA、结论为 success 的运行产物。未命中、过期或下载不可用则完整编译；`workflow_dispatch` 总是完整编译。
+  - 下载先校验 GitHub artifact 归档 SHA-256，再校验文件清单、来源 SHA 与包身份。完整编译和复用共用 Complete-ReleasePackage：正式证书签名、平台验签、签名者与发布者校验、包版本与清单校验。
+  - 验签时只在一次性发布 runner 临时信任本次公钥，完成后移除。随后 Make-Delivery 重算已签名 MSIX、`.cer`、交付 JSON 和安装脚本的哈希，不复用旧交付 ZIP。
+  - 编译 artifact 未签名，用于流水线复用；安装使用发布阶段生成的交付 ZIP。哈希或来源校验失败会终止发布，不当作缓存未命中。
 - **四段版本 `a.b.c.d`**：
   - `d = 0` 为正式版，`d > 0` 为预发布版。`a.b.c.0` 正式版后依次发布 `a.b.c.1`、`a.b.c.2`…，下一正式版为 `a.b.(c+1).0`，确保可直接覆盖升级。
   - 清单版本必须严格大于所有已有发布 tag 代表的包版本；旧格式 `v<version>-pre.<run_number>` 的包版本仍按 `<version>` 比较，不能复用。
 - **预发布自动构建（Pre-Release）**：
-  - 向 `main` 推送代码且清单第四段大于 0 时，自动构建、签名并发布 `v<version>-pre`，标题为 `BiliFluent <version> 预发布版`。CI 创建的 `-pre` tag 不再触发正式版流程。
+  - 向 `main` 推送代码且清单第四段大于 0 时，复用同 SHA 编译产物或完整编译，然后签名并发布 `v<version>-pre`，标题为 `BiliFluent <version> 预发布版`。CI 创建的 `-pre` tag 不再触发正式版流程。
   - 说明只取 `## [<version>] - YYYY-MM-DD` 小节，只记录相对上一个发布的变化；旧预发布 Release 与 tag 保留。
 - **正式版本发布（Release）**：
-  - 清单第四段为 0 时，向 `main` 推送只构建打包。推送匹配清单的 `v<version>` 正式 tag 才发布，第四段非 0、版本不匹配或 tag 目标不是本次提交都会失败。
+  - 清单第四段为 0 时，向 `main` 推送且已有同 SHA 成功编译产物则直接跳过；否则只编译并上传未签名产物。推送匹配清单的 `v<version>` 正式 tag 才签名、打包并发布，第四段非 0、版本不匹配或 tag 目标不是本次提交都会失败。
+  - 正式版修改版本后通常是新 SHA，未命中时自然完整编译；若该 SHA 的 PR/main 编译已经成功，则继续复用。
   - 说明只取对应正式版小节，汇总上一个正式版之后的全部变化。
 - **合并至 main 前检查单**：
   1. 在 `dev` 显式提升清单版本；预发布递增第四段。
   2. 将 `[Unreleased]` 改名为与清单同名、有日期且非空的版本小节，可在日期后加“（预发布）”；重新保留空的 `[Unreleased]` 并更新底部链接。
   3. PR 的 `build` 通过后，执行 `git fetch origin`、`git merge-base --is-ancestor origin/main dev`，确认可快进，再执行 `git push origin dev:main`。
-  4. CI 在构建前检查远端 tag、版本递增和 CHANGELOG 小节；非纯文档 PR 未提升版本会失败，纯文档变更仍跳过构建。不要复用已有 tag。
+  4. PR 与发布工作流都会先检查远端 tag、版本递增和 CHANGELOG 小节，复用不能跳过门禁；非纯文档 PR 未提升版本会失败，纯文档变更仍跳过构建。不要复用已有 tag。
 - **正式版步骤**：
   1. 将清单改为 `a.b.(c+1).0`，合并本周期预发布小节及未发布条目到正式版小节，删除文件中已合并的预发布小节；它们的 GitHub Release 页面保留。
-  2. PR 构建通过后在本地 fast-forward `main`，等待该次打包完成。
+  2. PR 构建通过后在本地 fast-forward `main`，等待该次复用检查或未签名编译完成。
   3. 在最新 `main` 提交从清单读取版本并打 tag：`[xml]$manifest = Get-Content ./src/Desktop/BiliCopilot.UI/Package.appxmanifest -Raw; $tag = 'v' + $manifest.Package.Identity.Version; git tag -s $tag; git push origin $tag`。
   4. 校验历史版本时只排除本次已推送且提交匹配的正式 tag 自身，其余 tag 仍参与比较。
 - **手动运行与脚本自检**：
-  - `workflow_dispatch` 按所选 ref 使用相同规则；不要选择预发布 tag 来发布正式版。
+  - `workflow_dispatch` 按所选 ref 使用发布规则，但总是完整编译；不要选择预发布 tag 来发布正式版。
   - 运行 `./scripts/ci/Test-ReleaseInfo.ps1` 可离线模拟事件和版本门禁；脚本只修改临时清单副本，注入 tag 列表，不访问远端。
+  - 运行 `./scripts/ci/Test-CompileArtifact.ps1` 可离线校验产物选择、SHA-256、包身份和编译回落逻辑；只生成惰性临时 ZIP，不签名或安装应用。
 - **密钥管理（Secrets）**：
   - 代码签名私钥由仓库 Actions Secrets 保护：
     - `SIGNING_PFX_BASE64`：PFX 证书二进制的 Base64 编码字符串。
