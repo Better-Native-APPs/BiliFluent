@@ -255,7 +255,9 @@ public sealed partial class MpvClient : IAsyncDisposable
 
         // The loop may be blocked in the native wait, which cancellation alone does not interrupt.
         _handle.Wakeup();
-        var finished = await Task.WhenAny(loop, Task.Delay(EventLoopExitTimeout));
+        using var timeout = new CancellationTokenSource();
+        var finished = await Task.WhenAny(loop, Task.Delay(EventLoopExitTimeout, timeout.Token));
+        await timeout.CancelAsync();
         if (finished != loop)
         {
             _logger.LogWarning("Mpv | The event loop did not stop in time.");

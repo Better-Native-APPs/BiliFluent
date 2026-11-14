@@ -43,7 +43,9 @@ internal static class MpvShutdownHelper
                 return;
             }
 
-            var completed = await Task.WhenAny(shutdown.Task, Task.Delay(timeout)).ConfigureAwait(false);
+            using var timeoutCancellation = new CancellationTokenSource();
+            var completed = await Task.WhenAny(shutdown.Task, Task.Delay(timeout, timeoutCancellation.Token)).ConfigureAwait(false);
+            await timeoutCancellation.CancelAsync().ConfigureAwait(false);
             if (completed == shutdown.Task)
             {
                 logger.LogInformation("mpv 核心已退出");

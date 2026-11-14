@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <AssemblyName>BiliFluent.Mpv</AssemblyName>
     <!-- The namespaces stay as they were in Richasy.MpvKernel, so the application code that uses them is unchanged. -->
     <RootNamespace>Richasy.MpvKernel</RootNamespace>
@@ -18,6 +18,5 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="HanumanInstitute.LibMpv" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 </Project>
