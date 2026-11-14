@@ -4,7 +4,27 @@ using System.Globalization;
 
 namespace BiliCopilot.UI.Controls.Danmaku;
 
-internal sealed record MpvAssDanmakuItem(double Start, int Mode, double FontSize, string Text, uint Color);
+internal sealed record MpvAssDanmakuItem(double Start, int Mode, double FontSize, string Text, uint Color)
+{
+    internal double StartX { get; init; }
+    internal double StartY { get; init; }
+    internal double EndX { get; init; }
+    internal double EndY { get; init; }
+    internal bool IsStartXRelative { get; init; }
+    internal bool IsStartYRelative { get; init; }
+    internal bool IsEndXRelative { get; init; }
+    internal bool IsEndYRelative { get; init; }
+    internal byte StartAlpha { get; init; } = byte.MaxValue;
+    internal byte EndAlpha { get; init; } = byte.MaxValue;
+    internal ulong DurationMs { get; init; }
+    internal ulong TranslationDurationMs { get; init; }
+    internal ulong TranslationDelayMs { get; init; }
+    internal double RotateZ { get; init; }
+    internal double RotateY { get; init; }
+    internal bool HasOutline { get; init; } = true;
+    internal bool KeepDefinedFontSize { get; init; }
+    internal string? FontFamily { get; init; }
+}
 
 internal sealed record MpvAssDanmakuStyle(
     string FontFamily,
@@ -29,13 +49,15 @@ internal sealed record MpvAssDanmakuStyle(
 internal static class MpvAssDanmakuDocument
 {
     private const int ScriptHeight = 1080;
+    // danmaku2ass uses BiliPlayerSize = (672, 438) for Bilibili's Flash positioning canvas.
+    private const int AdvancedReferenceWidth = 672;
+    private const int AdvancedReferenceHeight = 438;
 
     internal static string Build(
         IEnumerable<MpvAssDanmakuItem> items,
         MpvAssDanmakuStyle style,
         double aspect,
         CancellationToken token,
-        out int skippedAdvanced,
         out int eventCount)
     {
         aspect = double.IsFinite(aspect) && aspect > 0 ? aspect : 16d / 9;
@@ -68,27 +90,27 @@ internal static class MpvAssDanmakuDocument
             .AppendLine("[Events]")
             .AppendLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
 
-        skippedAdvanced = 0;
         eventCount = 0;
         foreach (var item in items.OrderBy(p => p.Start))
         {
             token.ThrowIfCancellationRequested();
-            if (item.Mode == 7)
-            {
-                skippedAdvanced++;
-                continue;
-            }
-
+            var advanced = item.Mode == 7;
             var rolling = item.Mode is 1 or 6;
-            if ((!rolling || !style.Rolling) && (item.Mode != 5 || !style.Top) && (item.Mode != 4 || !style.Bottom)) continue;
-            var text = Escape(item.Text);
+            if (!advanced && (!rolling || !style.Rolling) && (item.Mode != 5 || !style.Top) && (item.Mode != 4 || !style.Bottom)) continue;
+            var text = Escape(item.Text, advanced);
             if (text.Length == 0) continue;
             var start = Math.Max(0, item.Start);
-            var fontSize = GetDipFontSize(item.FontSize, style) * scale;
+            var fontSize = GetDipFontSize(item.FontSize, style, advanced && item.KeepDefinedFontSize) * scale;
             var span = Math.Min(laneCount, Math.Max(1, (int)Math.Ceiling(((fontSize * 1.2) + (2 * outline)) / laneHeight)));
             var end = start + 4;
             string position;
-            if (rolling)
+            if (advanced)
+            {
+                if (item.DurationMs == 0) continue;
+                end = start + (item.DurationMs / 1000d);
+                position = AdvancedOverrides(item, width, style.Opacity);
+            }
+            else if (rolling)
             {
                 while (active.TryPeek(out var expiry, out _) && expiry <= start) active.Dequeue();
                 if (style.Limit && active.Count >= 20) continue;
@@ -123,7 +145,7 @@ internal static class MpvAssDanmakuDocument
             var blue = color & 255;
             var border = ((red * 299) + (green * 587) + (blue * 114)) < 60000 ? "FFFFFF" : "000000";
             var primary = color == 0xFFFFFF ? string.Empty : FormattableString.Invariant($"\\c&H{blue:X2}{green:X2}{red:X2}&");
-            builder.Append("Dialogue: 0,").Append(Time(start)).Append(',').Append(Time(end))
+            builder.Append(advanced ? "Dialogue: 1," : "Dialogue: 0,").Append(Time(start)).Append(',').Append(Time(end))
                 .Append(",Danmaku,,0,0,0,,{").Append(position)
                 .Append("\\fs").Append(Number(fontSize)).Append(primary)
                 .Append("\\3c&H").Append(border).Append("&}").AppendLine(text);
@@ -132,6 +154,40 @@ internal static class MpvAssDanmakuDocument
 
         return builder.ToString();
     }
+
+    private static string AdvancedOverrides(MpvAssDanmakuItem item, int width, double opacity)
+    {
+        var startX = AdvancedCoordinate(item.StartX, item.IsStartXRelative, width, AdvancedReferenceWidth);
+        var startY = AdvancedCoordinate(item.StartY, item.IsStartYRelative, ScriptHeight, AdvancedReferenceHeight);
+        var endX = AdvancedCoordinate(item.EndX, item.IsEndXRelative, width, AdvancedReferenceWidth);
+        var endY = AdvancedCoordinate(item.EndY, item.IsEndYRelative, ScriptHeight, AdvancedReferenceHeight);
+        var position = startX == endX && startY == endY
+            ? $"\\an7\\pos({Number(startX)},{Number(startY)})"
+            : $"\\an7\\move({Number(startX)},{Number(startY)},{Number(endX)},{Number(endY)},{Number(item.TranslationDelayMs)},{Number((double)item.TranslationDelayMs + item.TranslationDurationMs)})";
+        opacity = Math.Clamp(opacity, 0, 1);
+        var startAlpha = (int)Math.Round(255 - (item.StartAlpha * opacity));
+        var endAlpha = (int)Math.Round(255 - (item.EndAlpha * opacity));
+        // Win2D initialization only stores the Flash angles; it does not render them.
+        // Use the simple-axis sign convention from danmaku2ass's ConvertFlashRotation:
+        // Flash +Z is clockwise on a Y-down screen, unlike ASS +frz; Y is also inverted.
+        // Combined-axis Euler conversion and perspective scaling are not included.
+        var builder = new StringBuilder(position)
+            .Append("\\frz").Append(Number(-item.RotateZ))
+            .Append("\\fry").Append(Number(-item.RotateY))
+            .Append("\\alpha&H").Append(startAlpha.ToString("X2", CultureInfo.InvariantCulture)).Append('&');
+        if (startAlpha != endAlpha)
+        {
+            builder.Append("\\t(0,").Append(item.DurationMs.ToString(CultureInfo.InvariantCulture))
+                .Append(",\\alpha&H").Append(endAlpha.ToString("X2", CultureInfo.InvariantCulture)).Append("&)");
+        }
+
+        if (!item.HasOutline) builder.Append("\\bord0");
+        if (!string.IsNullOrWhiteSpace(item.FontFamily)) builder.Append("\\fn").Append(Escape(item.FontFamily));
+        return builder.ToString();
+    }
+
+    private static double AdvancedCoordinate(double value, bool relative, int resolution, int reference)
+        => relative ? value * resolution : value * resolution / reference;
 
     private static int FindRollingLane(RollingEvent?[] lanes, int span, RollingEvent current, double width, double gap)
     {
@@ -191,17 +247,21 @@ internal static class MpvAssDanmakuDocument
         return em * fontSize * (bold ? 1.05 : 1);
     }
 
-    private static double GetDipFontSize(double baseSize, MpvAssDanmakuStyle style)
+    private static double GetDipFontSize(double baseSize, MpvAssDanmakuStyle style, bool keepDefinedFontSize = false)
     {
         // Match the Win2D renderer's 800-pixel narrow-window adjustment, integer font
         // rounding and final inverse-rasterization drawing transform without creating a canvas.
         var raster = style.RasterizationScale;
         var canvasWidth = style.PanelWidth * raster;
-        var size = baseSize * style.FontScale;
-        if (canvasWidth < 800)
+        var size = baseSize;
+        if (!keepDefinedFontSize)
         {
-            size *= canvasWidth / 800;
-            if (size >= 30) size *= 0.75;
+            size *= style.FontScale;
+            if (canvasWidth < 800)
+            {
+                size *= canvasWidth / 800;
+                if (size >= 30) size *= 0.75;
+            }
         }
 
         size = Math.Max(2, (int)size);
@@ -209,8 +269,18 @@ internal static class MpvAssDanmakuDocument
         return size / raster;
     }
 
-    private static string Escape(string text)
-        => text.Replace('\\', '＼').Replace('{', '｛').Replace('}', '｝').Replace('\r', ' ').Replace('\n', ' ').Trim();
+    private static string Escape(string text, bool preserveLineBreaks = false)
+    {
+        if (preserveLineBreaks)
+        {
+            text = text.Replace("/n", "\n", StringComparison.Ordinal).Replace("\\n", "\n", StringComparison.Ordinal)
+                .Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        }
+
+        text = text.Replace('\\', '＼').Replace('{', '｛').Replace('}', '｝');
+        return preserveLineBreaks ? text.Trim().Replace("\n", "\\N", StringComparison.Ordinal)
+            : text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+    }
 
     private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 

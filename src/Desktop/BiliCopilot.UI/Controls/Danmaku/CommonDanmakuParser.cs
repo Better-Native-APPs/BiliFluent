@@ -4,6 +4,7 @@ using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.Danmaku.Enums;
 using Richasy.Danmaku.Models;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Windows.UI;
@@ -181,7 +182,8 @@ public static class BilibiliDanmakuParser
                     valueArray = new string[jArray.Count()];
                     for (var i = 0; i < valueArray.Length; i++)
                     {
-                        valueArray[i] = jArray.ElementAt(i).GetString();
+                        var value = jArray.ElementAt(i);
+                        valueArray[i] = value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText();
                     }
 
                     if (valueArray.Length < 5)
@@ -195,16 +197,16 @@ public static class BilibiliDanmakuParser
                         return null;
                     }
 
-                    danmakuItem.StartX = string.IsNullOrWhiteSpace(valueArray[0]) ? 0f : float.Parse(valueArray[0]);
-                    danmakuItem.StartY = string.IsNullOrWhiteSpace(valueArray[1]) ? 0f : float.Parse(valueArray[1]);
+                    danmakuItem.StartX = string.IsNullOrWhiteSpace(valueArray[0]) ? 0f : float.Parse(valueArray[0], CultureInfo.InvariantCulture);
+                    danmakuItem.StartY = string.IsNullOrWhiteSpace(valueArray[1]) ? 0f : float.Parse(valueArray[1], CultureInfo.InvariantCulture);
                     danmakuItem.EndX = danmakuItem.StartX;
                     danmakuItem.EndY = danmakuItem.StartY;
 
                     var opacitySplit = valueArray[2].Split('-');
-                    danmakuItem.StartAlpha = (byte)(Math.Max(float.Parse(opacitySplit[0]), 0) * byte.MaxValue);
-                    danmakuItem.EndAlpha = opacitySplit.Length > 1 ? (byte)(Math.Max(float.Parse(opacitySplit[1]), 0) * byte.MaxValue) : danmakuItem.StartAlpha;
+                    danmakuItem.StartAlpha = (byte)(Math.Max(float.Parse(opacitySplit[0], CultureInfo.InvariantCulture), 0) * byte.MaxValue);
+                    danmakuItem.EndAlpha = opacitySplit.Length > 1 ? (byte)(Math.Max(float.Parse(opacitySplit[1], CultureInfo.InvariantCulture), 0) * byte.MaxValue) : danmakuItem.StartAlpha;
 
-                    danmakuItem.DurationMs = (ulong)(float.Parse(valueArray[3]) * 1000);
+                    danmakuItem.DurationMs = (ulong)(float.Parse(valueArray[3], CultureInfo.InvariantCulture) * 1000);
                     danmakuItem.TranslationDurationMs = danmakuItem.DurationMs;
                     danmakuItem.TranslationDelayMs = 0;
                     danmakuItem.AlphaDurationMs = danmakuItem.DurationMs;
@@ -212,8 +214,8 @@ public static class BilibiliDanmakuParser
 
                     if (valueArray.Length >= 7)
                     {
-                        danmakuItem.RotateZ = string.IsNullOrWhiteSpace(valueArray[5]) ? 0f : float.Parse(valueArray[5]);
-                        danmakuItem.RotateY = string.IsNullOrWhiteSpace(valueArray[6]) ? 0f : float.Parse(valueArray[6]);
+                        danmakuItem.RotateZ = string.IsNullOrWhiteSpace(valueArray[5]) ? 0f : float.Parse(valueArray[5], CultureInfo.InvariantCulture);
+                        danmakuItem.RotateY = string.IsNullOrWhiteSpace(valueArray[6]) ? 0f : float.Parse(valueArray[6], CultureInfo.InvariantCulture);
                     }
                     else
                     {
@@ -223,22 +225,23 @@ public static class BilibiliDanmakuParser
 
                     if (valueArray.Length >= 11)
                     {
-                        danmakuItem.EndX = string.IsNullOrWhiteSpace(valueArray[7]) ? 0f : float.Parse(valueArray[7]);
-                        danmakuItem.EndY = string.IsNullOrWhiteSpace(valueArray[8]) ? 0f : float.Parse(valueArray[8]);
+                        danmakuItem.EndX = string.IsNullOrWhiteSpace(valueArray[7]) ? 0f : float.Parse(valueArray[7], CultureInfo.InvariantCulture);
+                        danmakuItem.EndY = string.IsNullOrWhiteSpace(valueArray[8]) ? 0f : float.Parse(valueArray[8], CultureInfo.InvariantCulture);
                         if (!string.IsNullOrWhiteSpace(valueArray[9]))
                         {
-                            danmakuItem.TranslationDurationMs = (ulong)float.Parse(valueArray[9]);
+                            danmakuItem.TranslationDurationMs = (ulong)float.Parse(valueArray[9], CultureInfo.InvariantCulture);
                         }
 
                         if (!string.IsNullOrWhiteSpace(valueArray[10]))
                         {
                             var translationDelayValue = valueArray[10];
                             danmakuItem.TranslationDelayMs = translationDelayValue == "０"
-                                ? 0 : (ulong)float.Parse(translationDelayValue);
+                                ? 0 : (ulong)float.Parse(translationDelayValue, CultureInfo.InvariantCulture);
                         }
                     }
 
-                    danmakuItem.HasOutline = false;
+                    danmakuItem.HasOutline = valueArray.Length <= 11
+                        || (valueArray[11] != "0" && !string.Equals(valueArray[11], "false", StringComparison.OrdinalIgnoreCase));
                     danmakuItem.FontFamilyName = "Consolas"; // Default monospaced font
                     danmakuItem.KeepDefinedFontSize = true;
                 }
