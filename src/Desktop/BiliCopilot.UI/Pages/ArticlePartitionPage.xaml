@@ -73,33 +73,17 @@
                 Minimum="220"
                 Visibility="{x:Bind ViewModel.IsNavColumnManualHide, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
             <Button
-                Width="16"
-                Height="48"
-                Margin="0,0,-16,0"
-                Padding="0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Center"
                 AutomationProperties.Name="{ext:Locale Name=HideSidePanel}"
-                Background="Transparent"
-                BorderThickness="0"
                 Command="{x:Bind ViewModel.ToggleNavColumnCommand, Mode=OneWay}"
-                CornerRadius="0,4,4,0"
+                Style="{StaticResource SidePanelHideButtonStyle}"
                 ToolTipService.ToolTip="{ext:Locale Name=HideSidePanel}"
                 Visibility="{x:Bind ViewModel.IsNavColumnManualHide, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
                 <ic:SymbolIcon FontSize="12" Symbol="ChevronLeft" />
             </Button>
             <Button
-                Width="16"
-                Height="48"
-                Margin="0,0,-16,0"
-                Padding="0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Center"
                 AutomationProperties.Name="{ext:Locale Name=ShowSidePanel}"
-                Background="Transparent"
-                BorderThickness="0"
                 Command="{x:Bind ViewModel.ToggleNavColumnCommand, Mode=OneWay}"
-                CornerRadius="0,4,4,0"
+                Style="{StaticResource SidePanelShowButtonStyle}"
                 ToolTipService.ToolTip="{ext:Locale Name=ShowSidePanel}"
                 Visibility="{x:Bind ViewModel.IsNavColumnManualHide, Mode=OneWay}">
                 <ic:SymbolIcon FontSize="12" Symbol="ChevronRight" />
