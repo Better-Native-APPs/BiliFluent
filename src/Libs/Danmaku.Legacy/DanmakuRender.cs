@@ -31,7 +31,7 @@ namespace Richasy.Danmaku.Legacy
         private const float AdvancedReferenceCanvasHeight = 438;
         private const float DefaultRollingSpeed = 0.1f; // pixel per millisecond
         private const float DefaultBottomAndTopDurationMs = 3000f;
-        private const string DefaultFontFamilyName = "Segoe UI";
+        private const string DefaultFontFamilyName = "Microsoft YaHei UI";
 
         private CanvasAnimatedControl _canvas;
         private FrameworkElement _container;

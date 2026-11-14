@@ -69,4 +69,22 @@
   <data name="AudioTrackSwitchFailed" xml:space="preserve">
     <value>This audio track can't be played right now. The previous one is back.</value>
   </data>
+  <data name="DanmakuHoverActions" xml:space="preserve">
+    <value>Show danmaku actions on hover</value>
+  </data>
+  <data name="DanmakuHoverActionsWin2DOnly" xml:space="preserve">
+    <value>Available with the Win2D renderer only</value>
+  </data>
+  <data name="DanmakuUnlike" xml:space="preserve">
+    <value>Remove like</value>
+  </data>
+  <data name="DanmakuLikeNeedSignIn" xml:space="preserve">
+    <value>Sign in to like danmaku</value>
+  </data>
+  <data name="DanmakuLikeFailed" xml:space="preserve">
+    <value>Couldn't like the danmaku. Try again later.</value>
+  </data>
+  <data name="DanmakuCopyFailed" xml:space="preserve">
+    <value>Couldn't copy. Try again.</value>
+  </data>
 </root>

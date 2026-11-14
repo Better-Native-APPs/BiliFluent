@@ -4,9 +4,91 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Danmaku"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
+
+    <!--
+        The hover bar lives in a flyout, outside RootGrid: the Win2D renderer clears RootGrid's children.
+        It is shown at the frozen danmaku and never takes focus, so playback shortcuts keep working.
+    -->
+    <FlyoutBase.AttachedFlyout>
+        <Flyout
+            x:Name="HoverFlyout"
+            AreOpenCloseAnimationsEnabled="False"
+            Closed="OnHoverFlyoutClosed"
+            ShouldConstrainToRootBounds="False">
+            <Flyout.FlyoutPresenterStyle>
+                <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="IsTabStop" Value="False" />
+                    <Setter Property="ScrollViewer.VerticalScrollMode" Value="Disabled" />
+                    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                    <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+                    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                </Style>
+            </Flyout.FlyoutPresenterStyle>
+
+            <!--  The transparent background makes the padding and the gaps count as "pointer inside the bar".  -->
+            <StackPanel
+                x:Name="HoverBar"
+                Padding="4"
+                Background="Transparent"
+                Orientation="Horizontal"
+                PointerCanceled="OnHoverBarPointerExited"
+                PointerEntered="OnHoverBarPointerEntered"
+                PointerExited="OnHoverBarPointerExited"
+                Spacing="2">
+                <Button
+                    x:Name="HoverCopyButton"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.Name="{ext:Locale Name=Copy}"
+                    Click="OnHoverCopyClick"
+                    Style="{StaticResource SmallIconButtonStyle}"
+                    ToolTipService.ToolTip="{ext:Locale Name=Copy}">
+                    <ic:SymbolIcon FontSize="16" Symbol="Copy" />
+                </Button>
+                <!--  A disabled button shows no tooltip, so the sign-in hint sits on this host.  -->
+                <Grid x:Name="HoverLikeHost" Background="Transparent">
+                    <Button
+                        x:Name="HoverLikeButton"
+                        Height="32"
+                        MinWidth="32"
+                        Padding="8,0"
+                        VerticalAlignment="Center"
+                        AllowFocusOnInteraction="False"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="OnHoverLikeClick">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Grid VerticalAlignment="Center">
+                                <ic:SymbolIcon
+                                    x:Name="HoverLikeIcon"
+                                    FontSize="16"
+                                    Symbol="ThumbLike" />
+                                <ic:SymbolIcon
+                                    x:Name="HoverLikedIcon"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    IconVariant="Filled"
+                                    Symbol="ThumbLike"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="HoverLikeCount"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
+        </Flyout>
+    </FlyoutBase.AttachedFlyout>
 
     <Grid x:Name="RootGrid" Visibility="{x:Bind ViewModel.IsShowDanmaku, Mode=OneWay}" />
 </local:DanmakuControlBase>

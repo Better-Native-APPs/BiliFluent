@@ -3,10 +3,13 @@
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.BiliKernel.Models.Media;
+using Richasy.WinUIKernel.Share.Base;
 using System.ComponentModel;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -221,5 +224,107 @@ public sealed partial class PlayerViewModel
         _danmakuSegments = [];
         Danmaku.ClearAll();
         await InitializeDanmakuAsync();
+    }
+
+    /// <summary>
+    /// Whether the current account and media allow liking a danmaku.
+    /// </summary>
+    internal bool CanLikeDanmaku(out bool isSignedIn)
+    {
+        isSignedIn = this.Get<IBiliTokenResolver>().GetToken() is not null;
+        return isSignedIn && TryGetDanmakuCid(out _);
+    }
+
+    /// <summary>
+    /// Copies one danmaku to the clipboard and reports the result.
+    /// </summary>
+    internal void CopyDanmakuText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            Window?.ShowTip(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Copied), InfoType.Success);
+        }
+        catch (Exception ex)
+        {
+            // The clipboard can be held by another process for a moment.
+            logger.LogWarning(ex, "Failed to copy a danmaku.");
+            Window?.ShowTip(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuCopyFailed), InfoType.Error);
+        }
+    }
+
+    /// <summary>
+    /// Reads the like count and the account's like state of one danmaku. Returns null when it is unknown.
+    /// </summary>
+    internal async Task<(int Likes, bool IsLiked)?> GetDanmakuLikeStateAsync(string danmakuId)
+    {
+        var version = _mediaVersion;
+        if (string.IsNullOrEmpty(danmakuId) || !IsCurrentPlayback(version) || !TryGetDanmakuCid(out var cid)) return null;
+        try
+        {
+            var states = await this.Get<IDanmakuService>().GetDanmakuLikeStatesAsync(cid, new[] { danmakuId }, _activeMediaToken);
+            if (!IsCurrentPlayback(version)) return null;
+            return states.TryGetValue(danmakuId, out var state) ? (state.Likes, state.UserLiked) : (0, false);
+        }
+        catch (OperationCanceledException) when (_activeMediaToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception)
+        {
+            // Kernel exceptions carry the raw response, so only a fixed message is logged.
+            logger.LogWarning("Failed to read the danmaku like state.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Likes or unlikes one danmaku. A failure is reported to the user and never touches playback.
+    /// </summary>
+    internal async Task<bool> SetDanmakuLikeAsync(string danmakuId, bool isLike)
+    {
+        var version = _mediaVersion;
+        if (string.IsNullOrEmpty(danmakuId) || !IsCurrentPlayback(version) || !TryGetDanmakuCid(out var cid)) return false;
+        if (this.Get<IBiliTokenResolver>().GetToken() is null)
+        {
+            Window?.ShowTip(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuLikeNeedSignIn), InfoType.Warning);
+            return false;
+        }
+
+        try
+        {
+            // A request the user already confirmed is not cancelled by a later media change.
+            await this.Get<IDanmakuService>().LikeDanmakuAsync(danmakuId, cid, isLike);
+            return true;
+        }
+        catch (Exception)
+        {
+            // Kernel exceptions carry the raw response, so only a fixed message is logged.
+            logger.LogWarning("Failed to change the danmaku like state.");
+            if (IsCurrentPlayback(version))
+            {
+                Window?.ShowTip(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuLikeFailed), InfoType.Error);
+            }
+
+            return false;
+        }
+    }
+
+    private bool TryGetDanmakuCid(out string cid)
+    {
+        cid = string.Empty;
+        if (_snapshot?.Type == Models.Constants.BiliMediaType.Video && Connector is VideoConnectorViewModel { _part: { } part })
+        {
+            cid = part.Identifier.Id;
+        }
+        else if (_snapshot?.Type == Models.Constants.BiliMediaType.Pgc && Connector is PgcConnectorViewModel { _episode: { } episode })
+        {
+            cid = episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString();
+        }
+
+        return !string.IsNullOrEmpty(cid) && cid != "0";
     }
 }
