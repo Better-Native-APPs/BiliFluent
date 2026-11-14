@@ -50,7 +50,7 @@ internal sealed class PlayerInformation
     /// Dash视频播放信息.
     /// </summary>
     [JsonPropertyName("dash")]
-    public DashVideo VideoInformation { get; set; }
+    public DashVideo? VideoInformation { get; set; }
 
     /// <summary>
     /// Flv视频播放信息.
@@ -63,6 +63,18 @@ internal sealed class PlayerInformation
     /// </summary>
     [JsonPropertyName("support_formats")]
     public List<VideoFormat> SupportFormats { get; set; }
+
+    /// <summary>
+    /// Gets or sets the available AI dubbing languages.
+    /// </summary>
+    [JsonPropertyName("language")]
+    public PlayerLanguageInformation? Language { get; set; }
+
+    /// <summary>
+    /// Gets or sets the current AI dubbing language.
+    /// </summary>
+    [JsonPropertyName("cur_language")]
+    public string? CurrentLanguage { get; set; }
 }
 
 /// <summary>
@@ -86,13 +98,115 @@ internal sealed class DashVideo
     /// 不同清晰度的视频列表.
     /// </summary>
     [JsonPropertyName("video")]
-    public List<DashItem> Video { get; set; }
+    public List<DashItem>? Video { get; set; }
 
     /// <summary>
     /// 不同码率的音频列表.
     /// </summary>
     [JsonPropertyName("audio")]
-    public List<DashItem> Audio { get; set; }
+    public List<DashItem>? Audio { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Dolby audio information.
+    /// </summary>
+    [JsonPropertyName("dolby")]
+    public DolbyAudioInformation? Dolby { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Hi-Res audio information.
+    /// </summary>
+    [JsonPropertyName("flac")]
+    public FlacAudioInformation? Flac { get; set; }
+}
+
+/// <summary>
+/// Dolby audio streams.
+/// </summary>
+internal sealed class DolbyAudioInformation
+{
+    /// <summary>
+    /// Gets or sets the Dolby audio type reported by the API.
+    /// </summary>
+    [JsonPropertyName("type")]
+    public int? Type { get; set; }
+
+    /// <summary>
+    /// Gets or sets the available audio streams.
+    /// </summary>
+    [JsonPropertyName("audio")]
+    public List<DashItem?>? Audio { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional VIP requirement reported by the API.
+    /// </summary>
+    [JsonPropertyName("need_vip")]
+    public bool? NeedVip { get; set; }
+}
+
+/// <summary>
+/// Hi-Res lossless audio stream.
+/// </summary>
+internal sealed class FlacAudioInformation
+{
+    /// <summary>
+    /// Gets or sets whether the API displays the Hi-Res switch.
+    /// </summary>
+    [JsonPropertyName("display")]
+    public bool? Display { get; set; }
+
+    /// <summary>
+    /// Gets or sets the audio stream.
+    /// </summary>
+    [JsonPropertyName("audio")]
+    public DashItem? Audio { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional VIP requirement reported by the API.
+    /// </summary>
+    [JsonPropertyName("need_vip")]
+    public bool? NeedVip { get; set; }
+}
+
+/// <summary>
+/// AI dubbing languages supported by a video.
+/// </summary>
+internal sealed class PlayerLanguageInformation
+{
+    /// <summary>
+    /// Gets or sets whether the video supports AI dubbing.
+    /// </summary>
+    [JsonPropertyName("support")]
+    public bool? Support { get; set; }
+
+    /// <summary>
+    /// Gets or sets the available languages.
+    /// </summary>
+    [JsonPropertyName("items")]
+    public List<PlayerLanguageItem?>? Items { get; set; }
+}
+
+/// <summary>
+/// An AI dubbing language advertised by the API.
+/// </summary>
+internal sealed class PlayerLanguageItem
+{
+    /// <summary>
+    /// Gets or sets the language code accepted by cur_language.
+    /// </summary>
+    [JsonPropertyName("lang")]
+    public string? Language { get; set; }
+
+    /// <summary>
+    /// Gets or sets the language display name.
+    /// </summary>
+    [JsonPropertyName("title")]
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional VIP requirement reported by the API.
+    /// </summary>
+    [JsonPropertyName("need_vip")]
+    public bool? NeedVip { get; set; }
 }
 
 /// <summary>
@@ -110,13 +224,13 @@ internal sealed class DashItem
     /// 基链接.
     /// </summary>
     [JsonPropertyName("base_url")]
-    public string BaseUrl { get; set; }
+    public string? BaseUrl { get; set; }
 
     /// <summary>
     /// 备份链接.
     /// </summary>
     [JsonPropertyName("backup_url")]
-    public List<string> BackupUrl { get; set; }
+    public List<string>? BackupUrl { get; set; }
 
     /// <summary>
     /// 媒体要求的带宽.
@@ -128,13 +242,13 @@ internal sealed class DashItem
     /// 媒体格式.
     /// </summary>
     [JsonPropertyName("mime_type")]
-    public string MimeType { get; set; }
+    public string? MimeType { get; set; }
 
     /// <summary>
     /// 媒体编码.
     /// </summary>
     [JsonPropertyName("codecs")]
-    public string Codecs { get; set; }
+    public string? Codecs { get; set; }
 
     /// <summary>
     /// 媒体宽度.
@@ -152,25 +266,31 @@ internal sealed class DashItem
     /// 帧率.
     /// </summary>
     [JsonPropertyName("frame_rate")]
-    public string FrameRate { get; set; }
+    public string? FrameRate { get; set; }
 
     /// <summary>
     /// 播放比例.
     /// </summary>
     [JsonPropertyName("sar")]
-    public string Scale { get; set; }
+    public string? Scale { get; set; }
 
     /// <summary>
     /// 分段的基础信息.
     /// </summary>
     [JsonPropertyName("segment_base")]
-    public SegmentBase SegmentBase { get; set; }
+    public SegmentBase? SegmentBase { get; set; }
 
     /// <summary>
     /// 编码Id.
     /// </summary>
     [JsonPropertyName("codecid")]
     public int CodecId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional VIP requirement reported by the API.
+    /// </summary>
+    [JsonPropertyName("need_vip")]
+    public bool? NeedVip { get; set; }
 }
 
 /// <summary>
@@ -182,13 +302,13 @@ internal sealed class SegmentBase
     /// 起始位置.
     /// </summary>
     [JsonPropertyName("initialization")]
-    public string Initialization { get; set; }
+    public string? Initialization { get; set; }
 
     /// <summary>
     /// 索引范围.
     /// </summary>
     [JsonPropertyName("index_range")]
-    public string IndexRange { get; set; }
+    public string? IndexRange { get; set; }
 }
 
 /// <summary>

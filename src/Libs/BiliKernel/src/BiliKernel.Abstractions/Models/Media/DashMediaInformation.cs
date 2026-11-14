@@ -10,7 +10,9 @@ public sealed class DashMediaInformation(
     IList<DashSegmentInformation>? videoSegments,
     IList<DashSegmentInformation>? audioSegments,
     IList<PlayerFormatInformation>? formats,
-    int duration = 0)
+    int duration = 0,
+    IList<AudioTrackInformation>? audioTracks = default,
+    string? currentLanguage = default)
 {
     /// <summary>
     /// 视频时长.
@@ -31,4 +33,14 @@ public sealed class DashMediaInformation(
     /// 格式列表.
     /// </summary>
     public IList<PlayerFormatInformation>? Formats { get; } = formats;
+
+    /// <summary>
+    /// Gets the available audio tracks and AI dubbing languages.
+    /// </summary>
+    public IList<AudioTrackInformation>? AudioTracks { get; } = audioTracks;
+
+    /// <summary>
+    /// Gets the current dubbing language reported by the API.
+    /// </summary>
+    public string? CurrentLanguage { get; } = currentLanguage;
 }

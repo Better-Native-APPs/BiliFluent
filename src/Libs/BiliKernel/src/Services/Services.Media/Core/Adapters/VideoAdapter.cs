@@ -8,6 +8,7 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Base;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.Media.Core.Models;
+using RestDashItem = Richasy.BiliKernel.Services.Media.Core.Models.DashItem;
 using System.Text.RegularExpressions;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
@@ -490,7 +491,7 @@ internal static class VideoAdapter
         return new DashMediaInformation(videos, audios, formats);
     }
 
-    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information)
+    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information, bool includeAiDubbing = false, string? requestedLanguage = default)
     {
         var dash = information.VideoInformation;
         if (dash == null)
@@ -501,25 +502,13 @@ internal static class VideoAdapter
         var videos = new List<DashSegmentInformation>();
         var audios = new List<DashSegmentInformation>();
         var formats = new List<PlayerFormatInformation>();
+        var audioTracks = new List<AudioTrackInformation>();
 
         if (dash.Video?.Count > 0)
         {
             foreach (var video in dash.Video)
             {
-                var seg = new DashSegmentInformation(
-                    video.Id.ToString(),
-                    video.BaseUrl,
-                    video.BandWidth,
-                    video.MimeType,
-                    video.Codecs,
-                    video.Width,
-                    video.Height,
-                    video.SegmentBase.Initialization,
-                    video.SegmentBase.IndexRange,
-                    video.BackupUrl,
-                    video.CodecId);
-
-                videos.Add(seg);
+                videos.Add(ToDashSegmentInformation(video));
             }
         }
 
@@ -527,20 +516,52 @@ internal static class VideoAdapter
         {
             foreach (var audio in dash.Audio)
             {
-                var seg = new DashSegmentInformation(
-                    audio.Id.ToString(),
-                    audio.BaseUrl,
-                    audio.BandWidth,
-                    audio.MimeType,
-                    audio.Codecs,
-                    audio.Width,
-                    audio.Height,
-                    audio.SegmentBase.Initialization,
-                    audio.SegmentBase.IndexRange,
-                    audio.BackupUrl,
-                    audio.CodecId);
-
+                var seg = ToDashSegmentInformation(audio);
                 audios.Add(seg);
+                audioTracks.Add(new AudioTrackInformation($"std:{seg.Id}", default, AudioTrackKind.Standard, needVip: audio.NeedVip ?? false, segment: seg));
+            }
+        }
+
+        if (dash.Dolby?.Audio?.Count > 0)
+        {
+            foreach (var audio in dash.Dolby.Audio)
+            {
+                if (audio == null)
+                {
+                    continue;
+                }
+
+                var seg = ToDashSegmentInformation(audio);
+                audioTracks.Add(new AudioTrackInformation($"dolby:{seg.Id}", default, AudioTrackKind.Dolby, needVip: audio.NeedVip ?? dash.Dolby.NeedVip ?? false, segment: seg));
+            }
+        }
+
+        if (dash.Flac?.Audio is { } flacAudio)
+        {
+            var seg = ToDashSegmentInformation(flacAudio);
+            audioTracks.Add(new AudioTrackInformation($"hires:{seg.Id}", default, AudioTrackKind.HiRes, needVip: flacAudio.NeedVip ?? dash.Flac.NeedVip ?? false, segment: seg));
+        }
+
+        if (includeAiDubbing && information.Language?.Items is { } languageItems)
+        {
+            var requestedAudio = string.IsNullOrEmpty(requestedLanguage)
+                ? default
+                : audios.OrderByDescending(p => p.Bandwidth).FirstOrDefault();
+            foreach (var language in languageItems)
+            {
+                if (string.IsNullOrEmpty(language?.Language))
+                {
+                    continue;
+                }
+
+                audioTracks.Add(new AudioTrackInformation(
+                    $"ai:{language.Language}",
+                    language.Title,
+                    AudioTrackKind.AiDubbing,
+                    language.Language,
+                    isAI: true,
+                    needVip: language.NeedVip ?? false,
+                    segment: language.Language == requestedLanguage ? requestedAudio : default));
             }
         }
 
@@ -568,6 +589,20 @@ internal static class VideoAdapter
             audios = default;
         }
 
-        return new DashMediaInformation(videos, audios, formats, information.Duration);
+        return new DashMediaInformation(videos, audios, formats, information.Duration, audioTracks.Count > 0 ? audioTracks : default, information.CurrentLanguage);
     }
+
+    private static DashSegmentInformation ToDashSegmentInformation(RestDashItem item)
+        => new(
+            item.Id.ToString(),
+            item.BaseUrl ?? string.Empty,
+            item.BandWidth,
+            item.MimeType ?? string.Empty,
+            item.Codecs ?? string.Empty,
+            item.Width,
+            item.Height,
+            item.SegmentBase?.Initialization ?? string.Empty,
+            item.SegmentBase?.IndexRange ?? string.Empty,
+            item.BackupUrl,
+            item.CodecId);
 }
