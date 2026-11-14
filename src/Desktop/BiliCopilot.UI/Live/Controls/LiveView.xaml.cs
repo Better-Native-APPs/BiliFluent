@@ -249,7 +249,13 @@ public sealed partial class LiveView : UserControl
         _idleTimer.Stop();
         _feedbackTimer.Stop();
         Detach();
+        _commandBusy = _volumePumpRunning = _sendInFlight = false;
+        _volumeDesired = double.NaN;
+        ShowSendFeedback(null, null);
+        SetCommandFeedback(null);
     }
+
+    private bool IsCurrentActivation(CancellationToken token) => _attached && !token.IsCancellationRequested;
 
     private void BindMessages()
     {
@@ -535,9 +541,11 @@ public sealed partial class LiveView : UserControl
 
     private async void SelectQuality(object? item)
     {
-        if (_syncingQuality || !_attached || !_session.CanChangeQuality
+        if (_syncingQuality || !_attached || _lifetime is not { IsCancellationRequested: false } lifetime
+            || !_session.CanChangeQuality
             || item is not PlayerFormatInformation quality
             || !_session.Qualities.Contains(quality)) return;
+        var token = lifetime.Token;
         if (_session.SelectedQuality is { } current && current.Equals(quality))
         {
             QualityFlyout.Hide(); // Re-picking the current quality is a no-op, as in the VOD format button.
@@ -552,7 +560,7 @@ public sealed partial class LiveView : UserControl
         }
         catch (Exception)
         {
-            if (_attached) SetCommandFeedback(LiveText.CommandFailed);
+            if (IsCurrentActivation(token)) SetCommandFeedback(LiveText.CommandFailed);
         }
     }
 
@@ -616,12 +624,15 @@ public sealed partial class LiveView : UserControl
         catch (Exception)
         {
             // Fixed copy only; exception text never reaches the UI.
-            if (_attached) SetCommandFeedback(LiveText.CommandFailed);
+            if (IsCurrentActivation(token)) SetCommandFeedback(LiveText.CommandFailed);
         }
         finally
         {
-            _commandBusy = false;
-            if (_attached) RefreshAll();
+            if (IsCurrentActivation(token))
+            {
+                _commandBusy = false;
+                RefreshAll();
+            }
         }
     }
 
@@ -640,14 +651,16 @@ public sealed partial class LiveView : UserControl
     /// </summary>
     private async Task PumpVolumeAsync()
     {
+        if (!_attached || _lifetime is not { IsCancellationRequested: false } lifetime) return;
+        var token = lifetime.Token;
         _volumePumpRunning = true;
         try
         {
             var sent = double.NaN;
-            while (_attached && _lifetime is { IsCancellationRequested: false } lifetime && !_volumeDesired.Equals(sent))
+            while (IsCurrentActivation(token) && !_volumeDesired.Equals(sent))
             {
                 sent = _volumeDesired;
-                await _session.SetVolumeAsync(sent, lifetime.Token);
+                await _session.SetVolumeAsync(sent, token);
             }
         }
         catch (OperationCanceledException)
@@ -655,13 +668,16 @@ public sealed partial class LiveView : UserControl
         }
         catch (Exception)
         {
-            if (_attached) SetCommandFeedback(LiveText.VolumeFailed);
+            if (IsCurrentActivation(token)) SetCommandFeedback(LiveText.VolumeFailed);
         }
         finally
         {
-            _volumePumpRunning = false;
-            // If the session dropped a request (busy), snap back to the real value.
-            if (_attached) RefreshAll();
+            if (IsCurrentActivation(token))
+            {
+                _volumePumpRunning = false;
+                // If the session dropped a request (busy), snap back to the real value.
+                RefreshAll();
+            }
         }
     }
 
@@ -696,7 +712,7 @@ public sealed partial class LiveView : UserControl
 
     /// <summary>
     /// Same in-app route as the VOD publisher avatar (VideoConnectorViewModel.OpenUserSpace). The shared navigation
-    /// queue first closes this Live owner (navigation exits Live), then opens the user space overlay page.
+    /// queue hides this Live owner and opens the user space overlay while the retained owner closes.
     /// </summary>
     private void OnAnchorClick(object sender, RoutedEventArgs e)
     {
@@ -876,6 +892,7 @@ public sealed partial class LiveView : UserControl
         }
 
         var generation = ++_sendGeneration;
+        var token = lifetime.Token;
         _sendInFlight = true;
         ShowSendFeedback(LiveText.Sending, null);
         UpdateComposerState();
@@ -883,7 +900,7 @@ public sealed partial class LiveView : UserControl
         LiveSendResult? result = null;
         try
         {
-            result = await _session.SendManuallyAsync(binding, text, lifetime.Token);
+            result = await _session.SendManuallyAsync(binding, text, token);
         }
         catch (Exception)
         {
@@ -892,9 +909,8 @@ public sealed partial class LiveView : UserControl
         }
 
         // Stale attempt: room/account changed or view unloaded while waiting. Do not touch current UI.
-        if (generation != _sendGeneration) return;
+        if (!IsCurrentActivation(token) || generation != _sendGeneration) return;
         _sendInFlight = false;
-        if (!_attached) return;
         if (_session.Binding != binding || (result is not null && result.Binding != binding))
         {
             ShowSendFeedback(null, null);
