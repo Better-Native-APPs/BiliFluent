@@ -460,10 +460,13 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             _ = _mpvRenderer.DisposeAsync().AsTask();
             _mpvRenderer = null;
         }
+
+        AttachHover();
     }
 
     private void DetachPlaybackHost()
     {
+        DetachHover();
         if (_observedPlayer is not null) _observedPlayer.PropertyChanged -= OnObservedPlayerPropertyChanged;
         if (_playerViewModel is not null)
         {

@@ -1713,4 +1713,22 @@
   <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
     <value>{0}，AI 生成</value>
   </data>
+  <data name="DanmakuHoverActions" xml:space="preserve">
+    <value>悬停时显示弹幕操作</value>
+  </data>
+  <data name="DanmakuHoverActionsWin2DOnly" xml:space="preserve">
+    <value>仅 Win2D 渲染方式可用</value>
+  </data>
+  <data name="DanmakuUnlike" xml:space="preserve">
+    <value>取消点赞</value>
+  </data>
+  <data name="DanmakuLikeNeedSignIn" xml:space="preserve">
+    <value>登录后才能点赞弹幕</value>
+  </data>
+  <data name="DanmakuLikeFailed" xml:space="preserve">
+    <value>弹幕点赞失败，请稍后重试</value>
+  </data>
+  <data name="DanmakuCopyFailed" xml:space="preserve">
+    <value>复制失败，请重试</value>
+  </data>
 </root>

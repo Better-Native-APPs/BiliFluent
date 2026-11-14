@@ -120,6 +120,18 @@
                 </Grid>
             </StackPanel>
             <ToggleSwitch Header="{ext:Locale Name=DanmakuBold}" IsOn="{x:Bind ViewModel.IsDanmakuBold, Mode=TwoWay}" />
+            <StackPanel Spacing="4">
+                <ToggleSwitch
+                    Header="{ext:Locale Name=DanmakuHoverActions}"
+                    IsEnabled="{x:Bind ViewModel.IsHoverActionsAvailable, Mode=OneWay}"
+                    IsOn="{x:Bind ViewModel.IsHoverActionsEnabled, Mode=TwoWay}" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="{ext:Locale Name=DanmakuHoverActionsWin2DOnly}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.IsHoverActionsAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+            </StackPanel>
             <StackPanel
                 Padding="12,8"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"

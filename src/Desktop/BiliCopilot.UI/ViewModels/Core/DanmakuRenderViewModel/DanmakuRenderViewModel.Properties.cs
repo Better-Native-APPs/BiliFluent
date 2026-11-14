@@ -65,7 +65,19 @@ public sealed partial class DanmakuRenderViewModel
     public partial string? Title { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHoverActionsAvailable))]
     public partial DanmakuRendererType Renderer { get; set; }
+
+    /// <summary>
+    /// Whether hovering a danmaku shows its actions.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsHoverActionsEnabled { get; set; }
+
+    /// <summary>
+    /// Only the Win2D renderer knows which danmaku is under the pointer.
+    /// </summary>
+    public bool IsHoverActionsAvailable => Renderer == DanmakuRendererType.Win2D;
 
     public ObservableCollection<SystemFont> Fonts { get; } = [];
 

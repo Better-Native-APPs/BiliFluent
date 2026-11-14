@@ -12,6 +12,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     // A CJK UI font keeps Latin letters and digits in the same design as Chinese glyphs.
     internal const string DefaultDanmakuFontFamily = "Microsoft YaHei UI";
     private const string LegacyDefaultDanmakuFontFamily = "Segoe UI";
+    private const string HoverActionsSettingKey = "IsDanmakuHoverActionsEnabled";
 
     internal int Position => _position;
 
@@ -38,6 +39,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
 
         Renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
         DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily);
+        IsHoverActionsEnabled = this.Get<ISettingsToolkit>().ReadLocalSetting(HoverActionsSettingKey, true);
     }
 
     public void Initialize(IList<DanmakuInformation> danmakus)
@@ -141,6 +143,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
         IsRollingEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsRollingDanmakuEnabled, true);
         IsTopEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsTopDanmakuEnabled, true);
         IsBottomEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsBottomDanmakuEnabled, true);
+        IsHoverActionsEnabled = this.Get<ISettingsToolkit>().ReadLocalSetting(HoverActionsSettingKey, true);
         IsDanmakuLimit = true;
         ResetStyle();
     }
@@ -213,4 +216,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
 
     partial void OnRendererChanged(DanmakuRendererType value)
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, value);
+
+    partial void OnIsHoverActionsEnabledChanged(bool value)
+        => this.Get<ISettingsToolkit>().WriteLocalSetting(HoverActionsSettingKey, value);
 }
