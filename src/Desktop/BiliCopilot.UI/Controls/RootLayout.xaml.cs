@@ -829,6 +829,41 @@ public sealed partial class RootLayout : RootLayoutBase
         }
     }
 
+    private void OnNavViewLoaded(object sender, RoutedEventArgs e)
+    {
+        // The pane is normally built by now; look once more after layout in case it is not.
+        if (!RemoveNavMenuTopInset())
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => _ = RemoveNavMenuTopInset());
+    }
+
+    /// <summary>
+    /// The Store navigation template insets the menu list by a fixed 12px above the first item, with no resource
+    /// key to change it. Clear that inset so the list starts at the top of the pane, as it did before the Store
+    /// style. Nothing changes when the template part is not found.
+    /// </summary>
+    /// <returns>Whether the menu list was found.</returns>
+    private bool RemoveNavMenuTopInset()
+    {
+        var pending = new Stack<DependencyObject>();
+        pending.Push(NavView);
+        while (pending.TryPop(out var node))
+        {
+            if (node is ScrollViewer { Name: "MenuItemsScrollViewer" })
+            {
+                if (VisualTreeHelper.GetParent(node) is ItemsRepeaterScrollHost { Margin: { Top: > 0 } margin } host)
+                    host.Margin = new Thickness(margin.Left, 0, margin.Right, margin.Bottom);
+                return true;
+            }
+
+            // The content area holds the pages; the menu list is never inside it.
+            if (ReferenceEquals(node, MainGrid)) continue;
+            for (var index = VisualTreeHelper.GetChildrenCount(node) - 1; index >= 0; index--)
+                pending.Push(VisualTreeHelper.GetChild(node, index));
+        }
+
+        return false;
+    }
+
     private void OnNavViewItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         _ = this;

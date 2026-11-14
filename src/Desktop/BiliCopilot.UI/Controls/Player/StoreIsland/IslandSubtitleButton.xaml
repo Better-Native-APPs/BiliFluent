@@ -58,13 +58,36 @@
                             ItemInvoked="OnSubtitleItemInvoked">
                             <ItemsView.ItemTemplate>
                                 <DataTemplate x:DataType="items:SubtitleItemViewModel">
-                                    <ItemContainer Style="{StaticResource AppItemContainerStyle}">
+                                    <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                    <ItemContainer
+                                        AutomationProperties.Name="{x:Bind AccessibleName}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        Style="{StaticResource AppItemContainerStyle}">
                                         <Grid
                                             Padding="12,8"
-                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            Background="Transparent"
                                             Tag="{x:Bind}"
                                             Tapped="OnSubtitleItemTapped">
-                                            <base:TrimTextBlock MaxLines="1" Text="{x:Bind Name}" />
+                                            <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                            <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <base:TrimTextBlock
+                                                    VerticalAlignment="Center"
+                                                    MaxLines="1"
+                                                    Text="{x:Bind Name}" />
+                                                <Border
+                                                    Grid.Column="1"
+                                                    Style="{StaticResource TagBorderStyle}"
+                                                    Visibility="{x:Bind IsAI}">
+                                                    <TextBlock
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        Style="{StaticResource TagTextStyle}"
+                                                        Text="AI" />
+                                                </Border>
+                                            </Grid>
                                         </Grid>
                                     </ItemContainer>
                                 </DataTemplate>

@@ -272,6 +272,7 @@
                 Grid.Row="1"
                 FooterMenuItemsSource="{x:Bind ViewModel.FooterItems, Mode=OneWay}"
                 ItemInvoked="OnNavViewItemInvoked"
+                Loaded="OnNavViewLoaded"
                 MenuItemTemplate="{StaticResource AppNavItemTemplate}"
                 MenuItemsSource="{x:Bind ViewModel.MenuItems, Mode=OneWay}"
                 SelectionFollowsFocus="Disabled"

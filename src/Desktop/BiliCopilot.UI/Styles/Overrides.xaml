@@ -2,7 +2,8 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:base="using:Richasy.WinUIKernel.Share.Base">
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:controls="using:BiliCopilot.UI.Controls">
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
@@ -14,6 +15,7 @@
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPointerOver" Color="White" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPressed" Color="#C5FFFFFF" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundDisabled" Color="#87FFFFFF" />
+            <SolidColorBrush x:Key="ItemContainerSelectedInnerBorderBrush" Color="Transparent" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="BasicPlayerButtonBackground" Color="Transparent" />
@@ -24,6 +26,7 @@
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPointerOver" Color="White" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPressed" Color="#C5FFFFFF" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundDisabled" Color="#87FFFFFF" />
+            <SolidColorBrush x:Key="ItemContainerSelectedInnerBorderBrush" Color="Transparent" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <StaticResource x:Key="BasicPlayerButtonBackground" ResourceKey="SystemControlBackgroundBaseLowBrush" />
@@ -117,6 +120,7 @@
         <Setter Property="CornerRadius" Value="18" />
     </Style>
 
+    <!--  An avatar covers the whole button and hides the stock hover and pressed fills, so the button shrinks instead.  -->
     <Style
         x:Key="AvatarButtonStyle"
         BasedOn="{StaticResource SubtleButtonStyle}"
@@ -124,9 +128,57 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="controls:PressScale.IsEnabled" Value="True" />
     </Style>
 
-    <!--  No template: ItemContainer keeps the default WinUI template, states and setters.  -->
+    <!--  A small neutral tag with accent text, such as the "AI" mark on generated subtitles.  -->
+    <Style x:Key="TagBorderStyle" TargetType="Border">
+        <Setter Property="Padding" Value="5,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+    </Style>
+
+    <Style
+        x:Key="TagTextStyle"
+        BasedOn="{StaticResource CaptionTextBlockStyle}"
+        TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!--  The chevron tab on a side panel's divider. "Show" is always visible, so a hidden panel can be found again.  -->
+    <Style
+        x:Key="SidePanelShowButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="48" />
+        <Setter Property="Margin" Value="0,0,-16,0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0,4,4,0" />
+    </Style>
+
+    <!--  "Hide" appears only while the pointer is over the divider area or the button has keyboard focus.  -->
+    <Style
+        x:Key="SidePanelHideButtonStyle"
+        BasedOn="{StaticResource SidePanelShowButtonStyle}"
+        TargetType="Button">
+        <Setter Property="controls:HoverReveal.IsEnabled" Value="True" />
+    </Style>
+
+    <!--
+        No template: ItemContainer keeps the default WinUI template, states and setters.
+        The default template draws a second 1px ring inside the accent selection ring (meant for photos). The Light
+        and Dark dictionaries above set ItemContainerSelectedInnerBorderBrush to Transparent, so a selected item
+        shows one ring only. High contrast keeps the system brush.
+    -->
     <Style x:Key="AppItemContainerStyle" TargetType="ItemContainer" />
 
     <Style x:Key="MenuFlyoutHeaderSeparatorStyle" TargetType="MenuFlyoutSeparator">
