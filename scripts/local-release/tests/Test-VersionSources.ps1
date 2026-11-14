@@ -6,6 +6,7 @@ param(
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).ProviderPath
 Import-Module (Join-Path $SourceRoot 'ReleaseMetadata.psm1') -Force
 $repo = [IO.Path]::GetFullPath((Join-Path $SourceRoot '../..'))
 $version = Get-ReleasePackageVersion
