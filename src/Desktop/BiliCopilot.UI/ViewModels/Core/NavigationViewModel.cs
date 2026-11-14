@@ -46,7 +46,8 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     }
 
     public void NavigateTo(Type pageType, object? parameter = null) => QueueNavigation(() => NavigateToCore(pageType, parameter));
-    public void NavigateToOver(Type pageType, object? parameter = null) => QueueNavigation(() => NavigateToOverCore(pageType, parameter));
+    public void NavigateToOver(Type pageType, object? parameter = null)
+        => QueueNavigation(() => NavigateToOverCore(pageType, parameter), allowBackgroundLiveClose: true);
     public void Search(string keyword) => QueueNavigation(() => SearchCore(keyword));
     public void SearchInRegion(string keyword) => QueueNavigation(() => SearchInRegionCore(keyword));
     public void Back()
@@ -56,17 +57,28 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         QueueNavigation(() => { if (!returningFromPlayer) BackCore(); });
     }
 
-    private void QueueNavigation(Action navigate)
+    private void QueueNavigation(Action navigate, bool allowBackgroundLiveClose = false)
     {
         var previous = LastNavigationTask;
-        // All navigation entry points share the video close barrier, including search and Back.
-        // Root supplies the same identity-scoped Live back/close path as its exit button.
-        var close = Task.WhenAll(this.Get<AppViewModel>().CloseEmbeddedPlayerAsync(),
-            _closeEmbeddedLive?.Invoke() ?? Task.CompletedTask);
+        var app = this.Get<AppViewModel>();
+        var backgroundLiveClose = allowBackgroundLiveClose && !app.HasEmbeddedWork;
+        // VOD always keeps its real close barrier, including pending opening/Sponsor cleanup.
+        // Root hides Live synchronously and registers its retained close with playback admission.
+        var playerClose = app.CloseEmbeddedPlayerAsync();
+        Task liveClose;
+        try { liveClose = _closeEmbeddedLive?.Invoke() ?? Task.CompletedTask; }
+        catch (Exception ex)
+        {
+            // A synchronous hide/close-start failure must still block navigation and be observed.
+            liveClose = Task.FromException(ex);
+            backgroundLiveClose = false;
+        }
+        var close = backgroundLiveClose ? playerClose : Task.WhenAll(playerClose, liveClose);
         _navigationSequence++;
         LastNavigationTask = NavigateAfterCloseAsync(previous, close, navigate);
         OnPropertyChanged(nameof(LastNavigationTask));
-        _ = ObserveNavigationAsync(LastNavigationTask);
+        // Navigation may finish first, but its close failure still reaches the existing observer/tip.
+        _ = ObserveNavigationAsync(backgroundLiveClose ? Task.WhenAll(LastNavigationTask, liveClose) : LastNavigationTask);
     }
 
     private static async Task NavigateAfterCloseAsync(Task previous, Task close, Action navigate)

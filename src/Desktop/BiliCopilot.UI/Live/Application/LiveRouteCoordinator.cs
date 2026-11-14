@@ -20,6 +20,7 @@ internal sealed class LiveRouteCoordinator
     private Request? _admittingLive;
     private bool _stopping;
     private bool _releaseUnconfirmed;
+    private Task _navigationLiveClose = Task.CompletedTask;
     private Task? _shutdown;
     private Task? _shutdownWorker;
 
@@ -30,8 +31,49 @@ internal sealed class LiveRouteCoordinator
         _closeEmbedded = closeEmbedded;
     }
 
-    internal bool HasWork => _requests.Count != 0 || _releaseUnconfirmed || _shutdown is { IsCompleted: false };
+    internal bool HasWork => _requests.Count != 0 || _releaseUnconfirmed
+        || !_navigationLiveClose.IsCompleted || _shutdown is { IsCompleted: false };
     internal bool IsBlocked => _stopping || _releaseUnconfirmed;
+
+    internal Task RegisterNavigationLiveClose(Task close)
+    {
+        _checkAccess();
+        // The caller already issued this owner close; returning it holds no route lease.
+        #pragma warning disable VSTHRD003
+        if (ReferenceEquals(_navigationLiveClose, close)) return close;
+        #pragma warning restore VSTHRD003
+        // Never replace an unfinished or failed release with a later successful/no-op close.
+        _navigationLiveClose = _navigationLiveClose.IsCompletedSuccessfully
+            ? close : Task.WhenAll(_navigationLiveClose, close);
+        _ = ObserveNavigationLiveCloseAsync(_navigationLiveClose);
+        return _navigationLiveClose;
+    }
+
+    internal Task WaitForNavigationLiveCloseAsync()
+    {
+        _checkAccess();
+        // Return the registered actual close, not a wrapper or a lease held by its producer.
+        #pragma warning disable VSTHRD003
+        return _navigationLiveClose;
+        #pragma warning restore VSTHRD003
+    }
+
+    private async Task ObserveNavigationLiveCloseAsync(Task close)
+    {
+        try
+        {
+            // This observer never owns a route lease; the real close cannot depend on it.
+            #pragma warning disable VSTHRD003
+            await close;
+            #pragma warning restore VSTHRD003
+        }
+        catch
+        {
+            _releaseUnconfirmed = true;
+            SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveRouteCoordinator>>(),
+                logger => logger.LogError("Live navigation close is incomplete; ownership is retained and replacement is blocked."));
+        }
+    }
 
     internal Task OpenLiveAsync(Func<CancellationToken, Task> open, CancellationToken token)
         => Queue(open, isLive: true, token);
@@ -52,7 +94,8 @@ internal sealed class LiveRouteCoordinator
         _requests.Add(request); // Publish before cancellation callbacks or owner methods can reenter.
         request.Cancellation = previous is not null && !previous.Done.Task.IsCompleted
             ? Invoke(() => previous.Stop.CancelAsync()) : Task.CompletedTask;
-        request.LiveClose = Invoke(_closeLive); // Never wait for a lease before cancelling pending Live.
+        // Start cancellation immediately, then join both real owner close and any navigation drain.
+        request.LiveClose = Task.WhenAll(Invoke(_closeLive), _navigationLiveClose);
         request.EmbeddedClose = Invoke(_closeEmbedded); // Cancels/drains the actual pending VOD owner.
         request.Worker = RunAsync(request, previous?.Done.Task, open, isLive);
         // T1-06: Request.Done is published before route callbacks; return the identical owner completion without a synchronous UI wait.
@@ -167,7 +210,7 @@ internal sealed class LiveRouteCoordinator
         _shutdown = done.Task;
         var requests = _requests.ToArray();
         var cancellations = requests.Select(request => Invoke(() => request.Stop.CancelAsync())).ToArray();
-        var liveClose = Invoke(_closeLive);
+        var liveClose = Task.WhenAll(Invoke(_closeLive), _navigationLiveClose);
         var embeddedClose = Invoke(_closeEmbedded);
         _shutdownWorker = ShutdownCoreAsync(done, requests, cancellations, liveClose, embeddedClose);
         return done.Task;

@@ -89,6 +89,21 @@ internal sealed class LiveApplicationBridge : ILivePlaybackAdmission, ILiveWindo
         return _routes.OpenVideoAsync(open, token);
     }
 
+    internal Task RegisterNavigationLiveClose(Task close)
+    {
+        CheckAccess();
+        // Forward the already-issued owner close without acquiring a lease or changing completion.
+        #pragma warning disable VSTHRD003
+        return _routes.RegisterNavigationLiveClose(close);
+        #pragma warning restore VSTHRD003
+    }
+
+    internal Task WaitForNavigationLiveCloseAsync()
+    {
+        CheckAccess();
+        return _routes.WaitForNavigationLiveCloseAsync();
+    }
+
     private async Task CloseLiveOwnerAsync()
     {
         // Starts launcher cancellation immediately, with no route lease held/acquired here.
