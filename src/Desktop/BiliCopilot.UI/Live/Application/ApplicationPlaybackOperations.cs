@@ -1,5 +1,6 @@
 #nullable enable
 
+using BiliCopilot.UI.ViewModels.Core;
 
 namespace BiliCopilot.UI.Live.Application;
 
@@ -31,6 +32,11 @@ internal sealed class ApplicationPlaybackOperations(Action checkAccess)
         await Task.Yield();
         try
         {
+            _lifetime.Token.ThrowIfCancellationRequested();
+            // Independent routes keep their own owners/leases, but cannot start during a
+            // navigation-triggered Live drain. Waiting never cancels or replaces that close.
+            if (this.Get<AppViewModel>().HasLiveWork)
+                await this.Get<LiveApplicationBridge>().WaitForNavigationLiveCloseAsync();
             _lifetime.Token.ThrowIfCancellationRequested();
             await action(_lifetime.Token);
             work.Done.TrySetResult();

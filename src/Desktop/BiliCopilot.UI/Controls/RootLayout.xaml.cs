@@ -3,6 +3,7 @@
 using System.ComponentModel;
 using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Live;
+using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.Extensions.Logging;
@@ -310,13 +311,15 @@ public sealed partial class RootLayout : RootLayoutBase
         }
     }
 
-    private async Task CloseEmbeddedLiveForNavigationAsync()
+    private Task CloseEmbeddedLiveForNavigationAsync()
     {
-        if (_embeddedLiveOwner is not BiliCopilot.UI.Live.Hosting.LiveWindow owner) return;
+        if (_embeddedLiveOwner is not BiliCopilot.UI.Live.Hosting.LiveWindow owner) return Task.CompletedTask;
+        // Publish the real close barrier before presentation callbacks can reenter playback.
+        var close = this.Get<LiveApplicationBridge>().RegisterNavigationLiveClose(owner.CloseAsync());
         RequestLiveBack(owner);
-        // RequestLiveBack already starts this cached close via EmbeddedLiveBackRequested. Join
-        // that exact owner, never a replacement, before the navigation barrier may continue.
-        await owner.CloseAsync();
+        // Retain the exact owner's real close after hiding. Overlay navigation can finish first,
+        // while every later playback entry still joins this registered release barrier.
+        return close;
     }
 
     /// <inheritdoc/>
