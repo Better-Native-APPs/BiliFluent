@@ -166,6 +166,29 @@ namespace Richasy.Danmaku.Legacy
             _render?.SetForceSoftwareRenderer(value);
         }
 
+        /// <summary>
+        /// Finds the last drawn ordinary danmaku at canvas-relative DIP coordinates.
+        /// </summary>
+        public bool TryHitTest(double x, double y, out DanmakuHitInfo info)
+        {
+            info = default;
+            return _render != null && _render.TryHitTest(x, y, out info);
+        }
+
+        /// <summary>
+        /// Freezes one active ordinary danmaku without pausing the canvas.
+        /// An unknown source ID leaves the current frozen item unchanged.
+        /// </summary>
+        public void FreezeItem(string sourceId)
+        {
+            _render?.FreezeItem(sourceId);
+        }
+
+        public void ReleaseFrozenItem()
+        {
+            _render?.ReleaseFrozenItem();
+        }
+
         public void UpdateTime(uint currentMs)
         {
             if (_render is null)
