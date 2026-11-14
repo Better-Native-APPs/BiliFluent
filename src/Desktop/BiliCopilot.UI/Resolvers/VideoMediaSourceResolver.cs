@@ -18,10 +18,17 @@ namespace BiliCopilot.UI.Resolvers;
 
 internal sealed partial class VideoMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<VideoMediaSourceResolver> logger) : MediaSourceResolverBase
 {
+    private const string DubbingTrackPrefix = "ai:";
     private MediaSnapshot _snapshot;
     private VideoPart _part;
     private Task? _initTask;
     private DashMediaInformation? _playbackInfo;
+
+    // The dubbing language the loaded (or loading) play detail was requested with; null is the original audio.
+    private string? _loadedLanguage;
+
+    // Tracks of the original audio, kept for the list while a dubbing language is loaded.
+    private IList<AudioTrackInformation>? _originalAudioTracks;
 
     public void Initialize(MediaSnapshot snapshot, VideoPart part)
     {
@@ -30,6 +37,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             InvalidateInitialization();
             _snapshot = snapshot;
             _part = part;
+            _originalAudioTracks = default;
         }
     }
 
@@ -37,6 +45,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     {
         _playbackInfo = default;
         _initTask = default;
+        _loadedLanguage = default;
     }
 
     internal void ResetSnapshot(MediaSnapshot snapshot)
@@ -44,6 +53,49 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         lock (InitializationSync)
         {
             _snapshot = snapshot;
+        }
+    }
+
+    /// <summary>
+    /// Takes over the audio track chosen in <paramref name="snapshot"/>. Another dubbing language, or going back
+    /// to the original audio, needs a new play detail request, so the loaded one is dropped.
+    /// </summary>
+    internal void ResetAudioTrack(MediaSnapshot snapshot)
+    {
+        lock (InitializationSync)
+        {
+            _snapshot = snapshot;
+            if (_initTask is null)
+            {
+                return;
+            }
+
+            // A failed request is dropped as well, so choosing the track again retries it.
+            if (_initTask.IsFaulted || _initTask.IsCanceled || GetDubbingLanguage(snapshot.PreferAudioTrackId) != _loadedLanguage)
+            {
+                InvalidateInitialization();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The audio tracks of the loaded media and the ID of the one that plays. Empty until the media is loaded.
+    /// </summary>
+    internal (List<AudioTrackInformation> Tracks, string? CurrentId) GetAudioTracks()
+    {
+        lock (InitializationSync)
+        {
+            if (_playbackInfo?.AudioTracks is not { Count: > 0 } loaded)
+            {
+                return ([], default);
+            }
+
+            // With a dubbing language loaded, the standard streams in the response carry the dubbing.
+            // The list keeps showing the tracks of the original audio; picking one requests them again.
+            List<AudioTrackInformation> tracks = _loadedLanguage is not null && _originalAudioTracks is not null
+                ? [.. _originalAudioTracks.Where(p => !p.IsAI), .. loaded.Where(p => p.IsAI)]
+                : [.. loaded];
+            return (tracks, GetSelectedAudioTrack()?.Id ?? GetDefaultAudioTrackId());
         }
     }
 
@@ -171,7 +223,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 throw new InvalidOperationException("必须先初始化媒体信息.");
             }
 
-            loadTask = _initTask ??= LoadMediaInfoCoreAsync(_snapshot, _part, request);
+            if (_initTask is null)
+            {
+                _loadedLanguage = GetDubbingLanguage(_snapshot.PreferAudioTrackId);
+                _initTask = LoadMediaInfoCoreAsync(_snapshot, _part, _loadedLanguage, request);
+            }
+
+            loadTask = _initTask;
         }
 
         await loadTask;
@@ -181,15 +239,19 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         }
     }
 
-    private async Task LoadMediaInfoCoreAsync(MediaSnapshot snapshot, VideoPart part, (long Generation, CancellationToken CancellationToken) request)
+    private async Task LoadMediaInfoCoreAsync(MediaSnapshot snapshot, VideoPart part, string? curLanguage, (long Generation, CancellationToken CancellationToken) request)
     {
         try
         {
-            var info = await playerService.GetVideoPlayDetailAsync(snapshot.Video.Identifier, Convert.ToInt64(part.Identifier.Id), request.CancellationToken);
+            var info = await playerService.GetVideoPlayDetailAsync(snapshot.Video.Identifier, Convert.ToInt64(part.Identifier.Id), request.CancellationToken, curLanguage);
             lock (InitializationSync)
             {
                 ThrowIfInitializationInvalid(request);
                 _playbackInfo = info;
+                if (curLanguage is null)
+                {
+                    _originalAudioTracks = info?.AudioTracks;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -227,7 +289,9 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 12 || p.Codecs.Contains("hev", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 13 || p.Codecs.Contains("av01", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
-        var aSeg = audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
+        // The track the user picked, or the highest standard quality when nothing (available) is picked.
+        var aSeg = GetSelectedAudioTrack()?.Segment
+            ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
         var videoUrl = vSeg?.BaseUrl;
         var audioUrl = aSeg?.BaseUrl;
@@ -250,4 +314,35 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
     }
+
+    // An "ai:{lang}" track ID names the dubbing language to request; any other ID plays the original audio.
+    private static string? GetDubbingLanguage(string? trackId)
+        => trackId?.StartsWith(DubbingTrackPrefix, StringComparison.Ordinal) == true && trackId.Length > DubbingTrackPrefix.Length
+            ? trackId[DubbingTrackPrefix.Length..]
+            : default;
+
+    // The picked track, when the loaded media has it and it comes with an address.
+    private AudioTrackInformation? GetSelectedAudioTrack()
+    {
+        var id = _snapshot.PreferAudioTrackId;
+        if (string.IsNullOrEmpty(id) || _playbackInfo is not { } info)
+        {
+            return default;
+        }
+
+        // A response that names another language did not serve the requested dubbing. The two codes are
+        // compared loosely ("en" matches "en-US"), so a different spelling of one language is not a failure.
+        var language = GetDubbingLanguage(id);
+        if (language is not null && !string.IsNullOrEmpty(info.CurrentLanguage)
+            && !info.CurrentLanguage.StartsWith(language, StringComparison.OrdinalIgnoreCase)
+            && !language.StartsWith(info.CurrentLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            return default;
+        }
+
+        return info.AudioTracks?.FirstOrDefault(p => p.Id == id && !string.IsNullOrEmpty(p.Segment?.BaseUrl));
+    }
+
+    private string? GetDefaultAudioTrackId()
+        => _playbackInfo?.Audios is { Count: > 0 } audios ? $"std:{audios.Max(p => Convert.ToInt32(p.Id))}" : default;
 }

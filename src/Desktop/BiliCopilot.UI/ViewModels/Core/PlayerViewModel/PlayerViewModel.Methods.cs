@@ -967,6 +967,7 @@ public sealed partial class PlayerViewModel
 
         try
         {
+            CarryAudioTrackToEpisode(e);
             await InitializeAsync(e);
         }
         catch (Exception ex)
