@@ -58,10 +58,11 @@
                             ItemInvoked="OnSubtitleItemInvoked">
                             <ItemsView.ItemTemplate>
                                 <DataTemplate x:DataType="items:SubtitleItemViewModel">
-                                    <ItemContainer Style="{StaticResource AppItemContainerStyle}">
+                                    <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                    <ItemContainer Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Style="{StaticResource AppItemContainerStyle}">
                                         <Grid
                                             Padding="12,8"
-                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            Background="Transparent"
                                             Tag="{x:Bind}"
                                             Tapped="OnSubtitleItemTapped">
                                             <base:TrimTextBlock MaxLines="1" Text="{x:Bind Name}" />

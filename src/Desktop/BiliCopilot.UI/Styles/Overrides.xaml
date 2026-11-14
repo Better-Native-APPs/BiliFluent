@@ -14,6 +14,7 @@
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPointerOver" Color="White" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPressed" Color="#C5FFFFFF" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundDisabled" Color="#87FFFFFF" />
+            <SolidColorBrush x:Key="ItemContainerSelectedInnerBorderBrush" Color="Transparent" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="BasicPlayerButtonBackground" Color="Transparent" />
@@ -24,6 +25,7 @@
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPointerOver" Color="White" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundPressed" Color="#C5FFFFFF" />
             <SolidColorBrush x:Key="BasicPlayerButtonForegroundDisabled" Color="#87FFFFFF" />
+            <SolidColorBrush x:Key="ItemContainerSelectedInnerBorderBrush" Color="Transparent" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <StaticResource x:Key="BasicPlayerButtonBackground" ResourceKey="SystemControlBackgroundBaseLowBrush" />
@@ -126,7 +128,12 @@
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
-    <!--  No template: ItemContainer keeps the default WinUI template, states and setters.  -->
+    <!--
+        No template: ItemContainer keeps the default WinUI template, states and setters.
+        The default template draws a second 1px ring inside the accent selection ring (meant for photos). The Light
+        and Dark dictionaries above set ItemContainerSelectedInnerBorderBrush to Transparent, so a selected item
+        shows one ring only. High contrast keeps the system brush.
+    -->
     <Style x:Key="AppItemContainerStyle" TargetType="ItemContainer" />
 
     <Style x:Key="MenuFlyoutHeaderSeparatorStyle" TargetType="MenuFlyoutSeparator">
