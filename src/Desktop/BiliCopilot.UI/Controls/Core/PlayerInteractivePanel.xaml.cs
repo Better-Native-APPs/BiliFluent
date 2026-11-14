@@ -19,6 +19,7 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     private readonly DispatcherQueueTimer _tempControlTimer;
     private readonly PlayerSurfaceGestureState _gesture = new();
     private PlayerViewModel? _subscribedViewModel;
+    private bool _isTempControlActive;
     private uint? _pointerId;
     private double _startPosition;
     private double _startVolume;
@@ -287,12 +288,14 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         if (_inputRoot is not null) _inputRoot.Changed += OnInputRootChanged;
         _inputRootContent?.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnRootPointerPressed), true);
         _inputRootContent?.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnRootKeyDown), true);
+        _isTempControlActive = true;
         _tempControlTimer.Start();
     }
 
     protected override void OnControlUnloaded()
     {
         CleanupInteractionState();
+        _isTempControlActive = false;
         _tempControlTimer.Stop();
         SizeChanged -= OnSurfaceSizeChanged;
         if (_inputRoot is not null) _inputRoot.Changed -= OnInputRootChanged;
@@ -369,7 +372,9 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
 
     private void OnTempControlTimerTick(DispatcherQueueTimer sender, object args)
     {
-        if (ViewModel == null)
+        // A tick queued before Stop() still arrives after unloading, when reading the
+        // ViewModel property of the torn-down control fails with a COM error.
+        if (!_isTempControlActive || ViewModel == null)
         {
             return;
         }
