@@ -26,6 +26,9 @@ namespace Richasy.Danmaku.Legacy
     internal class DanmakuRender
     {
         private const float StandardCanvasWidth = 800;
+        // Match danmaku2ass's BiliPlayerSize reference canvas.
+        private const float AdvancedReferenceCanvasWidth = 672;
+        private const float AdvancedReferenceCanvasHeight = 438;
         private const float DefaultRollingSpeed = 0.1f; // pixel per millisecond
         private const float DefaultBottomAndTopDurationMs = 3000f;
         private const string DefaultFontFamilyName = "Segoe UI";
@@ -461,61 +464,11 @@ namespace Richasy.Danmaku.Legacy
                                     {
                                         if (renderItem.AlignmentMode == DanmakuAlignmentMode.Default)
                                         {
-                                            renderItem.StartX = renderItem.DefinedStartX > 1.0f ? renderItem.DefinedStartX : renderItem.DefinedStartX * CanvasWidth;
-                                            renderItem.StartY = renderItem.DefinedStartY > 1.0f ? renderItem.DefinedStartY : renderItem.DefinedStartY * CanvasHeight;
-                                            renderItem.EndX = renderItem.DefinedEndX > 1.0f ? renderItem.DefinedEndX : renderItem.DefinedEndX * CanvasWidth;
-                                            if (renderItem.EndX > renderItem.StartX && renderItem.EndX < CanvasWidth && renderItem.EndX + renderItem.Width > CanvasWidth)
-                                            {
-                                                renderItem.EndX = renderItem.EndX + renderItem.Width * 0.2f <= CanvasWidth ? CanvasWidth - renderItem.Width : CanvasWidth;
-                                            }
-                                            renderItem.EndY = renderItem.DefinedEndY > 1.0f ? renderItem.DefinedEndY : renderItem.DefinedEndY * CanvasHeight;
-                                            if (renderItem.EndY > renderItem.StartY && renderItem.EndY < CanvasHeight && renderItem.EndY + renderItem.Height > CanvasHeight)
-                                            {
-                                                renderItem.EndY = renderItem.EndY + renderItem.Height * 0.2f <= CanvasHeight ? CanvasHeight - renderItem.Height : CanvasHeight;
-                                            }
-
-                                            if (renderItem.AnchorMode != DanmakuAlignmentMode.UpperLeft)
-                                            {
-                                                switch (renderItem.AnchorMode)
-                                                {
-                                                    case DanmakuAlignmentMode.LowerCenter:
-                                                    case DanmakuAlignmentMode.MiddleCenter:
-                                                    case DanmakuAlignmentMode.UpperCenter:
-                                                        {
-                                                            renderItem.StartX -= renderItem.Width / 2;
-                                                            renderItem.EndX -= renderItem.Width / 2;
-                                                            break;
-                                                        }
-                                                    case DanmakuAlignmentMode.LowerRight:
-                                                    case DanmakuAlignmentMode.MiddleRight:
-                                                    case DanmakuAlignmentMode.UpperRight:
-                                                        {
-                                                            renderItem.StartX -= renderItem.Width;
-                                                            renderItem.EndX -= renderItem.Width;
-                                                            break;
-                                                        }
-                                                }
-
-                                                switch (renderItem.AnchorMode)
-                                                {
-                                                    case DanmakuAlignmentMode.LowerLeft:
-                                                    case DanmakuAlignmentMode.LowerCenter:
-                                                    case DanmakuAlignmentMode.LowerRight:
-                                                        {
-                                                            renderItem.StartY -= renderItem.Height;
-                                                            renderItem.EndY -= renderItem.Height;
-                                                            break;
-                                                        }
-                                                    case DanmakuAlignmentMode.MiddleLeft:
-                                                    case DanmakuAlignmentMode.MiddleCenter:
-                                                    case DanmakuAlignmentMode.MiddleRight:
-                                                        {
-                                                            renderItem.StartY -= renderItem.Height / 2;
-                                                            renderItem.EndY -= renderItem.Height / 2;
-                                                            break;
-                                                        }
-                                                }
-                                            }
+                                            Vector2 anchor = GetAdvancedAnchor(renderItem);
+                                            renderItem.StartX = ResolveAdvancedCoordinate(renderItem.DefinedStartX, CanvasWidth, AdvancedReferenceCanvasWidth) - anchor.X;
+                                            renderItem.StartY = ResolveAdvancedCoordinate(renderItem.DefinedStartY, CanvasHeight, AdvancedReferenceCanvasHeight) - anchor.Y;
+                                            renderItem.EndX = ResolveAdvancedCoordinate(renderItem.DefinedEndX, CanvasWidth, AdvancedReferenceCanvasWidth) - anchor.X;
+                                            renderItem.EndY = ResolveAdvancedCoordinate(renderItem.DefinedEndY, CanvasHeight, AdvancedReferenceCanvasHeight) - anchor.Y;
                                         }
                                         else
                                         {
@@ -548,7 +501,7 @@ namespace Richasy.Danmaku.Legacy
                                                 || renderItem.AlignmentMode == DanmakuAlignmentMode.MiddleCenter
                                                 || renderItem.AlignmentMode == DanmakuAlignmentMode.MiddleRight)
                                             {
-                                                renderItem.StartY = (CanvasHeight - renderItem.Width) / 2;
+                                                renderItem.StartY = (CanvasHeight - renderItem.Height) / 2;
                                             }
                                             else if (renderItem.AlignmentMode == DanmakuAlignmentMode.UpperLeft
                                                 || renderItem.AlignmentMode == DanmakuAlignmentMode.UpperCenter
@@ -560,15 +513,13 @@ namespace Richasy.Danmaku.Legacy
                                             renderItem.EndX = renderItem.StartX;
                                             renderItem.EndY = renderItem.StartY;
                                         }
-                                        renderItem.TranslationSpeedX = renderItem.DefinedTranslationDurationMs > 0 ? (renderItem.EndX - renderItem.StartX) / renderItem.DefinedTranslationDurationMs : 0;
-                                        renderItem.TranslationSpeedY = renderItem.DefinedTranslationDurationMs > 0 ? (renderItem.EndY - renderItem.StartY) / renderItem.DefinedTranslationDurationMs : 0;
-
                                         break;
                                     }
                             }
                             renderItem.X = renderItem.StartX;
+                            renderItem.Y = renderItem.StartY;
 
-                            if (_autoControlDensity && renderItem.AllowDensityControl && !renderItem.NeedToReleaseYSlot)
+                            if (_autoControlDensity && renderItem.AllowDensityControl && IsOrdinaryMode(renderItem.Mode) && !renderItem.NeedToReleaseYSlot)
                             {
                                 // Skip rendering due to _autoControlDensity
                                 renderItem.Dispose();
@@ -583,7 +534,7 @@ namespace Richasy.Danmaku.Legacy
                                 {
                                     drawingSession.DrawRectangle(0, 0, renderItem.Width, renderItem.Height, _borderColor, 4f);
                                 }
-                                if (renderItem.HasOutline)
+                                if (renderItem.HasOutline && _outlineSize > 0)
                                 {
                                     Color outlineColor = renderItem.TextColor.R + renderItem.TextColor.G + renderItem.TextColor.B < 0x20 ? Colors.White : renderItem.OutlineColor;
                                     outlineColor.A = renderItem.TextColor.A;
@@ -596,6 +547,29 @@ namespace Richasy.Danmaku.Legacy
                             }
                         }
                     }
+                }
+
+                if (renderItem.Mode == DanmakuMode.Advanced)
+                {
+                    Vector2 anchor = GetAdvancedAnchor(renderItem);
+                    Matrix4x4 perspective = Matrix4x4.Identity;
+                    perspective.M34 = -1f / Math.Max(CanvasWidth, CanvasHeight);
+                    Matrix4x4 transform = Matrix4x4.CreateTranslation(-anchor.X, -anchor.Y, 0)
+                        * Matrix4x4.CreateRotationY(DegreeToRadian(renderItem.DefinedRotateY))
+                        * Matrix4x4.CreateRotationZ(DegreeToRadian(renderItem.DefinedRotateZ))
+                        * perspective
+                        * Matrix4x4.CreateTranslation(anchor.X, anchor.Y, 0);
+
+                    renderItem.OpacityEffect = new OpacityEffect
+                    {
+                        Source = renderItem.RenderTarget,
+                        Opacity = renderItem.Alpha / (float)byte.MaxValue * (float)_textOpacity,
+                    };
+                    renderItem.TransformEffect = new Transform3DEffect
+                    {
+                        Source = renderItem.OpacityEffect,
+                        TransformMatrix = transform,
+                    };
                 }
 
                 lock (_renderLayerList[layerId].RenderList)
@@ -848,6 +822,24 @@ namespace Richasy.Danmaku.Legacy
 
                                     break;
                                 }
+                            case DanmakuMode.Advanced:
+                                {
+                                    if (durationMs >= renderItem.DefinedDurationMs)
+                                    {
+                                        removeItem = true;
+                                        break;
+                                    }
+
+                                    float translationProgress = GetAnimationProgress(durationMs, renderItem.DefinedTranslationDelayMs, renderItem.DefinedTranslationDurationMs);
+                                    renderItem.X = renderItem.StartX + (renderItem.EndX - renderItem.StartX) * translationProgress;
+                                    renderItem.Y = renderItem.StartY + (renderItem.EndY - renderItem.StartY) * translationProgress;
+
+                                    float alphaProgress = GetAnimationProgress(durationMs, renderItem.DefinedAlphaDelayMs, renderItem.DefinedAlphaDurationMs);
+                                    renderItem.Alpha = (byte)MathF.Round(renderItem.DefinedStartAlpha + (renderItem.DefinedEndAlpha - renderItem.DefinedStartAlpha) * alphaProgress);
+                                    renderItem.OpacityEffect.Opacity = renderItem.Alpha / (float)byte.MaxValue * (float)_textOpacity;
+
+                                    break;
+                                }
                         }
 
                         if (removeItem)
@@ -915,6 +907,15 @@ namespace Richasy.Danmaku.Legacy
 
                                             break;
                                         }
+                                    case DanmakuMode.Advanced:
+                                        {
+                                            // Flush ordinary sprites before an effect in a mixed layer.
+                                            spriteBatch?.Dispose();
+                                            spriteBatch = null;
+                                            args.DrawingSession.DrawImage(renderItem.TransformEffect, new Vector2(renderItem.X, renderItem.Y));
+
+                                            break;
+                                        }
                                 }
                             }
                         }
@@ -950,6 +951,40 @@ namespace Richasy.Danmaku.Legacy
                     Logger.Log("Device is lost!");
                 }
             }
+        }
+
+        private static float ResolveAdvancedCoordinate(float coordinate, float canvasSize, float referenceSize)
+        {
+            return coordinate >= 0 && coordinate <= 1
+                ? coordinate * canvasSize
+                : coordinate * canvasSize / referenceSize;
+        }
+
+        private static Vector2 GetAdvancedAnchor(DanmakuRenderItem item)
+        {
+            float x = item.AnchorMode switch
+            {
+                DanmakuAlignmentMode.LowerCenter or DanmakuAlignmentMode.MiddleCenter or DanmakuAlignmentMode.UpperCenter => item.Width / 2,
+                DanmakuAlignmentMode.LowerRight or DanmakuAlignmentMode.MiddleRight or DanmakuAlignmentMode.UpperRight => item.Width,
+                _ => 0,
+            };
+            float y = item.AnchorMode switch
+            {
+                DanmakuAlignmentMode.LowerLeft or DanmakuAlignmentMode.LowerCenter or DanmakuAlignmentMode.LowerRight => item.Height,
+                DanmakuAlignmentMode.MiddleLeft or DanmakuAlignmentMode.MiddleCenter or DanmakuAlignmentMode.MiddleRight => item.Height / 2,
+                _ => 0,
+            };
+            return new Vector2(x, y);
+        }
+
+        private static float GetAnimationProgress(double lifetimeMs, ulong delayMs, ulong durationMs)
+        {
+            if (lifetimeMs < delayMs)
+            {
+                return 0;
+            }
+
+            return durationMs == 0 ? 1 : (float)Math.Clamp((lifetimeMs - delayMs) / durationMs, 0, 1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -989,6 +1024,7 @@ namespace Richasy.Danmaku.Legacy
             public Vector2 FrozenPosition;
             public CanvasRenderTarget RenderTarget;
             public Transform3DEffect TransformEffect;
+            public OpacityEffect OpacityEffect;
 
             public volatile float Width;
             public volatile float Height;
@@ -1034,8 +1070,6 @@ namespace Richasy.Danmaku.Legacy
             public volatile float StartY;
             public volatile float EndX;
             public volatile float EndY;
-            public volatile float TranslationSpeedX;
-            public volatile float TranslationSpeedY;
             public volatile byte Alpha;
 
             #endregion
@@ -1097,15 +1131,20 @@ namespace Richasy.Danmaku.Legacy
 
             public void Dispose()
             {
-                if (RenderTarget != null)
-                {
-                    RenderTarget.Dispose();
-                    RenderTarget = null;
-                }
                 if (TransformEffect != null)
                 {
                     TransformEffect.Dispose();
                     TransformEffect = null;
+                }
+                if (OpacityEffect != null)
+                {
+                    OpacityEffect.Dispose();
+                    OpacityEffect = null;
+                }
+                if (RenderTarget != null)
+                {
+                    RenderTarget.Dispose();
+                    RenderTarget = null;
                 }
             }
 
