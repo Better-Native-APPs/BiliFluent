@@ -324,7 +324,28 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
 
     private static MpvAssDanmakuItem ToMpvItem(DanmakuItem item)
         => new(item.StartMs / 1000d, (int)item.Mode, item.BaseFontSize, item.Text,
-            ((uint)item.TextColor.R << 16) | ((uint)item.TextColor.G << 8) | item.TextColor.B);
+            ((uint)item.TextColor.R << 16) | ((uint)item.TextColor.G << 8) | item.TextColor.B)
+        {
+            StartX = item.StartX,
+            StartY = item.StartY,
+            EndX = item.EndX,
+            EndY = item.EndY,
+            // Like Win2D's initializer, classify each axis independently; 0 and 1 are relative.
+            IsStartXRelative = item.StartX is >= 0 and <= 1,
+            IsStartYRelative = item.StartY is >= 0 and <= 1,
+            IsEndXRelative = item.EndX is >= 0 and <= 1,
+            IsEndYRelative = item.EndY is >= 0 and <= 1,
+            StartAlpha = item.StartAlpha,
+            EndAlpha = item.EndAlpha,
+            DurationMs = item.DurationMs,
+            TranslationDurationMs = item.TranslationDurationMs,
+            TranslationDelayMs = item.TranslationDelayMs,
+            RotateZ = item.RotateZ,
+            RotateY = item.RotateY,
+            HasOutline = item.HasOutline,
+            KeepDefinedFontSize = item.KeepDefinedFontSize,
+            FontFamily = item.FontFamilyName,
+        };
 
     private void OnPanelSizeChanged(object sender, SizeChangedEventArgs e)
         => UpdateMpvStyle(500);

@@ -245,9 +245,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
                 }
                 finally { _native.Gate.Release(); }
 
-                var document = MpvAssDanmakuDocument.Build(items.Concat(realtime), style, aspect, token, out var advanced, out var count);
-                if (advanced > 0 && _logger.IsEnabled(LogLevel.Debug))
-                    _logger.LogDebug("Skipped {Count} advanced danmaku in the mpv renderer.", advanced);
+                var document = MpvAssDanmakuDocument.Build(items.Concat(realtime), style, aspect, token, out var count);
                 token.ThrowIfCancellationRequested();
                 if (count == 0)
                 {
