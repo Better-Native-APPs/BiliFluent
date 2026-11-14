@@ -278,7 +278,7 @@
                 SelectionFollowsFocus="Disabled"
                 Style="{StaticResource NavigationViewStoreStyle}">
                 <Grid x:Name="MainGrid">
-                    <Grid Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                    <Grid Visibility="{x:Bind _appViewModel.IsMainContentReady, Mode=OneWay}">
                         <Grid x:Name="NavigationContentHost">
                             <local:MainFrame x:Name="MainFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
                             <local:OverlayFrame x:Name="OverlayFrame" Visibility="{x:Bind ViewModel.IsOverlayOpen, Mode=OneWay}" />
@@ -293,8 +293,8 @@
                     <components:ShimmerLayout
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch"
-                        IsActive="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}"
-                        Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay}">
+                        IsActive="{x:Bind _appViewModel.IsMainContentReady, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                        Visibility="{x:Bind _appViewModel.IsMainContentReady, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
                         <animations:Implicit.HideAnimations>
                             <animations:OpacityAnimation
                                 From="1"
@@ -342,7 +342,7 @@
         <!--  One permanent layer; its normal bounds come from MainGrid, not the current cached page.  -->
         <Canvas
             Canvas.ZIndex="1"
-            Visibility="{x:Bind _appViewModel.IsInitialLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+            Visibility="{x:Bind _appViewModel.IsMainContentReady, Mode=OneWay}">
             <Grid
                 x:Name="EmbeddedPresentationLayer"
                 Visibility="Collapsed">

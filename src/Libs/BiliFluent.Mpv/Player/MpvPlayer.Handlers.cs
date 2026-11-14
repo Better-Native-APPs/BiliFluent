@@ -9,20 +9,10 @@ namespace Richasy.MpvKernel.Player;
 public sealed partial class MpvPlayer
 {
     private async void OnStatusTimerElapsedAsync(object? sender, ElapsedEventArgs e)
-        => await RefreshStatusAsync();
-
-    private async void OnProgressTimerElapsedAsync(object? sender, ElapsedEventArgs e)
     {
-        if (!Client.IsInitialized || Client.IsDisposed)
-        {
-            return;
-        }
-
-        var position = await Client.GetCurrentPositionAsync();
-        if (position.IsSuccess)
-        {
-            _uiContext.Post(_ => Position = position.Value, null);
-        }
+        // Five-second state checks, thirty-second correction for observed values.
+        var refreshObserved = Interlocked.Increment(ref _statusRefreshTicks) % ObservedPropertyRefreshTicks == 0;
+        await RefreshStatusAsync(refreshObserved);
     }
 
     private async void OnHistoryTimerElapsedAsync(object? sender, ElapsedEventArgs e)
@@ -93,6 +83,7 @@ public sealed partial class MpvPlayer
                 _uiContext.Post(_ => Duration = (double)e.Data!, default);
                 break;
             case MpvClientEventId.PositionChanged:
+                Interlocked.Increment(ref _positionUpdateVersion);
                 _uiContext.Post(_ => Position = (double)e.Data!, default);
                 break;
             case MpvClientEventId.FullScreenChanged:

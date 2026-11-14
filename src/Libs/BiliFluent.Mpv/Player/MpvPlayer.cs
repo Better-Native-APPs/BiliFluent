@@ -28,13 +28,11 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         _logger = logger ?? NullLogger.Instance;
         _uiContext = SynchronizationContext.Current ?? throw new InvalidOperationException("Must be created on UI thread.");
 
-        // 内部维护一个定时器用于刷新播放器状态.
+        // Composite state includes unobserved flags; other properties use events.
         _statusTimer = new System.Timers.Timer(5000);
         _statusTimer.Elapsed += OnStatusTimerElapsedAsync;
         _historyTimer = new System.Timers.Timer(10000);
         _historyTimer.Elapsed += OnHistoryTimerElapsedAsync;
-        _progressTimer = new System.Timers.Timer(1000);
-        _progressTimer.Elapsed += OnProgressTimerElapsedAsync;
         PlaybackState = MpvPlayerState.Idle;
         Client.DataNotify += OnDataNotify;
         Client.ReachFileLoading += OnFileLoading;
@@ -126,7 +124,10 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// 刷新播放器状态.
     /// </summary>
     /// <returns><see cref="Task"/>.</returns>
-    public async Task RefreshStatusAsync()
+    public Task RefreshStatusAsync()
+        => RefreshStatusAsync(refreshObservedProperties: true);
+
+    private async Task RefreshStatusAsync(bool refreshObservedProperties)
     {
         if (!Client.IsInitialized || Client.IsDisposed)
         {
@@ -139,10 +140,23 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             _uiContext.Post(_ => PlaybackState = state.Value, null);
         }
 
+        if (!refreshObservedProperties) return;
+
         var duration = await Client.GetDurationAsync();
         if (duration.IsSuccess)
         {
             _uiContext.Post(_ => Duration = duration.Value, null);
+        }
+
+        var positionVersion = Interlocked.Read(ref _positionUpdateVersion);
+        var position = await Client.GetCurrentPositionAsync();
+        if (position.IsSuccess)
+        {
+            _uiContext.Post(_ =>
+            {
+                // A newer time-pos event wins over an in-flight correction.
+                if (positionVersion == Interlocked.Read(ref _positionUpdateVersion)) Position = position.Value;
+            }, null);
         }
 
         var volume = await Client.GetVolumeAsync();
@@ -224,9 +238,6 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         _historyTimer.Elapsed -= OnHistoryTimerElapsedAsync;
         _historyTimer.Stop();
         _historyTimer.Dispose();
-        _progressTimer.Elapsed -= OnProgressTimerElapsedAsync;
-        _progressTimer.Stop();
-        _progressTimer.Dispose();
         await Client.DisposeAsync();
     }
 

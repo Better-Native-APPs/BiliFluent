@@ -14,10 +14,14 @@ namespace BiliCopilot.UI.ViewModels.Components;
 /// </summary>
 public sealed partial class VideoPartitionDetailViewModel
 {
+    private const int VideoCacheLimit = 120;
+    private const int ChildPartitionCacheLimit = 4;
     private readonly ILogger<VideoPartitionDetailViewModel> _logger;
     private readonly IVideoDiscoveryService _service;
     private readonly Dictionary<string, List<VideoItemViewModel>> _childPartitionVideoCache = new();
     private readonly Dictionary<string, (long Offset, int PageNumber)> _childPartitionOffsetCache = new();
+    private readonly LinkedList<string> _recentChildPartitions = new();
+    private long _videoGeneration;
 
     private List<VideoItemViewModel> _recommendVideoCache;
     private long _recommendOffset;
