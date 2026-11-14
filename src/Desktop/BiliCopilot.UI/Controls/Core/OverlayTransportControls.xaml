@@ -362,6 +362,110 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
+                <!--
+                    Audio track: shown only when there is more than one track to choose from.
+                    The narrow layout hides the button itself, so the binding stays on this wrapper.
+                -->
+                <Grid Visibility="{x:Bind ViewModel.IsAudioTrackSelectable, Mode=OneWay}">
+                    <Button
+                        x:Name="AudioTrackButton"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="{ext:Locale Name=AudioTrack}"
+                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        ToolTipService.ToolTip="{ext:Locale Name=AudioTrack}">
+                        <ic:SymbolIcon FontSize="14" Symbol="HeadphonesSoundWave" />
+                        <Button.Flyout>
+                            <Flyout Opened="OnDisplayFlyoutOpened" ShouldConstrainToRootBounds="False">
+                                <Flyout.FlyoutPresenterStyle>
+                                    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                                        <Setter Property="Padding" Value="0" />
+                                    </Style>
+                                </Flyout.FlyoutPresenterStyle>
+
+                                <Grid Width="280">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition />
+                                    </Grid.RowDefinitions>
+                                    <Grid Margin="16,12" ColumnSpacing="8">
+                                        <TextBlock
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            FontWeight="SemiBold"
+                                            Text="{ext:Locale Name=AudioTrack}" />
+                                    </Grid>
+                                    <ScrollView
+                                        Grid.Row="1"
+                                        MaxHeight="400"
+                                        Padding="16,0"
+                                        HorizontalScrollMode="Disabled"
+                                        VerticalScrollBarVisibility="Auto">
+                                        <Grid Margin="0,0,0,12">
+                                            <ItemsRepeater x:Name="AudioTrackRepeater" ItemsSource="{x:Bind ViewModel.AudioTracks, Mode=OneWay}">
+                                                <ItemsRepeater.ItemTemplate>
+                                                    <DataTemplate x:DataType="items:AudioTrackItemViewModel">
+                                                        <!--  Same card as a subtitle row; a track without an address disables itself through the command.  -->
+                                                        <base:AppToggleCard
+                                                            MinWidth="200"
+                                                            MaxWidth="280"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                                                            BorderBrush="Transparent"
+                                                            BorderThickness="2"
+                                                            Command="{x:Bind ActiveCommand}"
+                                                            IsChecked="{x:Bind IsSelected, Mode=OneWay}"
+                                                            IsEnableCheck="False">
+                                                            <Grid ColumnSpacing="8">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <base:TrimTextBlock
+                                                                        VerticalAlignment="Center"
+                                                                        MaxLines="1"
+                                                                        Text="{x:Bind Name}" />
+                                                                    <Border
+                                                                        Grid.Column="1"
+                                                                        Style="{StaticResource TagBorderStyle}"
+                                                                        Visibility="{x:Bind IsAI}">
+                                                                        <TextBlock
+                                                                            AutomationProperties.AccessibilityView="Raw"
+                                                                            Style="{StaticResource TagTextStyle}"
+                                                                            Text="AI" />
+                                                                    </Border>
+                                                                </Grid>
+                                                                <!--  A quiet note at the far end: this track needs a premium membership.  -->
+                                                                <TextBlock
+                                                                    Grid.Column="1"
+                                                                    VerticalAlignment="Center"
+                                                                    AutomationProperties.AccessibilityView="Raw"
+                                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="{ext:Locale Name=AudioTrackVip}"
+                                                                    Visibility="{x:Bind NeedVip}" />
+                                                            </Grid>
+                                                        </base:AppToggleCard>
+                                                    </DataTemplate>
+                                                </ItemsRepeater.ItemTemplate>
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Spacing="8" />
+                                                </ItemsRepeater.Layout>
+                                            </ItemsRepeater>
+                                        </Grid>
+                                    </ScrollView>
+                                </Grid>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
                 <Grid Visibility="{x:Bind ViewModel.IsSubtitleEnabled, Mode=OneWay}">
                     <Button
                         x:Name="SubtitleButton"
@@ -632,6 +736,7 @@
                         <Setter Target="NextButton.Visibility" Value="Visible" />
                         <Setter Target="DanmakuToggleButton.Visibility" Value="Collapsed" />
                         <Setter Target="DanmakuOptionButton.Visibility" Value="Collapsed" />
+                        <Setter Target="AudioTrackButton.Visibility" Value="Collapsed" />
                         <Setter Target="LeftPresenter.Visibility" Value="Collapsed" />
                         <!--  窄宽度下小窗/全屏切换保持直接可见，不再收进“更多”菜单  -->
                         <Setter Target="LeftColumn.Width" Value="Auto" />

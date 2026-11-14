@@ -140,6 +140,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         CancelPendingInput();
         SubscribeViewModel(null);
         SubtitleRepeater?.ItemsSource = null;
+        AudioTrackRepeater?.ItemsSource = null;
         IsEnabled = false;
     }
 
@@ -229,6 +230,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         {
             Bindings.Update();
             SubtitleRepeater.ItemsSource = ViewModel?.Subtitles;
+            AudioTrackRepeater.ItemsSource = ViewModel?.AudioTracks;
             if (ViewModel?.Player is { } player)
             {
                 SynchronizeProgress(player.Position, true);
