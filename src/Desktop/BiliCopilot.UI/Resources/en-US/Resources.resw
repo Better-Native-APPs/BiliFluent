@@ -30,4 +30,16 @@
   <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
     <value>{0}, AI generated</value>
   </data>
+  <data name="SystemChatSession" xml:space="preserve">
+    <value>System conversation</value>
+  </data>
+  <data name="NotificationViewDetails" xml:space="preserve">
+    <value>View details</value>
+  </data>
+  <data name="FailedToMarkChatRead" xml:space="preserve">
+    <value>Could not mark the conversation as read. Try again.</value>
+  </data>
+  <data name="FailedToOpenMessageLink" xml:space="preserve">
+    <value>Could not open the message link. Try again.</value>
+  </data>
 </root>
