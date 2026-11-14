@@ -316,7 +316,7 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private void UpdateMpvStyle(int delay = 300)
     {
         if (_mpvRenderer is null || ViewModel is not { } vm) return;
-        _mpvRenderer.SetStyle(new MpvAssDanmakuStyle(vm.DanmakuFontFamily ?? "Segoe UI", vm.DanmakuFontSize,
+        _mpvRenderer.SetStyle(new MpvAssDanmakuStyle(vm.DanmakuFontFamily ?? DanmakuRenderViewModel.DefaultDanmakuFontFamily, vm.DanmakuFontSize,
             vm.IsDanmakuBold, vm.DanmakuOpacity, vm.OutlineSize, vm.DanmakuArea, vm.DanmakuSpeed,
             vm.IsRollingEnabled, vm.IsTopEnabled, vm.IsBottomEnabled, vm.IsDanmakuLimit, ActualWidth, ActualHeight,
             XamlRoot?.RasterizationScale ?? 1), delay);
