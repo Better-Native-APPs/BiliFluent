@@ -10,6 +10,7 @@ namespace Richasy.MpvKernel.Player;
 
 public sealed partial class MpvPlayer
 {
+    private const int ObservedPropertyRefreshTicks = 6;
     private IMpvMediaSourceResolver? _sourceResolver;
     private IMpvMediaHistoryResolver? _historyResolver;
     private IMpvMediaSubtitleResolver? _subtitleResolver;
@@ -17,7 +18,8 @@ public sealed partial class MpvPlayer
     private readonly SynchronizationContext _uiContext;
     private readonly System.Timers.Timer _statusTimer;
     private readonly System.Timers.Timer _historyTimer;
-    private readonly System.Timers.Timer _progressTimer;
+    private long _statusRefreshTicks;
+    private long _positionUpdateVersion;
 
     private MpvMediaSource? _cachedSource;
     private bool _isDisposed;
