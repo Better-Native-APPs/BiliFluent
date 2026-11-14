@@ -8,7 +8,6 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.Search;
 using Richasy.BiliKernel.Services.Search.Core;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Search;
 

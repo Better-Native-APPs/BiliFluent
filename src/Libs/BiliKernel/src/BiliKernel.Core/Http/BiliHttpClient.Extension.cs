@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using Richasy.BiliKernel.Content;
-using RichasyKernel;
 using System.Text.Json;
 
 namespace Richasy.BiliKernel.Http;

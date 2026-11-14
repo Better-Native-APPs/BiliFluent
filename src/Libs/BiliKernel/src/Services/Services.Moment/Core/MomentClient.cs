@@ -8,7 +8,6 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models.Moment;
 using Richasy.BiliKernel.Models.User;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Moment.Core;
 

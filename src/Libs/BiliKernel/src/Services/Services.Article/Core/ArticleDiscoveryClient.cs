@@ -8,7 +8,6 @@ using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Article;
 using Richasy.BiliKernel.Services.Article.Core.Models;
-using RichasyKernel;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 

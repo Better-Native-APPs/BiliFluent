@@ -9,7 +9,6 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Article;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
-using RichasyKernel;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 

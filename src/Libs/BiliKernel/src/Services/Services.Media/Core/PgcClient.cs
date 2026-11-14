@@ -7,7 +7,6 @@ using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Media;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
 

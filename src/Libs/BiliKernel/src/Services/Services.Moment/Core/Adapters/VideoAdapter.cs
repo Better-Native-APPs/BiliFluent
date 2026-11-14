@@ -4,7 +4,6 @@
 using Bilibili.App.Dynamic.V2;
 using Richasy.BiliKernel.Adapters;
 using Richasy.BiliKernel.Models.Media;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Moment.Core;
 
