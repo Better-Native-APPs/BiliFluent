@@ -364,17 +364,18 @@
                 </Button>
                 <!--
                     Subtitle menu. A media with dubbing languages lists them first, above the subtitles;
-                    without them the menu is the subtitle list alone. The button shows for either.
+                    without them the menu is the subtitle list alone. The button shows for either, and is named
+                    after what it holds: subtitles, the audio track (with its own icon), or both.
                 -->
                 <Grid Visibility="{x:Bind GetSubtitleMenuVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
                     <Button
                         x:Name="SubtitleButton"
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
-                        AutomationProperties.Name="{ext:Locale Name=Subtitle}"
+                        AutomationProperties.Name="{x:Bind GetSubtitleMenuName(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Subtitle}">
-                        <ic:SymbolIcon FontSize="14" Symbol="Subtitles" />
+                        ToolTipService.ToolTip="{x:Bind GetSubtitleMenuName(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
+                        <ic:SymbolIcon FontSize="14" Symbol="{x:Bind GetSubtitleMenuSymbol(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}" />
                         <Button.Flyout>
                             <Flyout Opened="OnSubtitleFlyoutOpened" ShouldConstrainToRootBounds="False">
                                 <Flyout.FlyoutPresenterStyle>

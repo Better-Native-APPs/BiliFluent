@@ -62,7 +62,10 @@ public sealed partial class AudioQualityItemViewModel : ViewModelBase<AudioQuali
 
     public override int GetHashCode() => HashCode.Combine(Id);
 
-    private static string GetDisplayName(AudioQualityInformation quality)
+    /// <summary>
+    /// The name of an audio quality: Dolby, Dolby Atmos, Hi-Res lossless, or the standard quality.
+    /// </summary>
+    internal static string GetDisplayName(AudioQualityInformation quality)
         => quality.Kind switch
         {
             // 30250 is the API's Dolby Atmos stream. Any other Dolby stream is only called Dolby.

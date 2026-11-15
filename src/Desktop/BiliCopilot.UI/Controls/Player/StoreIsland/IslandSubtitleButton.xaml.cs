@@ -1,6 +1,8 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Core;
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.UI.Xaml.Input;
@@ -126,6 +128,16 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
     // The button shows for subtitles, and for a media that has dubbing languages even without subtitles.
     private Visibility GetMenuVisibility(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
         => !isSubtitleEmpty || hasMultipleAudioLanguages ? Visibility.Visible : Visibility.Collapsed;
+
+    // Subtitles only: "Subtitle". Languages only: "Audio track", with the audio icon. Both: "Audio track and subtitles".
+    private string GetMenuName(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => ResourceToolkit.GetLocalizedString(!hasMultipleAudioLanguages
+            ? StringNames.Subtitle
+            : isSubtitleEmpty ? StringNames.AudioTrack : StringNames.AudioTrackAndSubtitle);
+
+    private FluentIcons.Common.Symbol GetMenuSymbol(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => hasMultipleAudioLanguages && isSubtitleEmpty
+            ? FluentIcons.Common.Symbol.HeadphonesSoundWave : FluentIcons.Common.Symbol.ClosedCaption;
 
     private void OnFlyoutOpened(object sender, object e)
     {

@@ -133,6 +133,16 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         || ViewModel.Client?.IsDisposed != false
         || ViewModel.Player?.IsPlaybackInitialized != true;
 
+    // What the progress bar shows follows playback whenever the bar is on screen. Unlike input, that does
+    // not need the control to be active: a window that lost activation still shows the bar.
+    private bool IsProgressDisplayBlocked =>
+        !_loaded
+        || ViewModel is null
+        || ViewModel.IsPlaybackClosing
+        || ViewModel.IsConnecting
+        || ViewModel.Client?.IsDisposed != false
+        || ViewModel.Player?.IsPlaybackInitialized != true;
+
     /// <summary>
     /// 获取当前是否正在进行需阻止自动隐藏/快捷键的交互（拖动、延迟调度中或浮出已打开）.
     /// </summary>
@@ -220,7 +230,14 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     {
         IsEnabled = !IsInputBlocked;
         UpdateSlots(cancel: false);
-        if (!_loaded || !IsActive) return;
+        if (!_loaded) return;
+        if (!IsActive)
+        {
+            // Nothing takes input, but a bar that is still on screen keeps showing the position.
+            SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
+            return;
+        }
+
         _synchronizingSliders = true;
         try
         {
@@ -368,7 +385,8 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (!IsActive || !_isProgressVisible || ViewModel?.IsControlsVisible != true
+        // Shown is enough; active is not needed. An inactive window keeps its bar moving.
+        if (!_loaded || !_isProgressVisible || ViewModel?.IsControlsVisible != true
             || !ReferenceEquals(sender, _subscribedViewModel) || !double.IsFinite(e)) return;
         var seekedBackwards = e < _lastProgressPosition;
         var positionChanged = e != _lastProgressPosition;
@@ -381,8 +399,9 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     private void SynchronizeProgress(double position, bool force)
     {
         if (force) _progressSynchronizationPending = true;
+        // A pending seek owns the slider; nothing is written back over it.
         if (!_isProgressVisible || ViewModel?.IsControlsVisible != true || _progressChangeList.Count > 0
-            || IsInputBlocked || !double.IsFinite(position)) return;
+            || IsProgressDisplayBlocked || !double.IsFinite(position)) return;
         var duration = ViewModel.Player.Duration;
         var durationChanged = ProgressSlider.Maximum != duration;
         // 与浮层底部进度条一致：至少移动一个像素，且保留 0.1 秒的最小步长.

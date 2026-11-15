@@ -1737,6 +1737,9 @@
   <data name="AudioTrack" xml:space="preserve">
     <value>声轨</value>
   </data>
+  <data name="AudioTrackAndSubtitle" xml:space="preserve">
+    <value>声轨和字幕</value>
+  </data>
   <data name="AudioTrackStandard" xml:space="preserve">
     <value>标准音质</value>
   </data>
@@ -1775,6 +1778,9 @@
   </data>
   <data name="QualityAutoTemplate" xml:space="preserve">
     <value>自动（{0}）</value>
+  </data>
+  <data name="QualityAutoWithAudioTemplate" xml:space="preserve">
+    <value>自动（{0} · {1}）</value>
   </data>
   <data name="PreferQualityDescription" xml:space="preserve">
     <value>播放时手动选的清晰度会一直沿用，在播放器里选回“自动”后恢复按这里的偏好播放。</value>

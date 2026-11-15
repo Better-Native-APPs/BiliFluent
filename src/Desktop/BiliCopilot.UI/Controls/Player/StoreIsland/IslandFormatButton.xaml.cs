@@ -156,6 +156,7 @@ public sealed partial class IslandFormatButton : PlayerControlBase
             || ReferenceEquals(item, _activating)) return;
 
         // An entry is activated only while its own list still shows it and it is not the one in effect.
+        // While the quality is automatic, the audio quality that plays can be chosen too: that keeps it.
         CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command;
         if (item is SourceItemViewModel { IsEnabled: true } format
             && ReferenceEquals(FormatView.ItemsSource, ViewModel.Sources)
@@ -165,7 +166,7 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         else if (item is AudioQualityItemViewModel { IsEnabled: true } quality
             && ReferenceEquals(AudioQualityView.ItemsSource, ViewModel.AudioQualities)
             && ViewModel.AudioQualities.Any(entry => ReferenceEquals(entry, quality))
-            && !ReferenceEquals(quality, ViewModel.SelectedAudioQuality))
+            && (!ReferenceEquals(quality, ViewModel.SelectedAudioQuality) || ViewModel.IsQualityAuto))
             command = quality.ActiveCommand;
         else return;
 
