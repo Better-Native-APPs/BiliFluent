@@ -76,6 +76,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
+            Client.ReachFileLoaded -= OnChapterFileLoaded;
         }
 
         if (Player is not null)
@@ -177,7 +178,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _isDanmakuInitialized = false;
         IsNextTipShownInThisMedia = false;
         Danmaku.ClearAll();
-        Chapters.Clear();
+        ResetChapters();
         IsChapterVisible = SettingsToolkit.ReadLocalSetting(SettingNames.IsChapterVisible, true);
         UseIntegrationOperation = !IsEmbedded && SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true)
             && SettingsToolkit.ReadLocalSetting(SettingNames.UseIntegrationWhenSinglePlayWindow, true);
@@ -203,6 +204,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             await Connector.InitializeAsync(_snapshot, default, _activeMediaToken);
             CheckMediaAdmission();
             InitializeCommandDanmaku();
+            InitializeVideoChapters();
         }
 
         Title = Connector switch
@@ -277,6 +279,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger);
             Player.PropertyChanged += OnPlayerPropertyChanged;
+            Client!.ReachFileLoaded += OnChapterFileLoaded;
         }
         else
         {

@@ -709,7 +709,7 @@ public sealed partial class PlayerViewModel
     private void UpdateChapterFlags(double position)
     {
         if (_chapterFlagsCount == Chapters.Count && (_chapterFlagsPosition == position
-            || (position > _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
+            || (position >= _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
         {
             return;
         }
@@ -718,15 +718,18 @@ public sealed partial class PlayerViewModel
         _chapterFlagsPosition = position;
         _chapterFlagsLowerBound = double.NegativeInfinity;
         _chapterFlagsUpperBound = double.PositiveInfinity;
-        foreach (var chapter in Chapters)
+        ChapterItemViewModel? current = null;
+        for (var i = 0; i < Chapters.Count; i++)
         {
-            chapter.IsPlayed = chapter.Position <= position;
-            chapter.IsPlaying = Math.Abs(chapter.Position - position) < 2;
-            // Preserve the ±2s start window used by previous/next chapter commands.
-            UpdateChapterBoundary(chapter.Position - 2, position);
-            UpdateChapterBoundary(chapter.Position, position);
-            UpdateChapterBoundary(chapter.Position + 2, position);
+            var chapter = Chapters[i];
+            chapter.IsPlayed = chapter.Start <= position;
+            if (current is null && chapter.Start <= position && position < chapter.End) current = chapter;
+            chapter.IsPlaying = ReferenceEquals(current, chapter);
+            UpdateChapterBoundary(chapter.Start, position);
+            UpdateChapterBoundary(chapter.End, position);
         }
+
+        CurrentChapter = current;
     }
 
     private void UpdateChapterBoundary(double boundary, double position)
@@ -736,7 +739,7 @@ public sealed partial class PlayerViewModel
             _chapterFlagsLowerBound = Math.Max(_chapterFlagsLowerBound, boundary);
         }
 
-        if (boundary >= position)
+        else
         {
             _chapterFlagsUpperBound = Math.Min(_chapterFlagsUpperBound, boundary);
         }
@@ -858,7 +861,7 @@ public sealed partial class PlayerViewModel
         else if (e.PropertyName == nameof(Player.Duration))
         {
             DurationText = TimeSpan.FromSeconds(Player.Duration).ToString(@"hh\:mm\:ss");
-            ChapterInitialized?.Invoke(this, EventArgs.Empty);
+            UpdateChapterDuration();
         }
         else if (e.PropertyName == nameof(Player.IsFullScreen))
         {
@@ -1043,28 +1046,29 @@ public sealed partial class PlayerViewModel
 
     private async Task VerifyChaptersAsync()
     {
-        if (Client is null || Player is null)
+        if (!IsCurrentPlayback(_mediaVersion) || !_chapterFileLoaded || Client is null || Player is not { Duration: > 0 } || _usingBilibiliChapters
+            || TryApplyVideoChapters() || Chapters.Count > 0)
         {
             return;
         }
 
         var mediaVersion = _mediaVersion;
-        var chapters = await Client.GetChaptersAsync();
-        if (!IsCurrentPlayback(mediaVersion))
+        var revision = _chapterRevision;
+        try
         {
-            return;
-        }
-
-        if (chapters.IsSuccess && Chapters.Count == 0 && chapters.Value.Count > 1)
-        {
-            var index = 0;
-            foreach (var chapter in chapters.Value)
+            var chapters = await Client.GetChaptersAsync();
+            if (!IsCurrentChapterRequest(mediaVersion, revision) || _usingBilibiliChapters || Chapters.Count > 0) return;
+            if (chapters.IsSuccess && chapters.Value.Count >= 2)
             {
-                Chapters.Add(new ChapterItemViewModel(index, chapter.Title, chapter.Time));
-                index++;
+                var items = chapters.Value.OrderBy(chapter => chapter.Time)
+                    .Select((chapter, index) => new ChapterItemViewModel(index, chapter.Title, chapter.Time))
+                    .ToArray();
+                SetChapters(items, fromBilibili: false);
             }
-
-            ChapterInitialized?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrentChapterRequest(mediaVersion, revision)) logger.LogWarning(ex, "Failed to load embedded chapters.");
         }
     }
 
