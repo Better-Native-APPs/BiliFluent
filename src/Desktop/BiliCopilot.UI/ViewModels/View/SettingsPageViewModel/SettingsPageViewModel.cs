@@ -119,7 +119,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         PackageVersion = this.Get<IAppToolkit>().GetPackageVersion();
         CheckMpvConfigVisible();
         LoadCustomLibmpvSettings();
-        InitializeClassicSettings();
         await LoadCacheSizeAsync();
 
         if (GpuDevices.Count == 0)

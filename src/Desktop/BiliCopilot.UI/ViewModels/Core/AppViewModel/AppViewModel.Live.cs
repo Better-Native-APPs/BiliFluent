@@ -40,9 +40,8 @@ public sealed partial class AppViewModel
         || SponsorMainWindowExitEligible && _sponsorApplicationRuntime?.HasMainWindowExitBarrier == true
         || _playbackTerminationReservation is not null; // Pending/uncertain termination must keep exclusion.
 
-    // Use the existing Classic/MainWindow keepalive seam, not another window registry. Other Live,
-    // Classic, independent and pending-open owners retain their previous hide/keepalive policy.
-    private bool SponsorMainWindowExitEligible => !HasEmbeddedWork && !HasLiveWork && !HasClassicOwnerWork
+    // Existing main-window exit eligibility includes live, independent and pending-open owners.
+    private bool SponsorMainWindowExitEligible => !HasEmbeddedWork && !HasLiveWork
         && !Players.Any(player => !player.IsEmbedded) && _applicationPlayback?.HasWork != true;
 
     private void BindSponsorMainWindow(MainWindow window)
@@ -150,10 +149,10 @@ public sealed partial class AppViewModel
 
     internal void RestoreMainWindowAfterLiveRelease()
     {
-        // Match the existing Classic last-window return affordance, without changing saved policy.
+        // Preserve the last-window return affordance without changing saved policy.
         try
         {
-            if (!IsPlaybackStopping && !HasClassicWork && Players.Count == 0 && !IsMainWindowVisible())
+            if (!IsPlaybackStopping && !HasApplicationPlaybackKeepAlive && Players.Count == 0 && !IsMainWindowVisible())
                 Windows.OfType<MainWindow>().FirstOrDefault()?.Activate();
         }
         catch { ReportLiveFailure(); }
@@ -184,9 +183,8 @@ public sealed partial class AppViewModel
             await stop;
             #pragma warning restore VSTHRD003
         } catch { failed = true; }
-        // Pending launch/consent/independent opens have really returned. Close any late adopted owner.
-        // Live retains cached failed release; legacy Classic has its own failed-close retry policy.
-        // This existing late-owner pass does not change either owner's release contract.
+        // Pending launches and independent opens have really returned. Close any late adopted owner.
+        // Live retains cached failed release; the late-owner pass preserves that release contract.
         if (!failed)
         {
             try { await CloseApplicationPlaybackOwnersAsync(); } catch { failed = true; }
@@ -203,8 +201,7 @@ public sealed partial class AppViewModel
                 await observer.Worker;
                 #pragma warning restore VSTHRD003
         }
-        if (HasLiveWork || HasEmbeddedWork || Players.Count != 0 || ClassicPlayers.Count != 0
-            || _classicOpenCount != 0 || HasPendingClassicExternalCleanup || _offeringExternalCleanupRetry) failed = true;
+        if (HasLiveWork || HasEmbeddedWork || Players.Count != 0) failed = true;
         if (failed)
         {
             _playbackShutdownFailed = true;
@@ -259,7 +256,6 @@ public sealed partial class AppViewModel
         // Admission is already shut. Start global durability and every independent owner before
         // joining any branch; each Player.Close still owns its required Sponsor detach/native drain.
         var players = Players.ToArray();
-        var classicPlayers = ClassicPlayers.ToArray();
         var tasks = new List<Task>
         {
             LiveRouteCoordinator.Invoke(CloseSponsorApplicationAsync),
@@ -267,7 +263,6 @@ public sealed partial class AppViewModel
         };
         if (_liveApplication is not null) tasks.Add(LiveRouteCoordinator.Invoke(_liveApplication.ShutdownAsync));
         tasks.AddRange(players.Select(player => LiveRouteCoordinator.Invoke(() => player.CloseAsync())));
-        tasks.AddRange(classicPlayers.Select(window => LiveRouteCoordinator.Invoke(window.CloseAsync)));
         // MainWindow/APP dispatcher and recovery UI survive until ALL real closes and durability finish.
         await Task.WhenAll(tasks);
     }

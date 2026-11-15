@@ -70,7 +70,6 @@ internal static class GlobalDependencies
             .AddSingleton<PinnerViewModel>()
             .AddSingleton<AppViewModel>()
             .AddSingleton<BiliCopilot.UI.Live.Application.LiveApplicationBridge>()
-            .AddSingleton<BiliCopilot.UI.Classic.ClassicPlayerLauncher>()
             .AddSingleton<EmoteModuleViewModel>()
             .AddSingleton<NavigationViewModel>()
             .AddSingleton<StartupPageViewModel>()
