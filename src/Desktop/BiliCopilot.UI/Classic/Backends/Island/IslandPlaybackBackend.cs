@@ -240,6 +240,11 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
             client.ErrorOccurred += _errorHandler;
 
             // These Task-returning setters throw on native failure (verified library IL).
+#if DEBUG
+            await client.SetTlsVerifyAsync(false).ConfigureAwait(false);
+#else
+            await client.SetTlsVerifyAsync(true).ConfigureAwait(false);
+#endif
             await client.SetVideoOutputAsync(VideoOutputType.GpuNext).ConfigureAwait(false);
             await client.SetGpuApiAsync(GpuApiType.D3D11).ConfigureAwait(false);
             await client.SetGpuContextAsync(GpuContextType.D3D11).ConfigureAwait(false);

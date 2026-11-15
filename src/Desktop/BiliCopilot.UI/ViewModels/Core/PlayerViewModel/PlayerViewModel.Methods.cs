@@ -320,7 +320,11 @@ public sealed partial class PlayerViewModel
             await AwaitInitializationStepAsync(() => Client.SetLogLevelAsync(logLevel));
             await AwaitInitializationStepAsync(() => Client.UseIdleAsync(true));
             await AwaitInitializationStepAsync(() => Client.UseKeepOpenAsync(true));
+#if DEBUG
             await AwaitInitializationStepAsync(() => Client.SetTlsVerifyAsync(false));
+#else
+            await AwaitInitializationStepAsync(() => Client.SetTlsVerifyAsync(true));
+#endif
             await AwaitInitializationStepAsync(() => Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No));
             _clientConfigured = true;
         }
