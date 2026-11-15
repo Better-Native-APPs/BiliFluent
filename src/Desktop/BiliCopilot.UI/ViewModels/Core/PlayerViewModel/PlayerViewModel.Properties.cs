@@ -101,7 +101,13 @@ public sealed partial class PlayerViewModel
     public partial bool IsSpeedChanging { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsQualityMenuAvailable))]
     public partial bool IsSourceSelectable { get; set; }
+
+    /// <summary>
+    /// Whether the quality menu has a choice to offer: more than one video quality, or more than one audio quality.
+    /// </summary>
+    public bool IsQualityMenuAvailable => IsSourceSelectable || HasMultipleAudioQualities;
 
     [ObservableProperty]
     public partial bool IsSubtitleEmpty { get; set; }

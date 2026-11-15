@@ -91,6 +91,7 @@
         <!--  清晰度列表项：独立播放窗口标题栏与内嵌全屏/小窗标题区共用同一模板  -->
         <DataTemplate x:Key="SourceItemTemplate" x:DataType="items:SourceItemViewModel">
             <Button
+                AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                 Click="OnSourceItemClick"
                 DataContext="{x:Bind}"
                 IsEnabled="{x:Bind IsEnabled, Mode=OneWay}"
@@ -151,6 +152,71 @@
                                 Text="{x:Bind Subtitle, Mode=OneWay}"
                                 Visibility="{x:Bind Subtitle, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />-->
                         </Grid>
+                    </Grid>
+                </Grid>
+            </Button>
+        </DataTemplate>
+        <!--  An audio quality row of the quality menu. It looks like a quality row; a row that needs a premium membership says so at its end.  -->
+        <DataTemplate x:Key="AudioQualityItemTemplate" x:DataType="items:AudioQualityItemViewModel">
+            <Button
+                AutomationProperties.Name="{x:Bind AccessibleName}"
+                Click="OnAudioQualityItemClick"
+                DataContext="{x:Bind}"
+                IsEnabled="{x:Bind IsEnabled}"
+                Style="{StaticResource ItemButtonStyle}">
+                <!--  Same as a quality row: a row that cannot be chosen is only grey text, without the fill and border of a disabled button.  -->
+                <Button.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
+                                <StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
+                                <StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Button.Resources>
+                <Grid>
+                    <Rectangle
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Fill="{ThemeResource ControlFillColorDefaultBrush}"
+                        RadiusX="4"
+                        RadiusY="4"
+                        Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+                    <Grid Margin="0,8" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="4" />
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Rectangle
+                            Width="4"
+                            Height="20"
+                            VerticalAlignment="Center"
+                            Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                            RadiusX="2"
+                            RadiusY="2"
+                            Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+                        <base:TrimTextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            MaxLines="1"
+                            Text="{x:Bind Name}" />
+                        <TextBlock
+                            Grid.Column="2"
+                            Margin="0,0,12,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{ext:Locale Name=AudioTrackVip}"
+                            Visibility="{x:Bind NeedVip}" />
                     </Grid>
                 </Grid>
             </Button>
@@ -298,11 +364,6 @@
                     <local:IslandTransportControls.RightContent>
                         <StackPanel Orientation="Horizontal">
                             <store:IslandFormatButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-                            <!--  The audio track button takes the island's activity from this binding; the island only drives the slots it knows.  -->
-                            <store:IslandAudioButton
-                                x:Name="IslandAudioTrackButton"
-                                IsActive="{x:Bind local:PlayerOverlay.IsIslandActive(ViewModel.IsControlsVisible, ViewModel.IsWindowDeactivated, ViewModel.IsConnecting, ViewModel.IsPlaybackClosing, ViewModel.Presentation), Mode=OneWay}"
-                                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                             <store:IslandSubtitleButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                         </StackPanel>
                     </local:IslandTransportControls.RightContent>
@@ -588,7 +649,7 @@
                                 Margin="12,0,0,0"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Center"
-                                x:Load="{x:Bind ViewModel.IsSourceSelectable, Mode=OneWay}">
+                                x:Load="{x:Bind ViewModel.IsQualityMenuAvailable, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ic:SymbolIcon
                                         VerticalAlignment="Center"
@@ -608,15 +669,33 @@
                                         Opened="OnOverlayFlyoutOpened"
                                         FlyoutPresenterStyle="{StaticResource DropDownFlyoutStyle}"
                                         Placement="Bottom">
-                                        <ItemsRepeater
-                                            x:Name="SourceListView"
-                                            MaxWidth="360"
-                                            ItemTemplate="{StaticResource SourceItemTemplate}"
-                                            ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
-                                            <ItemsRepeater.Layout>
-                                                <StackLayout Spacing="4" />
-                                            </ItemsRepeater.Layout>
-                                        </ItemsRepeater>
+                                        <StackPanel MaxWidth="360" XYFocusKeyboardNavigation="Enabled">
+                                            <ItemsRepeater
+                                                x:Name="SourceListView"
+                                                ItemTemplate="{StaticResource SourceItemTemplate}"
+                                                ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Spacing="4" />
+                                                </ItemsRepeater.Layout>
+                                            </ItemsRepeater>
+                                            <!--  Dolby and Hi-Res, when the media has them. Without them the menu is the quality list alone.  -->
+                                            <StackPanel Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay}">
+                                                <Border
+                                                    Height="1"
+                                                    Margin="0,4"
+                                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                <TextBlock
+                                                    Margin="20,4,16,6"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackQuality}" />
+                                                <ItemsRepeater ItemTemplate="{StaticResource AudioQualityItemTemplate}" ItemsSource="{x:Bind ViewModel.AudioQualities, Mode=OneWay}">
+                                                    <ItemsRepeater.Layout>
+                                                        <StackLayout Spacing="4" />
+                                                    </ItemsRepeater.Layout>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </Flyout>
                                 </DropDownButton.Flyout>
                             </DropDownButton>
@@ -753,7 +832,7 @@
                                 VerticalAlignment="Center"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Center"
-                                x:Load="{x:Bind ViewModel.IsSourceSelectable, Mode=OneWay}">
+                                x:Load="{x:Bind ViewModel.IsQualityMenuAvailable, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ic:SymbolIcon
                                         VerticalAlignment="Center"
@@ -772,14 +851,30 @@
                                         FlyoutPresenterStyle="{StaticResource DropDownFlyoutStyle}"
                                         Opened="OnOverlayFlyoutOpened"
                                         Placement="Bottom">
-                                        <ItemsRepeater
-                                            MaxWidth="360"
-                                            ItemTemplate="{StaticResource SourceItemTemplate}"
-                                            ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
-                                            <ItemsRepeater.Layout>
-                                                <StackLayout Spacing="4" />
-                                            </ItemsRepeater.Layout>
-                                        </ItemsRepeater>
+                                        <StackPanel MaxWidth="360" XYFocusKeyboardNavigation="Enabled">
+                                            <ItemsRepeater ItemTemplate="{StaticResource SourceItemTemplate}" ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Spacing="4" />
+                                                </ItemsRepeater.Layout>
+                                            </ItemsRepeater>
+                                            <!--  Dolby and Hi-Res, when the media has them. Without them the menu is the quality list alone.  -->
+                                            <StackPanel Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay}">
+                                                <Border
+                                                    Height="1"
+                                                    Margin="0,4"
+                                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                <TextBlock
+                                                    Margin="20,4,16,6"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackQuality}" />
+                                                <ItemsRepeater ItemTemplate="{StaticResource AudioQualityItemTemplate}" ItemsSource="{x:Bind ViewModel.AudioQualities, Mode=OneWay}">
+                                                    <ItemsRepeater.Layout>
+                                                        <StackLayout Spacing="4" />
+                                                    </ItemsRepeater.Layout>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </Flyout>
                                 </DropDownButton.Flyout>
                             </DropDownButton>

@@ -17,7 +17,7 @@ public sealed partial class AudioLanguageItemViewModel : ViewModelBase<AudioLang
 {
     private readonly Func<AudioLanguageItemViewModel, Task> _activeFunc;
 
-    public AudioLanguageItemViewModel(AudioLanguageInformation language, string? groupTitle, Func<AudioLanguageItemViewModel, Task> activeFunc)
+    public AudioLanguageItemViewModel(AudioLanguageInformation language, Func<AudioLanguageItemViewModel, Task> activeFunc)
         : base(language)
     {
         _activeFunc = activeFunc;
@@ -26,7 +26,6 @@ public sealed partial class AudioLanguageItemViewModel : ViewModelBase<AudioLang
         Name = language.IsOriginal
             ? ResourceToolkit.GetLocalizedString(StringNames.AudioTrackOriginal)
             : string.IsNullOrWhiteSpace(language.Name) ? language.Id : language.Name;
-        GroupTitle = language.IsOriginal ? default : groupTitle;
     }
 
     /// <summary>
@@ -39,12 +38,7 @@ public sealed partial class AudioLanguageItemViewModel : ViewModelBase<AudioLang
     public bool IsOriginal => Data.IsOriginal;
 
     /// <summary>
-    /// The title the API gives to its dubbing languages, shown as it is. Null for the original audio.
-    /// </summary>
-    public string? GroupTitle { get; }
-
-    /// <summary>
-    /// Whether the API marks this language itself as AI dubbing. The list marks it with a tag.
+    /// Whether this is AI dubbing. The list marks it with a tag.
     /// </summary>
     public bool IsAI => Data.IsAI;
 
@@ -59,18 +53,15 @@ public sealed partial class AudioLanguageItemViewModel : ViewModelBase<AudioLang
     public bool IsEnabled => Data.IsEnabled;
 
     /// <summary>
-    /// The name a screen reader announces: the language name, plus the group, AI and membership marks when they apply.
+    /// The name a screen reader announces: the language name, plus the AI and membership marks when they apply.
     /// </summary>
     public string AccessibleName
     {
         get
         {
-            var name = string.IsNullOrWhiteSpace(GroupTitle) ? Name : $"{Name}, {GroupTitle}";
-            if (IsAI)
-            {
-                name = string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.AudioTrackAITemplate), name);
-            }
-
+            var name = IsAI
+                ? string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.AudioTrackAITemplate), Name)
+                : Name;
             return NeedVip
                 ? string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.AudioTrackVipTemplate), name)
                 : name;

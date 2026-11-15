@@ -363,20 +363,20 @@
                     </Button.Flyout>
                 </Button>
                 <!--
-                    Audio track: shown only when the media offers a language besides its original audio.
-                    The narrow layout hides the button itself, so the binding stays on this wrapper.
+                    Subtitle menu. A media with dubbing languages lists them first, above the subtitles;
+                    without them the menu is the subtitle list alone. The button shows for either.
                 -->
-                <Grid Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}">
+                <Grid Visibility="{x:Bind GetSubtitleMenuVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
                     <Button
-                        x:Name="AudioTrackButton"
+                        x:Name="SubtitleButton"
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
-                        AutomationProperties.Name="{ext:Locale Name=AudioTrack}"
+                        AutomationProperties.Name="{ext:Locale Name=Subtitle}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=AudioTrack}">
-                        <ic:SymbolIcon FontSize="14" Symbol="HeadphonesSoundWave" />
+                        ToolTipService.ToolTip="{ext:Locale Name=Subtitle}">
+                        <ic:SymbolIcon FontSize="14" Symbol="Subtitles" />
                         <Button.Flyout>
-                            <Flyout Opened="OnDisplayFlyoutOpened" ShouldConstrainToRootBounds="False">
+                            <Flyout Opened="OnSubtitleFlyoutOpened" ShouldConstrainToRootBounds="False">
                                 <Flyout.FlyoutPresenterStyle>
                                     <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
                                         <Setter Property="Padding" Value="0" />
@@ -388,31 +388,29 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition />
                                     </Grid.RowDefinitions>
+                                    <!--  The title of the first section: the audio track when there are languages, otherwise the subtitles.  -->
                                     <Grid Margin="16,12" ColumnSpacing="8">
                                         <TextBlock
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
                                             FontWeight="SemiBold"
-                                            Text="{ext:Locale Name=AudioTrack}" />
+                                            Text="{x:Bind GetSubtitleMenuTitle(ViewModel.HasMultipleAudioLanguages), Mode=OneWay}" />
                                     </Grid>
+                                    <!--  One scroll area for both lists, so the menu never shows two scroll bars.  -->
                                     <ScrollView
                                         Grid.Row="1"
                                         MaxHeight="400"
                                         Padding="16,0"
                                         HorizontalScrollMode="Disabled"
                                         VerticalScrollBarVisibility="Auto">
-                                        <StackPanel Margin="0,0,0,12" Spacing="8">
-                                            <!--  The API's own title for its dubbing languages, shown as it is.  -->
-                                            <TextBlock
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                Style="{StaticResource CaptionTextBlockStyle}"
-                                                Text="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay}"
-                                                TextWrapping="Wrap"
-                                                Visibility="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                                            <ItemsRepeater x:Name="AudioLanguageRepeater" ItemsSource="{x:Bind ViewModel.AudioLanguages, Mode=OneWay}">
+                                        <StackPanel Margin="0,0,0,12">
+                                            <ItemsRepeater
+                                                x:Name="AudioLanguageRepeater"
+                                                ItemsSource="{x:Bind ViewModel.AudioLanguages, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}">
                                                 <ItemsRepeater.ItemTemplate>
                                                     <DataTemplate x:DataType="items:AudioLanguageItemViewModel">
-                                                        <!--  Same card as a subtitle row; an entry that cannot be played disables itself through the command.  -->
+                                                        <!--  Same card as a subtitle row; a language that cannot be played disables itself through the command.  -->
                                                         <base:AppToggleCard
                                                             MinWidth="200"
                                                             MaxWidth="280"
@@ -439,6 +437,7 @@
                                                                         VerticalAlignment="Center"
                                                                         MaxLines="1"
                                                                         Text="{x:Bind Name}" />
+                                                                    <!--  The same tag as an AI subtitle.  -->
                                                                     <Border
                                                                         Grid.Column="1"
                                                                         Style="{StaticResource TagBorderStyle}"
@@ -449,7 +448,7 @@
                                                                             Text="AI" />
                                                                     </Border>
                                                                 </Grid>
-                                                                <!--  A quiet note at the far end: this entry needs a premium membership.  -->
+                                                                <!--  A quiet note at the far end: this language needs a premium membership.  -->
                                                                 <TextBlock
                                                                     Grid.Column="1"
                                                                     VerticalAlignment="Center"
@@ -466,53 +465,45 @@
                                                     <StackLayout Spacing="8" />
                                                 </ItemsRepeater.Layout>
                                             </ItemsRepeater>
-                                            <!--  Second section: the qualities of the language that plays.  -->
-                                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay}">
+                                            <StackPanel Visibility="{x:Bind GetSubtitleListVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty), Mode=OneWay}">
+                                                <!--  The subtitles get their own title only below the languages; alone, the title above is theirs.  -->
                                                 <TextBlock
-                                                    Margin="0,4,0,0"
-                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="{ext:Locale Name=AudioTrackQuality}" />
-                                                <ItemsRepeater x:Name="AudioQualityRepeater" ItemsSource="{x:Bind ViewModel.AudioQualities, Mode=OneWay}">
+                                                    Margin="0,16,0,12"
+                                                    FontWeight="SemiBold"
+                                                    Text="{ext:Locale Name=Subtitle}"
+                                                    Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}" />
+                                                <ItemsRepeater x:Name="SubtitleRepeater" ItemsSource="{x:Bind ViewModel.Subtitles, Mode=OneWay}">
                                                     <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate x:DataType="items:AudioQualityItemViewModel">
-                                                            <!--  Same card as a subtitle row; an entry that cannot be played disables itself through the command.  -->
+                                                        <DataTemplate x:DataType="items:SubtitleItemViewModel">
                                                             <base:AppToggleCard
                                                                 MinWidth="200"
                                                                 MaxWidth="280"
                                                                 HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Stretch"
-                                                                AutomationProperties.Name="{x:Bind AccessibleName}"
+                                                                AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
                                                                 BorderBrush="Transparent"
                                                                 BorderThickness="2"
-                                                                Command="{x:Bind ActiveCommand}"
+                                                                Command="{x:Bind ActiveCommand, Mode=OneWay}"
                                                                 IsChecked="{x:Bind IsSelected, Mode=OneWay}"
                                                                 IsEnableCheck="False">
-                                                                <Grid ColumnSpacing="8">
+                                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition />
                                                                         <ColumnDefinition Width="Auto" />
                                                                     </Grid.ColumnDefinitions>
-                                                                    <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
-                                                                    <Grid HorizontalAlignment="Left" ColumnSpacing="6">
-                                                                        <Grid.ColumnDefinitions>
-                                                                            <ColumnDefinition />
-                                                                            <ColumnDefinition Width="Auto" />
-                                                                        </Grid.ColumnDefinitions>
-                                                                        <base:TrimTextBlock
-                                                                            VerticalAlignment="Center"
-                                                                            MaxLines="1"
-                                                                            Text="{x:Bind Name}" />
-                                                                    </Grid>
-                                                                    <!--  A quiet note at the far end: this entry needs a premium membership.  -->
-                                                                    <TextBlock
-                                                                        Grid.Column="1"
+                                                                    <base:TrimTextBlock
                                                                         VerticalAlignment="Center"
-                                                                        AutomationProperties.AccessibilityView="Raw"
-                                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                                                        Text="{ext:Locale Name=AudioTrackVip}"
-                                                                        Visibility="{x:Bind NeedVip}" />
+                                                                        MaxLines="1"
+                                                                        Text="{x:Bind Name, Mode=OneWay}" />
+                                                                    <Border
+                                                                        Grid.Column="1"
+                                                                        Style="{StaticResource TagBorderStyle}"
+                                                                        Visibility="{x:Bind IsAI}">
+                                                                        <TextBlock
+                                                                            AutomationProperties.AccessibilityView="Raw"
+                                                                            Style="{StaticResource TagTextStyle}"
+                                                                            Text="AI" />
+                                                                    </Border>
                                                                 </Grid>
                                                             </base:AppToggleCard>
                                                         </DataTemplate>
@@ -523,91 +514,6 @@
                                                 </ItemsRepeater>
                                             </StackPanel>
                                         </StackPanel>
-                                    </ScrollView>
-                                </Grid>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </Grid>
-                <Grid Visibility="{x:Bind ViewModel.IsSubtitleEnabled, Mode=OneWay}">
-                    <Button
-                        x:Name="SubtitleButton"
-                        Margin="0,0,8,0"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Subtitle}"
-                        Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
-                        <ic:SymbolIcon FontSize="14" Symbol="Subtitles" />
-                        <Button.Flyout>
-                            <Flyout
-                                Opened="OnSubtitleFlyoutOpened"
-                                ShouldConstrainToRootBounds="False">
-                                <Flyout.FlyoutPresenterStyle>
-                                    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
-                                        <Setter Property="Padding" Value="0" />
-                                    </Style>
-                                </Flyout.FlyoutPresenterStyle>
-
-                                <Grid Width="280">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition />
-                                    </Grid.RowDefinitions>
-                                    <Grid Margin="16,12" ColumnSpacing="8">
-                                        <TextBlock
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"
-                                            FontWeight="SemiBold"
-                                            Text="{ext:Locale Name=Subtitle}" />
-                                    </Grid>
-                                    <ScrollView
-                                        Grid.Row="1"
-                                        MaxHeight="400"
-                                        Padding="16,0"
-                                        HorizontalScrollMode="Disabled"
-                                        VerticalScrollBarVisibility="Auto">
-                                        <Grid Margin="0,0,0,12">
-                                            <ItemsRepeater x:Name="SubtitleRepeater" ItemsSource="{x:Bind ViewModel.Subtitles, Mode=OneWay}">
-                                                <ItemsRepeater.ItemTemplate>
-                                                    <DataTemplate x:DataType="items:SubtitleItemViewModel">
-                                                        <base:AppToggleCard
-                                                            MinWidth="200"
-                                                            MaxWidth="280"
-                                                            HorizontalAlignment="Stretch"
-                                                            AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
-                                                            BorderBrush="Transparent"
-                                                            BorderThickness="2"
-                                                            Command="{x:Bind ActiveCommand, Mode=OneWay}"
-                                                            IsChecked="{x:Bind IsSelected, Mode=OneWay}"
-                                                            IsEnableCheck="False">
-                                                            <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
-                                                            <Grid HorizontalAlignment="Left" ColumnSpacing="6">
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition />
-                                                                    <ColumnDefinition Width="Auto" />
-                                                                </Grid.ColumnDefinitions>
-                                                                <base:TrimTextBlock
-                                                                    VerticalAlignment="Center"
-                                                                    MaxLines="1"
-                                                                    Text="{x:Bind Name, Mode=OneWay}" />
-                                                                <Border
-                                                                    Grid.Column="1"
-                                                                    Style="{StaticResource TagBorderStyle}"
-                                                                    Visibility="{x:Bind IsAI}">
-                                                                    <TextBlock
-                                                                        AutomationProperties.AccessibilityView="Raw"
-                                                                        Style="{StaticResource TagTextStyle}"
-                                                                        Text="AI" />
-                                                                </Border>
-                                                            </Grid>
-                                                        </base:AppToggleCard>
-                                                    </DataTemplate>
-                                                </ItemsRepeater.ItemTemplate>
-                                                <ItemsRepeater.Layout>
-                                                    <StackLayout Spacing="8" />
-                                                </ItemsRepeater.Layout>
-                                            </ItemsRepeater>
-                                        </Grid>
                                     </ScrollView>
                                 </Grid>
                             </Flyout>
@@ -799,7 +705,6 @@
                         <Setter Target="NextButton.Visibility" Value="Visible" />
                         <Setter Target="DanmakuToggleButton.Visibility" Value="Collapsed" />
                         <Setter Target="DanmakuOptionButton.Visibility" Value="Collapsed" />
-                        <Setter Target="AudioTrackButton.Visibility" Value="Collapsed" />
                         <Setter Target="LeftPresenter.Visibility" Value="Collapsed" />
                         <!--  窄宽度下小窗/全屏切换保持直接可见，不再收进“更多”菜单  -->
                         <Setter Target="LeftColumn.Width" Value="Auto" />
