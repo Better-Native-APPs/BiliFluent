@@ -172,6 +172,7 @@ public sealed partial class PlayerViewModel
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _closeTask = completion.Task;
         _isClosing = true;
+        _ = SuspendPlaybackDiagnosticsAsync();
         HideMpvDanmaku();
         StartSponsorApplicationCleanup();
         _closeWorker = CompleteCloseAsync(completion, cancelOpening);

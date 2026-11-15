@@ -35,6 +35,15 @@
                     <ComboBoxItem Content="{ext:Locale Name=Verb}" />
                 </ComboBox>
             </community:SettingsCard>
+            <community:SettingsCard Description="{ext:Locale Name=PlaybackStutterDiagnosticsDescription}" Header="{ext:Locale Name=PlaybackStutterDiagnostics}">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.PlaybackStutterDiagnosticsEnabled, Mode=TwoWay}" />
+            </community:SettingsCard>
+            <community:SettingsCard
+                Description="{ext:Locale Name=DisableMpvCurlForDiagnosticsDescription}"
+                Header="{ext:Locale Name=DisableMpvCurlForDiagnostics}"
+                Visibility="{x:Bind ViewModel.PlaybackStutterDiagnosticsEnabled, Mode=OneWay}">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.DisableMpvCurlForDiagnostics, Mode=TwoWay}" />
+            </community:SettingsCard>
         </community:SettingsExpander.Items>
     </community:SettingsExpander>
 </local:SettingsPageControlBase>

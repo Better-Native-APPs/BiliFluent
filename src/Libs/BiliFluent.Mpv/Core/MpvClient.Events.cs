@@ -206,6 +206,11 @@ public sealed partial class MpvClient
         }
         else if (name == TimePosition)
         {
+            if (IsTimePositionNotificationCountingEnabled)
+            {
+                Interlocked.Increment(ref _timePositionNotificationCount);
+            }
+
             SendNotify(MpvClientEventId.PositionChanged, *(double*)data);
         }
         else if (name == FullScreen)

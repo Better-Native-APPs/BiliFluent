@@ -325,6 +325,15 @@ public sealed partial class MpvClient : IAsyncDisposable
                 }
             }
 
+            if (options?.DisableCurl == true)
+            {
+                var curlError = _handle.SetOptionString("curl-enabled", "no");
+                if (curlError != MpvError.Success)
+                {
+                    _logger.LogWarning("Mpv | set curl-enabled=no failed error={Error}", curlError);
+                }
+            }
+
             errorCode = _handle.Initialize();
         });
 
