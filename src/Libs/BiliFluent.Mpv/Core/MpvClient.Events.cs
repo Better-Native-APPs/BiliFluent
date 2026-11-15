@@ -14,10 +14,19 @@ namespace Richasy.MpvKernel.Core;
 
 public sealed partial class MpvClient
 {
+    // MPV_END_FILE_REASON_ERROR: the file could not be opened, or playback broke off.
+    private const int EndFileReasonError = 4;
+
     /// <summary>
     /// 播放器关闭事件，应在此事件中释放客户端.
     /// </summary>
     public event EventHandler? Shutdown;
+
+    /// <summary>
+    /// The file ended because of the given error, such as a source that could not be opened.
+    /// Raised on the event loop thread, right before <see cref="ReachFileEnd"/>.
+    /// </summary>
+    public event EventHandler<MpvError>? FileFailed;
 
     /// <summary>
     /// 文件播放结束事件.
@@ -33,6 +42,17 @@ public sealed partial class MpvClient
     /// 文件加载完成事件.（此时开始尝试播放，如果是网络文件，此时开始缓冲）.
     /// </summary>
     public event EventHandler? ReachFileLoaded;
+
+    /// <summary>
+    /// The pause set by the user or the app changed; the value is the new state.
+    /// Raised on the event loop thread.
+    /// </summary>
+    public event EventHandler<bool>? PauseChanged;
+
+    /// <summary>
+    /// A seek has started; it drops the forward cache. Raised on the event loop thread.
+    /// </summary>
+    public event EventHandler? SeekStarted;
 
     /// <summary>
     /// 发生错误.
@@ -59,6 +79,12 @@ public sealed partial class MpvClient
                 break;
             case NativeEventId.EndFile:
                 TraceSubtitleState("end-file", "event");
+                // mpv_event_end_file begins with the reason the file ended, followed by the error code.
+                if (@event->Data != null && *(int*)@event->Data == EndFileReasonError)
+                {
+                    FileFailed?.Invoke(this, (MpvError)((int*)@event->Data)[1]);
+                }
+
                 ReachFileEnd?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.LogMessage:
@@ -77,7 +103,10 @@ public sealed partial class MpvClient
                 ReachFileLoaded?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.EventIdle:
+                NotifyPlayerState();
+                break;
             case NativeEventId.Seek:
+                SeekStarted?.Invoke(this, EventArgs.Empty);
                 NotifyPlayerState();
                 break;
             case NativeEventId.PropertyChange:
@@ -194,6 +223,11 @@ public sealed partial class MpvClient
 
         if (name == Pause || name == CoreIdle || name == Seeking)
         {
+            if (name == Pause)
+            {
+                PauseChanged?.Invoke(this, *(int*)data != 0);
+            }
+
             NotifyPlayerState();
         }
         else if (name == Volume)
@@ -266,7 +300,30 @@ public sealed partial class MpvClient
                     EofCached = nodeDict.GetFlag("eof-cached"),
                     FwBytes = nodeDict.GetInteger("fw-bytes") ?? 0,
                     FileCacheBytes = nodeDict.GetInteger("file-cache-bytes") ?? 0,
+                    RawInputRate = nodeDict.GetInteger("raw-input-rate") ?? 0,
                 };
+
+                if (nodeDict.TryGetValue("ts-per-stream", out var streamNodes))
+                {
+                    foreach (var item in streamNodes as List<object?> ?? [])
+                    {
+                        if (item is not Dictionary<string, object?> map
+                            || !map.TryGetValue("type", out var type)
+                            || map.GetDouble("cache-duration") is not double seconds)
+                        {
+                            continue;
+                        }
+
+                        if (type as string == "video")
+                        {
+                            cacheStateArgs.VideoCacheSeconds = seconds;
+                        }
+                        else if (type as string == "audio")
+                        {
+                            cacheStateArgs.AudioCacheSeconds = seconds;
+                        }
+                    }
+                }
 
                 CacheStateChanged?.Invoke(this, cacheStateArgs);
             }
