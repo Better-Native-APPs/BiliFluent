@@ -32,6 +32,9 @@ public sealed partial class SettingsPageViewModel
     private bool _isAutoPlayNextRecommendVideo;
 
     [ObservableProperty]
+    public partial bool IsCommandDanmakuEnabled { get; set; } = true;
+
+    [ObservableProperty]
     private PlayerDisplayMode _defaultPlayerDisplayMode;
 
     [ObservableProperty]
