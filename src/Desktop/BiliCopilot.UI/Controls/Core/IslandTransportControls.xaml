@@ -194,9 +194,7 @@
                         Margin="0,0,8,0"
                         Style="{StaticResource CircleIconButtonStyle}"
                         ToolTipService.ToolTip="{ext:Locale Name=PlaybackRate}">
-                        <TextBlock FontSize="14">
-                            <Run Text="{x:Bind ViewModel.Player.PlaybackRate, Mode=OneWay}" /><Run Text="x" />
-                        </TextBlock>
+                        <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
                         <Button.Flyout>
                             <!--  与全屏 OverlayTransportControls 倍速浮出内容同一模板：快捷倍速 + 0.1~3x 细调滑块  -->
                             <Flyout
