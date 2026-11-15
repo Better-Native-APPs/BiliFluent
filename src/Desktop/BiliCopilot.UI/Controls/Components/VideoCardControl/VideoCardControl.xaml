@@ -643,6 +643,7 @@
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
                         </Border>
+                        <local:WatchMarkOverlay Mark="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.WatchMark}" />
                         <Grid
                             Grid.Column="1"
                             Padding="0,8,12,8"
