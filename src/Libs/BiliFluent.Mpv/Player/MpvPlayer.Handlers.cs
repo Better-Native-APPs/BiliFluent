@@ -39,7 +39,7 @@ public sealed partial class MpvPlayer
         Client.DataNotify -= OnDataNotify;
         Client.ErrorOccurred -= OnErrorOccurred;
         var position = Position;
-        _uiContext.Post(_ =>
+        PostCounted(_ =>
         {
             PlaybackState = MpvPlayerState.Idle;
             Position = 0;
@@ -49,7 +49,7 @@ public sealed partial class MpvPlayer
             IsLoading = false;
             IsFullScreen = false;
             IsCompactOverlay = false;
-        }, default);
+        });
     }
 
     private void OnFileEnd(object? sender, EventArgs e)
@@ -59,11 +59,11 @@ public sealed partial class MpvPlayer
             return;
         }
 
-        _uiContext.Post(_ =>
+        PostCounted(_ =>
         {
             IsLoading = false;
             PlaybackState = MpvPlayerState.End;
-        }, default);
+        });
     }
 
     private async void OnDataNotify(object? sender, MpvClientNotifyEventArgs e)
@@ -71,36 +71,36 @@ public sealed partial class MpvPlayer
         switch (e.Id)
         {
             case MpvClientEventId.StateChanged:
-                _uiContext.Post(_ => PlaybackState = (MpvPlayerState)e.Data!, default);
+                PostCounted(_ => PlaybackState = (MpvPlayerState)e.Data!);
                 break;
             case MpvClientEventId.VolumeChanged:
-                _uiContext.Post(_ => Volume = (double)e.Data!, default);
+                PostCounted(_ => Volume = (double)e.Data!);
                 break;
             case MpvClientEventId.SpeedChanged:
-                _uiContext.Post(_ => PlaybackRate = (double)e.Data!, default);
+                PostCounted(_ => PlaybackRate = (double)e.Data!);
                 break;
             case MpvClientEventId.DurationChanged:
-                _uiContext.Post(_ => Duration = (double)e.Data!, default);
+                PostCounted(_ => Duration = (double)e.Data!);
                 break;
             case MpvClientEventId.PositionChanged:
                 Interlocked.Increment(ref _positionUpdateVersion);
-                _uiContext.Post(_ => Position = (double)e.Data!, default);
+                PostCounted(_ => Position = (double)e.Data!);
                 break;
             case MpvClientEventId.FullScreenChanged:
-                _uiContext.Post(_ => IsFullScreen = (bool)e.Data!, default);
+                PostCounted(_ => IsFullScreen = (bool)e.Data!);
                 break;
             case MpvClientEventId.CompactOverlayChanged:
-                _uiContext.Post(_ => IsCompactOverlay = (bool)e.Data!, default);
+                PostCounted(_ => IsCompactOverlay = (bool)e.Data!);
                 break;
             case MpvClientEventId.TrackCountChanged:
                 await InitializeTracksAsync();
                 break;
             case MpvClientEventId.PlaybackRestart:
                 _isTlsError = false;
-                _uiContext.Post(_ => IsPlaybackInitialized = true, default);
+                PostCounted(_ => IsPlaybackInitialized = true);
                 break;
             case MpvClientEventId.CacheSpeedChanged:
-                _uiContext.Post(_ => CacheSpeed = (long)e.Data!, default);
+                PostCounted(_ => CacheSpeed = (long)e.Data!);
                 break;
             default:
                 break;
@@ -117,15 +117,22 @@ public sealed partial class MpvPlayer
 
     private async void OnFileLoaded(object? sender, EventArgs e)
     {
-        _uiContext.Post(_ => IsLoading = false, default);
+        PostCounted(_ => IsLoading = false);
         await RefreshStatusAsync();
         if (Math.Abs(Duration - 1) < 0.01)
         {
             // No file loaded, throw an error.
-            _uiContext.Post(_ => Client.ThrowError(MpvError.LoadingFailed), default);
+            PostCounted(_ => Client.ThrowError(MpvError.LoadingFailed));
         }
     }
 
     private void OnFileLoading(object? sender, EventArgs e)
-        => _uiContext.Post(_ => IsLoading = true, default);
+        => PostCounted(_ => IsLoading = true);
+
+    // Same post as before; the client counts it only while stutter diagnostics run.
+    private void PostCounted(SendOrPostCallback callback)
+    {
+        Client.CountUiPost();
+        _uiContext.Post(callback, default);
+    }
 }

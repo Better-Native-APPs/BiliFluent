@@ -570,6 +570,9 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+        var handlerStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
+        long synchronousTicks = -1;
         if (e.PropertyName is nameof(Player.Position) or nameof(Player.IsPlaybackInitialized) or nameof(Player.PlaybackState))
             UpdateCommandDanmakuPosition(Player.Position);
 
@@ -593,6 +596,7 @@ public sealed partial class PlayerViewModel
 
         if (e.PropertyName == nameof(Player.Position) && !ShouldFanOutPlayerPosition())
         {
+            if (diagnostics) ReportSlowPlayerPropertyChanged(e.PropertyName, handlerStarted, synchronousTicks);
             return;
         }
 
@@ -606,7 +610,10 @@ public sealed partial class PlayerViewModel
         var mediaVersion = _mediaVersion;
         try
         {
-            await OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
+            var work = OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
+            // The UI thread has been held up to here; anything after the await may have yielded.
+            if (diagnostics) synchronousTicks = Stopwatch.GetTimestamp() - handlerStarted;
+            await work;
             if (flushPendingPosition && _pendingFanOutPosition.HasValue && IsCurrentPlayback(mediaVersion))
             {
                 ShouldFanOutPlayerPosition(force: true);
@@ -624,6 +631,17 @@ public sealed partial class PlayerViewModel
                 logger.LogError(ex, "Stale playback event failed.");
             }
         }
+
+        if (diagnostics) ReportSlowPlayerPropertyChanged(e.PropertyName, handlerStarted, synchronousTicks);
+    }
+
+    private static void ReportSlowPlayerPropertyChanged(string? propertyName, long started, long synchronousTicks)
+    {
+        if (!PlaybackStutterDiagnostics.IsSlow(started, out var milliseconds)) return;
+        // sync-ms is the part before the first await, which is what blocks the UI thread.
+        var synchronous = synchronousTicks < 0 ? milliseconds : synchronousTicks * 1000d / Stopwatch.Frequency;
+        PlaybackStutterDiagnostics.ReportSlow("PlayerPropertyChanged", milliseconds,
+            "property=" + (propertyName ?? "n/a") + " sync-ms=" + PlaybackStutterDiagnostics.FormatMilliseconds(synchronous));
     }
 
     private bool ShouldFanOutPlayerPosition(bool force = false)
