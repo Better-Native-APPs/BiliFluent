@@ -16,4 +16,7 @@ public sealed class VoteCommandDanmakuOption
 
     /// <summary>Gets or sets the vote count from cnt, when supplied.</summary>
     public long? Count { get; set; }
+
+    /// <summary>Gets or sets whether this option requests user-supplied text via has_self_def.</summary>
+    public bool HasSelfDefinition { get; set; }
 }

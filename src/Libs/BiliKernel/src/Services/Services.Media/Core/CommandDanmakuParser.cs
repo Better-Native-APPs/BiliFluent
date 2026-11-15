@@ -80,9 +80,11 @@ internal static class CommandDanmakuParser
                     information.Vote = new VoteCommandDanmakuPayload
                     {
                         VoteId = GetScalarText(extra, "vote_id"),
+                        VoteType = GetInt32(extra, "vote_type"),
                         Question = GetScalarText(extra, "question"),
                         Options = GetVoteOptions(extra),
                         MyVote = GetInt32(extra, "my_vote"),
+                        ParticipantCount = GetInt64(extra, "join_num"),
                         DurationMs = GetInt32(extra, "duration"),
                     };
                     break;
@@ -107,7 +109,17 @@ internal static class CommandDanmakuParser
         return information;
     }
 
-    private static IReadOnlyList<VoteCommandDanmakuOption> GetVoteOptions(JsonElement extra)
+    public static VoteCommandDanmakuPayload ParseVoteInfo(JsonElement voteInfo)
+        => new()
+        {
+            VoteId = GetScalarText(voteInfo, "vote_id"),
+            Question = GetScalarText(voteInfo, "title"),
+            Options = GetVoteOptions(voteInfo, "opt_idx", "opt_desc"),
+            ParticipantCount = GetInt64(voteInfo, "join_num"),
+        };
+
+    private static IReadOnlyList<VoteCommandDanmakuOption> GetVoteOptions(JsonElement extra,
+        string indexName = "idx", string textName = "desc")
     {
         if (!extra.TryGetProperty("options", out var options) || options.ValueKind != JsonValueKind.Array)
         {
@@ -124,9 +136,10 @@ internal static class CommandDanmakuParser
 
             result.Add(new VoteCommandDanmakuOption
             {
-                Index = GetInt32(option, "idx"),
-                Text = GetScalarText(option, "desc"),
+                Index = GetInt32(option, indexName),
+                Text = GetScalarText(option, textName),
                 Count = GetInt64(option, "cnt"),
+                HasSelfDefinition = GetBoolean(option, "has_self_def"),
             });
         }
 
@@ -153,6 +166,15 @@ internal static class CommandDanmakuParser
 
     private static long? GetInt64(JsonElement extra, string name)
         => long.TryParse(GetScalarText(extra, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
+
+    private static bool GetBoolean(JsonElement extra, string name)
+        => extra.TryGetProperty(name, out var value) && (value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.Number => value.TryGetDouble(out var number) && number != 0,
+            JsonValueKind.String => !string.IsNullOrEmpty(value.GetString()),
+            _ => false,
+        });
 
     private static double? GetDouble(JsonElement extra, string name)
         => double.TryParse(GetScalarText(extra, name), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)

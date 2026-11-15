@@ -678,6 +678,16 @@ public static class BiliApis
         public const string GradeDanmaku = _apiBase + "/x/v2/dm/command/grade/post";
 
         /// <summary>
+        /// Submits an option for a voting danmaku.
+        /// </summary>
+        public const string VoteDanmaku = _apiBase + "/x/v2/dm/command/vote/post";
+
+        /// <summary>
+        /// Gets voting information and any available option counts.
+        /// </summary>
+        public const string DanmakuVoteInfo = _apiBase + "/x/vote/vote_info";
+
+        /// <summary>
         /// Gets like counts and the current user's danmaku like states.
         /// </summary>
         public const string DanmakuLikeStats = _apiBase + "/x/v2/dm/thumbup/stats";
