@@ -1,15 +1,14 @@
 #nullable enable
 
-using BiliCopilot.UI.Classic;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Application;
+using BiliCopilot.UI.Live.Playback;
 using BiliCopilot.UI.SponsorBlock.Application;
 using BiliCopilot.UI.SponsorBlock.Integration;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.UI.Dispatching;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
-using Richasy.WinUIKernel.Share.Toolkits;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -62,10 +61,10 @@ public sealed partial class AppViewModel
         if (IsPlaybackStopping) return Task.CompletedTask;
         try
         {
-            // Capture the old identity/generation/lifetime and real saved decode choice BEFORE any await.
+            // Capture the account identity/generation/lifetime BEFORE any await.
             var bridge = LiveApplication;
             var account = bridge.CaptureLaunchAccount();
-            var decode = ClassicSessionOptions.Capture(this.Get<ISettingsToolkit>()).DecodePreference;
+            var decode = LiveDecodePreference.Auto;
             return OwnApplicationPlaybackAsync(token => bridge.OpenLiveAsync(information, decode, account, token));
         }
         catch (Exception error)
