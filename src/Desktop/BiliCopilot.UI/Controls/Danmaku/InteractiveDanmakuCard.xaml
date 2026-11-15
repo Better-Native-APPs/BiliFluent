@@ -50,6 +50,18 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
+        <!--  A poll option: the whole row is the button, text on the left like the result it turns into.  -->
+        <Style
+            x:Key="CardVoteButtonStyle"
+            BasedOn="{StaticResource DefaultButtonStyle}"
+            TargetType="Button">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="11,5,11,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <!--  Keep the focus rectangle inside the row so the scrolling list cannot cut it off.  -->
+            <Setter Property="FocusVisualMargin" Value="0" />
+        </Style>
         <Style
             x:Key="CardCaptionStyle"
             BasedOn="{StaticResource CaptionTextBlockStyle}"
@@ -271,7 +283,11 @@
                     </Grid>
                 </StackPanel>
 
-                <!--  Poll: results only.  -->
+                <!--
+                    Poll. Before voting each option is a button and picking one sends the vote at once.
+                    Afterwards (or when voting is not possible) the same rows show the counts, the share and
+                    the user's own choice. Both forms keep the same height and text position.
+                -->
                 <StackPanel
                     x:Name="VoteSection"
                     x:Load="False"
@@ -281,62 +297,120 @@
                         MaxHeight="184"
                         HorizontalScrollBarVisibility="Disabled"
                         HorizontalScrollMode="Disabled"
-                        IsTabStop="True"
+                        IsTabStop="False"
                         UseSystemFocusVisuals="True"
                         VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="VoteList" IsTabStop="False">
+                        <ItemsControl
+                            x:Name="VoteList"
+                            IsTabStop="False"
+                            XYFocusKeyboardNavigation="Enabled">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="local:CommandDanmakuVoteRow">
-                                    <Grid
-                                        Margin="0,0,0,8"
-                                        ColumnSpacing="6"
-                                        RowSpacing="4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <ic:SymbolIcon
-                                            VerticalAlignment="Center"
-                                            FontSize="14"
-                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                            IconVariant="Filled"
-                                            Symbol="CheckmarkCircle"
-                                            ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuVoteSelected}"
-                                            Visibility="{x:Bind IsSelected}" />
-                                        <TextBlock
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
-                                            MaxLines="2"
-                                            Text="{x:Bind Text}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
-                                        <TextBlock
-                                            Grid.Column="2"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
-                                            Style="{StaticResource CardCaptionStyle}"
-                                            Text="{x:Bind Stats}" />
-                                        <ProgressBar
-                                            Grid.Row="1"
-                                            Grid.ColumnSpan="3"
-                                            AutomationProperties.Name="{x:Bind AutomationName}"
-                                            Maximum="100"
-                                            Value="{x:Bind Percent}" />
+                                    <Grid Margin="0,0,0,6">
+                                        <Button
+                                            AutomationProperties.Name="{x:Bind Text}"
+                                            Click="OnVoteOptionClick"
+                                            IsEnabled="{x:Bind CanChoose, Mode=OneWay}"
+                                            Style="{StaticResource CardVoteButtonStyle}"
+                                            Tag="{x:Bind}"
+                                            Visibility="{x:Bind IsChoice, Mode=OneWay}">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    MaxLines="2"
+                                                    Text="{x:Bind Text}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    TextWrapping="Wrap" />
+                                                <!--  Only on the option being sent.  -->
+                                                <ProgressRing
+                                                    Grid.Column="1"
+                                                    Width="16"
+                                                    Height="16"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AccessibilityView="Raw"
+                                                    IsActive="{x:Bind IsPending, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsPending, Mode=OneWay}" />
+                                            </Grid>
+                                        </Button>
+                                        <Grid
+                                            MinHeight="36"
+                                            Padding="11,3,11,4"
+                                            Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            ColumnSpacing="6"
+                                            CornerRadius="{StaticResource ControlCornerRadius}"
+                                            RowSpacing="3"
+                                            Visibility="{x:Bind IsResult, Mode=OneWay}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                MaxLines="2"
+                                                Text="{x:Bind Text}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap" />
+                                            <ic:SymbolIcon
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                FontSize="14"
+                                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                IconVariant="Filled"
+                                                Symbol="CheckmarkCircle"
+                                                ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuVoteSelected}"
+                                                Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                Style="{StaticResource CardCaptionStyle}"
+                                                Text="{x:Bind Stats, Mode=OneWay}" />
+                                            <ProgressBar
+                                                Grid.Row="1"
+                                                Grid.ColumnSpan="3"
+                                                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                                                Maximum="100"
+                                                Value="{x:Bind Percent, Mode=OneWay}" />
+                                        </Grid>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <TextBlock
-                        x:Name="VoteSummary"
-                        Style="{StaticResource CardCaptionStyle}"
-                        TextWrapping="Wrap" />
+                    <!--  One line that is always there: how to vote, sending, what went wrong, or the total.  -->
+                    <Grid x:Name="VoteStatus" ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ic:SymbolIcon
+                            x:Name="VoteFailedIcon"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            IconVariant="Filled"
+                            Symbol="Warning"
+                            Visibility="Collapsed" />
+                        <TextBlock
+                            x:Name="VoteStatusText"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite"
+                            Style="{StaticResource CardCaptionStyle}"
+                            TextWrapping="Wrap" />
+                    </Grid>
                 </StackPanel>
 
                 <!--  Rating: pick the stars, then submit.  -->
