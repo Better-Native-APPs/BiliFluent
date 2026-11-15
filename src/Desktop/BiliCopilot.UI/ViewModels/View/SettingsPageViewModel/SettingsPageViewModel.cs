@@ -41,6 +41,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         LogLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
         PlaybackStutterDiagnosticsEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false);
         DisableMpvCurlForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false);
+        UseDisplaySyncForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false);
         HideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
         IsTopNavShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
         IsAutoPlayNextRecommendVideo = SettingsToolkit.ReadLocalSetting(SettingNames.AutoPlayNextRecommendVideo, false);
@@ -341,6 +342,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnDisableMpvCurlForDiagnosticsChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, value);
+
+    partial void OnUseDisplaySyncForDiagnosticsChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, value);
 
     partial void OnIsCommandDanmakuEnabledChanged(bool value)
     {

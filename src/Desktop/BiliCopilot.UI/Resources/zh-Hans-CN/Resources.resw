@@ -603,6 +603,12 @@
   <data name="DisableMpvCurlForDiagnosticsDescription" xml:space="preserve">
     <value>对照诊断网络缓冲；重新打开播放器后生效。</value>
   </data>
+  <data name="UseDisplaySyncForDiagnostics" xml:space="preserve">
+    <value>使用显示同步（对比用）</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnosticsDescription" xml:space="preserve">
+    <value>按显示器刷新率安排视频帧，对照诊断帧节奏；重新打开播放器后生效。</value>
+  </data>
   <data name="MainWindow" xml:space="preserve">
     <value>主窗口</value>
   </data>

@@ -105,6 +105,12 @@
   <data name="DisableMpvCurlForDiagnosticsDescription" xml:space="preserve">
     <value>Compare network buffering; takes effect when the player is reopened.</value>
   </data>
+  <data name="UseDisplaySyncForDiagnostics" xml:space="preserve">
+    <value>Use display sync (comparison)</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnosticsDescription" xml:space="preserve">
+    <value>Time video frames to the display refresh rate to compare frame pacing; takes effect when the player is reopened.</value>
+  </data>
   <data name="CommandDanmakuEnabled" xml:space="preserve">
     <value>Show interactive danmaku</value>
   </data>
