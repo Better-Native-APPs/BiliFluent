@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
+using BiliCopilot.UI.ViewModels.View;
 using Richasy.WinUIKernel.Share.Toolkits;
 
 namespace BiliCopilot.UI.Controls.Danmaku;
@@ -11,10 +12,22 @@ namespace BiliCopilot.UI.Controls.Danmaku;
 /// </summary>
 public sealed partial class DanmakuDisplayOptions : DanmakuControlBase
 {
-    public DanmakuDisplayOptions() => InitializeComponent();
+    public DanmakuDisplayOptions()
+    {
+        Settings = this.Get<SettingsPageViewModel>();
+        InitializeComponent();
+    }
+
+    /// <summary>
+    /// The shared settings view model that owns the interactive danmaku switch for every player.
+    /// </summary>
+    private SettingsPageViewModel Settings { get; }
 
     protected override void OnControlLoaded()
     {
+        // The settings page may never have been opened: bring the shared value up to date first,
+        // so that flipping the switch here is always seen as a change.
+        Settings.IsCommandDanmakuEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsCommandDanmakuEnabled, true);
         var renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
         RendererComboBox.SelectedIndex = renderer == DanmakuRendererType.Win2D ? 0 : 1;
         DanmakuFontComboBox.SelectedItem = ViewModel.Fonts.FirstOrDefault(p => p.LocalName == ViewModel.DanmakuFontFamily);
