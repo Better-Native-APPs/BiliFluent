@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Media;
@@ -10,7 +11,7 @@ using Richasy.MpvKernel.Player;
 
 namespace BiliCopilot.UI.Resolvers;
 
-internal sealed partial class VideoMediaHistoryResolver(IPlayerService playerService, ILogger<VideoMediaHistoryResolver> logger) : IMpvMediaHistoryResolver
+internal sealed partial class VideoMediaHistoryResolver(IPlayerService playerService, ILogger<VideoMediaHistoryResolver> logger, WatchRecordIndex watchRecords) : IMpvMediaHistoryResolver
 {
     private VideoPlayerView _view;
     private VideoPart _part;
@@ -41,6 +42,9 @@ internal sealed partial class VideoMediaHistoryResolver(IPlayerService playerSer
         {
             return;
         }
+
+        // Same position that goes to the server, kept for this run so the dynamic page can mark the video right away.
+        watchRecords.RecordPlayback(_view?.Information.Identifier.Id, position, duration > 0 ? duration : _part?.Duration ?? 0);
 
         try
         {
