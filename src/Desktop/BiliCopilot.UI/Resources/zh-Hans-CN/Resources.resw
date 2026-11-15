@@ -1911,4 +1911,10 @@
   <data name="CommandDanmakuGradeFailed" xml:space="preserve">
     <value>提交失败，请重试</value>
   </data>
+  <data name="WatchFinished" xml:space="preserve">
+    <value>已看完</value>
+  </data>
+  <data name="WatchedToTemplate" xml:space="preserve">
+    <value>看到 {0}</value>
+  </data>
 </root>

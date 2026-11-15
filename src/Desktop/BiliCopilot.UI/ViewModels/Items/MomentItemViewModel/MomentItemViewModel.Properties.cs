@@ -55,6 +55,11 @@ public sealed partial class MomentItemViewModel
     public string? VideoDuration { get; init; }
 
     /// <summary>
+    /// Watched mark of the video or episode in this moment. Null when it has not been watched.
+    /// </summary>
+    public WatchMark? WatchMark { get; init; }
+
+    /// <summary>
     /// 说明.
     /// </summary>
     public EmoteText? Description { get; init; }

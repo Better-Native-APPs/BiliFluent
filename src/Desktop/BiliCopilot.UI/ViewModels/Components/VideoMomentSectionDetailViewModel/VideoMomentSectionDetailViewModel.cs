@@ -95,7 +95,7 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
                 {
                     if (token.IsCancellationRequested || generation != _account.AccountGeneration) return;
                     if (!ids.Add(item.Id)) continue;
-                    Items.Add(new MomentItemViewModel(item, Models.Constants.MomentCardStyle.Video, ShowComment));
+                    Items.Add(new MomentItemViewModel(item, Models.Constants.MomentCardStyle.Video, ShowComment, showWatchMark: true));
                 }
 
                 if (token.IsCancellationRequested || generation != _account.AccountGeneration) return;
