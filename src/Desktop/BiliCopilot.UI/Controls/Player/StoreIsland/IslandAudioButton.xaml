@@ -24,8 +24,8 @@
         </ResourceDictionary>
     </core:PlayerControlBase.Resources>
 
-    <!--  Shown only when there is more than one track to choose from. Sits between quality and subtitle.  -->
-    <Grid Margin="8,0,0,0" Visibility="{x:Bind ViewModel.IsAudioTrackSelectable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+    <!--  Shown only when the media offers a language besides its original audio. Sits between quality and subtitle.  -->
+    <Grid Margin="8,0,0,0" Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
         <Button
             VerticalAlignment="Center"
             AutomationProperties.Name="{ext:Locale Name=AudioTrack}"
@@ -45,16 +45,25 @@
                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="{ext:Locale Name=AudioTrack}" />
+                        <!--  The API's own title for its dubbing languages, shown as it is.  -->
+                        <TextBlock
+                            Width="220"
+                            HorizontalAlignment="Left"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
                         <!--  A video can offer many dubbing languages; the list scrolls past this height.  -->
                         <ItemsView
                             x:Name="AudioView"
                             Width="220"
-                            MaxHeight="320"
+                            MaxHeight="240"
                             IsItemInvokedEnabled="True"
                             ItemInvoked="OnAudioItemInvoked"
                             SelectionMode="Single">
                             <ItemsView.ItemTemplate>
-                                <DataTemplate x:DataType="items:AudioTrackItemViewModel">
+                                <DataTemplate x:DataType="items:AudioLanguageItemViewModel">
                                     <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
                                     <ItemContainer
                                         AutomationProperties.Name="{x:Bind AccessibleName}"
@@ -92,7 +101,7 @@
                                                         Text="AI" />
                                                 </Border>
                                             </Grid>
-                                            <!--  A quiet note at the far end: this track needs a premium membership.  -->
+                                            <!--  A quiet note at the far end: this entry needs a premium membership.  -->
                                             <TextBlock
                                                 Grid.Column="1"
                                                 VerticalAlignment="Center"
@@ -109,6 +118,70 @@
                                 <StackLayout Spacing="4" />
                             </ItemsView.Layout>
                         </ItemsView>
+                        <!--  Second section: the qualities of the language that plays.  -->
+                        <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                HorizontalAlignment="Left"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{ext:Locale Name=AudioTrackQuality}" />
+                            <!--  Standard bitrates first, then Dolby and Hi-Res.  -->
+                            <ItemsView
+                                x:Name="QualityView"
+                                Width="220"
+                                MaxHeight="200"
+                                IsItemInvokedEnabled="True"
+                                ItemInvoked="OnAudioItemInvoked"
+                                SelectionMode="Single">
+                                <ItemsView.ItemTemplate>
+                                    <DataTemplate x:DataType="items:AudioQualityItemViewModel">
+                                        <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                        <ItemContainer
+                                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            IsEnabled="{x:Bind IsEnabled}"
+                                            Style="{StaticResource AppItemContainerStyle}">
+                                            <Grid
+                                                MinHeight="40"
+                                                Padding="12,0"
+                                                Background="Transparent"
+                                                ColumnSpacing="8"
+                                                Tag="{x:Bind}"
+                                                Tapped="OnAudioItemTapped">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <base:TrimTextBlock
+                                                        VerticalAlignment="Center"
+                                                        MaxLines="1"
+                                                        Text="{x:Bind Name}" />
+                                                </Grid>
+                                                <!--  A quiet note at the far end: this entry needs a premium membership.  -->
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AccessibilityView="Raw"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackVip}"
+                                                    Visibility="{x:Bind NeedVip}" />
+                                            </Grid>
+                                        </ItemContainer>
+                                    </DataTemplate>
+                                </ItemsView.ItemTemplate>
+                                <ItemsView.Layout>
+                                    <StackLayout Spacing="4" />
+                                </ItemsView.Layout>
+                            </ItemsView>
+                        </StackPanel>
                     </StackPanel>
                 </Flyout>
             </Button.Flyout>

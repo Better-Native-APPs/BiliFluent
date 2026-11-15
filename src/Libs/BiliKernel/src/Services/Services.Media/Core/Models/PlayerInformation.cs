@@ -65,13 +65,13 @@ internal sealed class PlayerInformation
     public List<VideoFormat> SupportFormats { get; set; }
 
     /// <summary>
-    /// Gets or sets the available AI dubbing languages.
+    /// Gets or sets the available dubbing languages.
     /// </summary>
     [JsonPropertyName("language")]
     public PlayerLanguageInformation? Language { get; set; }
 
     /// <summary>
-    /// Gets or sets the current AI dubbing language.
+    /// Gets or sets the dubbing language the response serves. Empty for the original audio.
     /// </summary>
     [JsonPropertyName("cur_language")]
     public string? CurrentLanguage { get; set; }
@@ -168,12 +168,12 @@ internal sealed class FlacAudioInformation
 }
 
 /// <summary>
-/// AI dubbing languages supported by a video.
+/// Dubbing languages supported by a video.
 /// </summary>
 internal sealed class PlayerLanguageInformation
 {
     /// <summary>
-    /// Gets or sets whether the video supports AI dubbing.
+    /// Gets or sets whether the video supports dubbing languages.
     /// </summary>
     [JsonPropertyName("support")]
     public bool? Support { get; set; }
@@ -183,10 +183,16 @@ internal sealed class PlayerLanguageInformation
     /// </summary>
     [JsonPropertyName("items")]
     public List<PlayerLanguageItem?>? Items { get; set; }
+
+    /// <summary>
+    /// Gets or sets the title the API shows above the language list.
+    /// </summary>
+    [JsonPropertyName("list_title")]
+    public string? ListTitle { get; set; }
 }
 
 /// <summary>
-/// An AI dubbing language advertised by the API.
+/// A dubbing language advertised by the API.
 /// </summary>
 internal sealed class PlayerLanguageItem
 {
@@ -201,6 +207,12 @@ internal sealed class PlayerLanguageItem
     /// </summary>
     [JsonPropertyName("title")]
     public string? Title { get; set; }
+
+    /// <summary>
+    /// Gets or sets the production type of the dubbing, as reported by the API.
+    /// </summary>
+    [JsonPropertyName("production_type")]
+    public int? ProductionType { get; set; }
 
     /// <summary>
     /// Gets or sets the optional VIP requirement reported by the API.

@@ -491,7 +491,7 @@ internal static class VideoAdapter
         return new DashMediaInformation(videos, audios, formats);
     }
 
-    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information, bool includeAiDubbing = false, string? requestedLanguage = default)
+    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information, bool includeAudioLanguages = false, string? requestedLanguage = default)
     {
         var dash = information.VideoInformation;
         if (dash == null)
@@ -502,7 +502,7 @@ internal static class VideoAdapter
         var videos = new List<DashSegmentInformation>();
         var audios = new List<DashSegmentInformation>();
         var formats = new List<PlayerFormatInformation>();
-        var audioTracks = new List<AudioTrackInformation>();
+        var audioQualities = new List<AudioQualityInformation>();
 
         if (dash.Video?.Count > 0)
         {
@@ -518,7 +518,7 @@ internal static class VideoAdapter
             {
                 var seg = ToDashSegmentInformation(audio);
                 audios.Add(seg);
-                audioTracks.Add(new AudioTrackInformation($"std:{seg.Id}", default, AudioTrackKind.Standard, needVip: audio.NeedVip ?? false, segment: seg));
+                audioQualities.Add(new AudioQualityInformation($"std:{seg.Id}", AudioQualityKind.Standard, needVip: audio.NeedVip ?? false, segment: seg));
             }
         }
 
@@ -532,36 +532,38 @@ internal static class VideoAdapter
                 }
 
                 var seg = ToDashSegmentInformation(audio);
-                audioTracks.Add(new AudioTrackInformation($"dolby:{seg.Id}", default, AudioTrackKind.Dolby, needVip: audio.NeedVip ?? dash.Dolby.NeedVip ?? false, segment: seg));
+                audioQualities.Add(new AudioQualityInformation($"dolby:{seg.Id}", AudioQualityKind.Dolby, needVip: audio.NeedVip ?? dash.Dolby.NeedVip ?? false, segment: seg));
             }
         }
 
         if (dash.Flac?.Audio is { } flacAudio)
         {
             var seg = ToDashSegmentInformation(flacAudio);
-            audioTracks.Add(new AudioTrackInformation($"hires:{seg.Id}", default, AudioTrackKind.HiRes, needVip: flacAudio.NeedVip ?? dash.Flac.NeedVip ?? false, segment: seg));
+            audioQualities.Add(new AudioQualityInformation($"hires:{seg.Id}", AudioQualityKind.HiRes, needVip: flacAudio.NeedVip ?? dash.Flac.NeedVip ?? false, segment: seg));
         }
 
-        if (includeAiDubbing && information.Language?.Items is { } languageItems)
+        // The original audio always comes first. Languages are listed only as the API names them;
+        // nothing is derived from the streams.
+        var audioLanguages = new List<AudioLanguageInformation> { new(AudioLanguageInformation.OriginalId) };
+        var languageGroupTitle = default(string);
+        if (includeAudioLanguages && information.Language is { Support: not false, Items: { } languageItems } languageInfo)
         {
-            var requestedAudio = string.IsNullOrEmpty(requestedLanguage)
-                ? default
-                : audios.OrderByDescending(p => p.Bandwidth).FirstOrDefault();
+            languageGroupTitle = string.IsNullOrWhiteSpace(languageInfo.ListTitle) ? default : languageInfo.ListTitle;
+            var servedLanguage = AudioLanguageInformation.MatchesCode(requestedLanguage, information.CurrentLanguage) ? requestedLanguage : default;
             foreach (var language in languageItems)
             {
-                if (string.IsNullOrEmpty(language?.Language))
+                if (string.IsNullOrWhiteSpace(language?.Language) || audioLanguages.Any(p => p.Id == language.Language))
                 {
                     continue;
                 }
 
-                audioTracks.Add(new AudioTrackInformation(
-                    $"ai:{language.Language}",
-                    language.Title,
-                    AudioTrackKind.AiDubbing,
+                // The API has no per-language AI marker, so none is set here.
+                audioLanguages.Add(new AudioLanguageInformation(
                     language.Language,
-                    isAI: true,
+                    language.Title,
                     needVip: language.NeedVip ?? false,
-                    segment: language.Language == requestedLanguage ? requestedAudio : default));
+                    hasAudio: language.Language == servedLanguage,
+                    productionType: language.ProductionType));
             }
         }
 
@@ -589,7 +591,15 @@ internal static class VideoAdapter
             audios = default;
         }
 
-        return new DashMediaInformation(videos, audios, formats, information.Duration, audioTracks.Count > 0 ? audioTracks : default, information.CurrentLanguage);
+        return new DashMediaInformation(
+            videos,
+            audios,
+            formats,
+            information.Duration,
+            audioQualities.Count > 0 ? audioQualities : default,
+            information.CurrentLanguage,
+            audioLanguages,
+            languageGroupTitle);
     }
 
     private static DashSegmentInformation ToDashSegmentInformation(RestDashItem item)
