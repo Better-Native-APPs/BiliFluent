@@ -100,7 +100,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
         MTCBehavior = SettingsToolkit.ReadLocalSetting(SettingNames.MTCBehavior, MTCBehavior.Automatic);
         BottomProgressVisible = SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
-        UseWebPlayerWhenLive = SettingsToolkit.ReadLocalSetting(SettingNames.UseWebPlayerWhenLive, false);
         ShowSearchRecommend = SettingsToolkit.ReadLocalSetting(SettingNames.ShowSearchRecommend, true);
 
         ScreenshotAction = SettingsToolkit.ReadLocalSetting(SettingNames.ScreenshotAction, ScreenshotAction.Open);
@@ -460,9 +459,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnMTCBehaviorChanged(MTCBehavior value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MTCBehavior, value);
-
-    partial void OnUseWebPlayerWhenLiveChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.UseWebPlayerWhenLive, value);
 
     partial void OnShowSearchRecommendChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.ShowSearchRecommend, value);
