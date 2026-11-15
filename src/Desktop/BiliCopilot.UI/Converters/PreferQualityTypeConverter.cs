@@ -17,7 +17,6 @@ internal sealed partial class PreferQualityTypeConverter : IValueConverter
             ? quality switch
             {
                 PreferQualityType.HD => ResourceToolkit.GetLocalizedString(StringNames.HDFirst),
-                PreferQualityType.High => ResourceToolkit.GetLocalizedString(StringNames.PreferHighQuality),
                 PreferQualityType.UHD => ResourceToolkit.GetLocalizedString(StringNames.UHDFirst),
                 _ => ResourceToolkit.GetLocalizedString(StringNames.Automatic),
             }

@@ -1078,26 +1078,7 @@ public sealed partial class PlayerViewModel
                 var sources = await videoResolver.GetSourcesAsync();
                 if (!IsCurrentPlayback(version)) return;
 
-                IsSourceSelectable = sources?.Count > 1;
-                Sources.Clear();
-                if (sources != null)
-                {
-                    var currentSource = videoResolver.GetCurrentFormat();
-                    foreach (var source in sources)
-                    {
-                        var vm = new SourceItemViewModel(source, item => IsCurrentPlayback(version)
-                            ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask);
-                        if (currentSource != null)
-                        {
-                            vm.IsSelected = source.Quality == currentSource.Quality;
-                        }
-
-                        Sources.Add(vm);
-                    }
-
-                    SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
-                }
-
+                ResetSources(sources, version);
                 var c = ((VideoConnectorViewModel)Connector);
                 DanmakuSend.ResetData(c._view.Information.Identifier.Id, c._part.Identifier.Id);
             }
@@ -1106,26 +1087,7 @@ public sealed partial class PlayerViewModel
                 var sources = await pgcResolver.GetSourcesAsync();
                 if (!IsCurrentPlayback(version)) return;
 
-                IsSourceSelectable = sources?.Count > 1;
-                Sources.Clear();
-                if (sources != null)
-                {
-                    var currentSource = pgcResolver.GetCurrentFormat();
-                    foreach (var source in sources)
-                    {
-                        var vm = new SourceItemViewModel(source, item => IsCurrentPlayback(version)
-                            ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask);
-                        if (currentSource != null)
-                        {
-                            vm.IsSelected = source.Quality == currentSource.Quality;
-                        }
-
-                        Sources.Add(vm);
-                    }
-
-                    SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
-                }
-
+                ResetSources(sources, version);
                 var c = ((PgcConnectorViewModel)Connector);
                 var aid = c._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Aid).ToString();
                 var cid = c._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString();
@@ -1136,6 +1098,29 @@ public sealed partial class PlayerViewModel
         {
             logger.LogError(ex, "加载清晰度列表失败");
         }
+    }
+
+    // Fills the quality list: the automatic entry first, then the qualities of the media.
+    private void ResetSources(List<PlayerFormatInformation>? sources, long version)
+    {
+        IsSourceSelectable = sources?.Count > 1;
+        Sources.Clear();
+        if (sources is not { Count: > 0 })
+        {
+            SelectedSource = default;
+            return;
+        }
+
+        Task Activate(SourceItemViewModel item)
+            => IsCurrentPlayback(version) ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask;
+
+        Sources.Add(SourceItemViewModel.CreateAuto(Activate));
+        foreach (var source in sources)
+        {
+            Sources.Add(new SourceItemViewModel(source, Activate));
+        }
+
+        MarkSelectedSource();
     }
 
     private async Task LoadSubtitlesAsync()

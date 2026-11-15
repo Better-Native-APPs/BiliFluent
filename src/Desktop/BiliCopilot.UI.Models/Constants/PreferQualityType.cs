@@ -8,7 +8,7 @@ namespace BiliCopilot.UI.Models.Constants;
 public enum PreferQualityType
 {
     /// <summary>
-    /// 最高画质.
+    /// 最高画质. 与 <see cref="Auto"/> 的选择相同，仅为兼容已保存的设置而保留，设置页不再列出.
     /// </summary>
     High,
 
@@ -23,7 +23,7 @@ public enum PreferQualityType
     HD,
 
     /// <summary>
-    /// 自动（延续上一次播放设置）.
+    /// 自动（每次播放都选当前账号能播的最高清晰度）.
     /// </summary>
     Auto,
 }

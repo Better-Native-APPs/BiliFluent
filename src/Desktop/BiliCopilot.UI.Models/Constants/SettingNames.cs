@@ -32,11 +32,12 @@ public enum SettingNames
     LastSelectedFavoriteSection,
     LastSelectedMessageSection,
     PreferQuality,
-    LastSelectedVideoQuality,
+
+    // The video quality chosen by hand in the player, kept across media. Absent while the quality is automatic.
+    ManualVideoQuality,
     ShouldAutoPlay,
     LastSelectedLiveQuality,
     IsLiveAudioOnly,
-    LastSelectedPgcQuality,
     IsVideoPlayerPartsOnlyIndex,
     PlayerVolume,
     PlayerSpeed,

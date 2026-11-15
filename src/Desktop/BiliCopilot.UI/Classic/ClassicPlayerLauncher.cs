@@ -53,8 +53,7 @@ public sealed class ClassicPlayerLauncher(IPlayerService player, IBiliCookiesRes
             settings.ReadLocalSetting("AutoPlayNextRecommendVideo", false),
             settings.ReadLocalSetting("ShouldReportProgress", true),
             settings.ReadLocalSetting("PreferQuality", PreferQualityType.Auto),
-            settings.ReadLocalSetting("LastSelectedVideoQuality", 0),
-            settings.ReadLocalSetting("LastSelectedPgcQuality", 0), AppToolkit.GetPreferCodecId(),
+            settings.ReadLocalSetting("ManualVideoQuality", 0), AppToolkit.GetPreferCodecId(),
             settings.ReadLocalSetting("PlayWithoutP2P", false));
         var inputPreferences = new ClassicInputPreferences(
             settings.ReadLocalSetting("StepBackwardSecond", 10d), settings.ReadLocalSetting("StepForwardSecond", 30d),

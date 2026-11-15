@@ -64,42 +64,28 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         }
     }
 
+    /// <summary>
+    /// The quality that plays: the one chosen by hand when there is one, otherwise the automatic choice.
+    /// Null until the media is loaded.
+    /// </summary>
     internal PlayerFormatInformation? GetCurrentFormat()
     {
-        var preferFormatSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.PreferQuality, PreferQualityType.Auto);
-        var availableFormats = _playbackInfo.Formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default)).Where(p => p.IsEnabled).ToList();
-        SourceItemViewModel? selectedFormat = default;
-        if (_snapshot.PreferQuality > 0)
+        if (_playbackInfo?.Formats is not { } formats)
         {
-            selectedFormat = availableFormats.Find(p => p.Data.Quality == _snapshot.PreferQuality);
+            return default;
         }
 
-        if (selectedFormat == null)
-        {
-            if (preferFormatSetting == PreferQualityType.Auto)
-            {
-                var lastSelectedFormat = SettingsToolkit.ReadLocalSetting(SettingNames.LastSelectedVideoQuality, 0);
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == lastSelectedFormat);
-            }
-            else if (preferFormatSetting == PreferQualityType.UHD)
-            {
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == 120);
-            }
-            else if (preferFormatSetting == PreferQualityType.HD)
-            {
-                var hdFormats = availableFormats.Where(p => p.Data.Quality == 116 || p.Data.Quality == 80).ToList();
-                selectedFormat = hdFormats.OrderByDescending(p => p.Data.Quality).FirstOrDefault();
-            }
-        }
-
-        if (selectedFormat is null)
-        {
-            var maxQuality = availableFormats.Max(p => p.Data.Quality);
-            selectedFormat = availableFormats.Find(p => p.Data.Quality == maxQuality);
-        }
-
-        return selectedFormat.Data;
+        var availableFormats = formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default)).Where(p => p.IsEnabled).ToList();
+        return VideoQualityPreference.Pick(
+            VideoMediaSourceResolver.KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos),
+            VideoMediaSourceResolver.GetManualQuality(_snapshot),
+            SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
     }
+
+    /// <summary>
+    /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
+    /// </summary>
+    internal bool IsAutoQuality() => VideoMediaSourceResolver.GetManualQuality(_snapshot) <= 0;
 
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
 
@@ -254,7 +240,6 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             }
         }
 
-        SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedPgcQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
     }
 

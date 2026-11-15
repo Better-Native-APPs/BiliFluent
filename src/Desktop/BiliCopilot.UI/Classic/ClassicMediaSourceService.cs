@@ -1,6 +1,7 @@
 using System.Globalization;
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Classic.Backends.Web;
+using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.Media;
@@ -19,7 +20,7 @@ public sealed class ClassicSourceException : Exception
 // These preferences and account eligibility are captured by the composition root, not New connectors.
 public sealed record ClassicSourcePreferences(bool AutoLoadHistory, bool AutoPlayRecommendations,
     bool ReportProgress, PreferQualityType QualityPreference = PreferQualityType.Auto,
-    int LastVideoQuality = 0, int LastPgcQuality = 0, string? PreferredCodec = null,
+    int ManualQuality = 0, string? PreferredCodec = null,
     bool WithoutP2P = false);
 
 public sealed class ClassicSourceResult
@@ -266,17 +267,8 @@ public sealed class ClassicMediaSourceService
         if (item.PreferQuality is > 0)
             return qualities.FirstOrDefault(q => q.Quality == item.PreferQuality)
                 ?? throw new ClassicSourceException("Requested quality is unavailable.");
-        PlayerFormatInformation? selected = null;
-        if (Preferences.QualityPreference == PreferQualityType.Auto)
-        {
-            var last = item.Type == BiliMediaType.Pgc ? Preferences.LastPgcQuality : Preferences.LastVideoQuality;
-            selected = qualities.FirstOrDefault(q => q.Quality == last);
-        }
-        else if (Preferences.QualityPreference == PreferQualityType.UHD)
-            selected = qualities.FirstOrDefault(q => q.Quality == 120);
-        else if (Preferences.QualityPreference == PreferQualityType.HD)
-            selected = qualities.Where(q => q.Quality is 116 or 80).OrderByDescending(q => q.Quality).FirstOrDefault();
-        return selected ?? qualities.OrderByDescending(q => q.Quality).FirstOrDefault();
+        // The same rule as the main player: the quality chosen by hand there, otherwise the automatic choice.
+        return VideoQualityPreference.Pick(qualities, Preferences.ManualQuality, Preferences.QualityPreference);
     }
 
     private Uri SegmentUri(DashSegmentInformation segment)
