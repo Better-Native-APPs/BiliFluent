@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.View;
@@ -45,12 +46,16 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         _isSeeded = true;
         Items.Clear();
         var ids = new HashSet<string>(StringComparer.Ordinal);
+        var added = new List<MomentItemViewModel>();
         foreach (var item in momentView.Moments)
         {
             if (_isRetired || _accountGeneration != _account.AccountGeneration) return;
             if (!ids.Add(item.Id)) continue;
-            Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
+            var row = new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true);
+            Items.Add(row);
+            added.Add(row);
         }
+        MomentItemViewModel.TrackFeedLoad(this.Get<WatchRecordIndex>(), added, feedStart: true);
         IsEmpty = Items.Count == 0;
         ListUpdated?.Invoke(this, EventArgs.Empty);
     }
@@ -176,14 +181,20 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
             _preventLoadMore = view.HasMoreMoments != true;
             IsPrefetchExhausted = _preventLoadMore;
             var ids = Items.Select(item => item.Data.Id).ToHashSet(StringComparer.Ordinal);
+            var first = Items.Count == 0;
+            var added = new List<MomentItemViewModel>();
             foreach (var item in view.Moments)
             {
                 if (!IsCurrentRequest(generation, token)) return;
                 if (!ids.Add(item.Id)) continue;
-                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
+                var row = new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true);
+                Items.Add(row);
+                added.Add(row);
             }
 
-            if (IsCurrentRequest(generation, token)) ListUpdated?.Invoke(this, EventArgs.Empty);
+            if (!IsCurrentRequest(generation, token)) return;
+            MomentItemViewModel.TrackFeedLoad(this.Get<WatchRecordIndex>(), added, first);
+            ListUpdated?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -197,14 +208,20 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         if (moments is not null)
         {
             var ids = Items.Select(item => item.Data.Id).ToHashSet(StringComparer.Ordinal);
+            var first = Items.Count == 0;
+            var added = new List<MomentItemViewModel>();
             foreach (var item in moments)
             {
                 if (!IsCurrentRequest(generation, token)) return;
                 if (!ids.Add(item.Id)) continue;
-                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
+                var row = new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true);
+                Items.Add(row);
+                added.Add(row);
             }
 
-            if (IsCurrentRequest(generation, token)) ListUpdated?.Invoke(this, EventArgs.Empty);
+            if (!IsCurrentRequest(generation, token)) return;
+            MomentItemViewModel.TrackFeedLoad(this.Get<WatchRecordIndex>(), added, first);
+            ListUpdated?.Invoke(this, EventArgs.Empty);
         }
     }
 

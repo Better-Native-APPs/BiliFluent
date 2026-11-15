@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,6 +14,7 @@ namespace BiliCopilot.UI.ViewModels.View;
 public sealed partial class MomentPageViewModel
 {
     private readonly IMomentDiscoveryService _momentDiscoveryService;
+    private readonly WatchRecordIndex _watchRecords;
 
     [ObservableProperty]
     private List<IMomentSectionDetailViewModel> _sections;

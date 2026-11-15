@@ -87,8 +87,10 @@ public sealed partial class VideoItemViewModel
 
     /// <summary>
     /// Watched mark shown on the cover of a dynamic card. Null when the video has not been watched.
+    /// It can arrive after the card is on screen, once the watch records are in.
     /// </summary>
-    public WatchMark? WatchMark { get; init; }
+    [ObservableProperty]
+    public partial WatchMark? WatchMark { get; set; }
 
     /// <summary>
     /// 用户信息是否有效.

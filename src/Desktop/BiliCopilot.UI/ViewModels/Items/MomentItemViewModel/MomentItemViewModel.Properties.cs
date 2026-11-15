@@ -29,6 +29,10 @@ public sealed partial class MomentItemViewModel
     [ObservableProperty]
     private bool _isPgc;
 
+    // Watched mark of the video or episode in this moment. Null when it has not been watched.
+    [ObservableProperty]
+    private WatchMark? _watchMark;
+
     /// <summary>
     /// 作者.
     /// </summary>
@@ -53,11 +57,6 @@ public sealed partial class MomentItemViewModel
     /// 视频时长.
     /// </summary>
     public string? VideoDuration { get; init; }
-
-    /// <summary>
-    /// Watched mark of the video or episode in this moment. Null when it has not been watched.
-    /// </summary>
-    public WatchMark? WatchMark { get; init; }
 
     /// <summary>
     /// 说明.

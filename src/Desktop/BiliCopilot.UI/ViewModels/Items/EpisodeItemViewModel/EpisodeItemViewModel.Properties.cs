@@ -68,7 +68,8 @@ public sealed partial class EpisodeItemViewModel
     /// <summary>
     /// Watched mark shown on the cover of a dynamic card. Null when the episode has not been watched.
     /// </summary>
-    public WatchMark? WatchMark { get; init; }
+    [ObservableProperty]
+    public partial WatchMark? WatchMark { get; set; }
 
     /// <summary>
     /// 卡片样式.

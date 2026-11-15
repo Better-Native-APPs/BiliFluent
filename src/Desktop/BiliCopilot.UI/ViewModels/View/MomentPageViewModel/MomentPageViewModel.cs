@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -21,10 +22,15 @@ public sealed partial class MomentPageViewModel : ViewModelBase
     /// </summary>
     public MomentPageViewModel(
         IMomentDiscoveryService discoveryService,
-        CommentMainViewModel comment)
+        CommentMainViewModel comment,
+        WatchRecordIndex watchRecords)
     {
         _momentDiscoveryService = discoveryService;
         CommentModule = comment;
+        _watchRecords = watchRecords;
+
+        // Both live for the whole run, so this subscription is never removed.
+        _watchRecords.Changed += OnWatchRecordsChanged;
     }
 
     [RelayCommand]
@@ -84,5 +90,29 @@ public sealed partial class MomentPageViewModel : ViewModelBase
 
         CommentModule.Initialize(data.CommentId, data.CommentType!.Value, Richasy.BiliKernel.Models.CommentSortType.Hot);
         CommentModule.RefreshCommand.Execute(default);
+    }
+
+    // Watch records arrive after the cards are on screen (history pull, or a video just played in the app).
+    private void OnWatchRecordsChanged(string? aid)
+    {
+        if (Sections is null)
+        {
+            return;
+        }
+
+        foreach (var section in Sections)
+        {
+            if (section is VideoMomentSectionDetailViewModel video)
+            {
+                MomentItemViewModel.RefreshWatchMarks(video.Items, _watchRecords, aid);
+            }
+            else if (section is ComprehensiveMomentSectionDetailViewModel comprehensive)
+            {
+                foreach (var uper in comprehensive.Upers)
+                {
+                    MomentItemViewModel.RefreshWatchMarks(uper.Items, _watchRecords, aid);
+                }
+            }
+        }
     }
 }
