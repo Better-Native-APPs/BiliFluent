@@ -565,6 +565,9 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        if (e.PropertyName is nameof(Player.Position) or nameof(Player.IsPlaybackInitialized) or nameof(Player.PlaybackState))
+            UpdateCommandDanmakuPosition(Player.Position);
+
         // Notifications are reread prompts only; never feed this event's old payload into Sponsor.
         if (e.PropertyName == nameof(Player.Position))
         {

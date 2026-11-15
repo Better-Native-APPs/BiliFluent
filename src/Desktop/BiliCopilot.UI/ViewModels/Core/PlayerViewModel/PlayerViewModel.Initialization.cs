@@ -172,6 +172,7 @@ public sealed partial class PlayerViewModel
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _closeTask = completion.Task;
         _isClosing = true;
+        ClearActiveCommandDanmakus();
         HideMpvDanmaku();
         StartSponsorApplicationCleanup();
         _closeWorker = CompleteCloseAsync(completion, cancelOpening);
@@ -250,6 +251,7 @@ public sealed partial class PlayerViewModel
         // Cancel callbacks run once; a later Cancel no-op must not turn a failed transition into reuse.
         if (_mediaCancellationError is { } failure) return OwnWork(Task.FromException(failure));
         RetireSponsorBinding(RetirementReason.Replacement);
+        ClearActiveCommandDanmakus();
         var previous = _mediaCancellation;
         // A callback may reenter CloseAsync before Cancel reports its error. Reserve this real
         // synchronous cancellation scope in the existing drain set, so close cannot release early.

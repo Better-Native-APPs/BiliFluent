@@ -137,4 +137,5 @@ public enum SettingNames
     ClassicUseWebPlayerWhenLive = 140,
     DanmakuRendererMpvMigrated = 141,
     DanmakuDefaultFontMigrated = 142,
+    IsCommandDanmakuEnabled = 143,
 }
