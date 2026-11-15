@@ -1761,6 +1761,12 @@
   <data name="AudioTrackVipTemplate" xml:space="preserve">
     <value>{0}，需要大会员</value>
   </data>
+  <data name="AudioTrackOriginal" xml:space="preserve">
+    <value>原声</value>
+  </data>
+  <data name="AudioTrackQuality" xml:space="preserve">
+    <value>音质</value>
+  </data>
   <data name="AudioTrackSwitchFailed" xml:space="preserve">
     <value>这条声轨暂时播放不了，已切回原来的声轨。</value>
   </data>
