@@ -140,4 +140,5 @@ public enum SettingNames
     IsCommandDanmakuEnabled = 143,
     PlaybackStutterDiagnosticsEnabled = 144,
     DisableMpvCurlForDiagnostics = 145,
+    UseDisplaySyncForDiagnostics = 146,
 }

@@ -10,6 +10,7 @@ using Richasy.MpvKernel.Core.Enums;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
+using System.Runtime.InteropServices;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -19,6 +20,7 @@ public sealed partial class PlayerViewModel
     private PlaybackDiagnosticsSession? _playbackDiagnostics;
     private Task _playbackDiagnosticsDrain = Task.CompletedTask;
     private bool _curlDisableRequested;
+    private bool _displaySyncRequested;
 
     internal void RefreshPlaybackDiagnostics(bool startCurrentPlayback = true)
     {
@@ -74,7 +76,9 @@ public sealed partial class PlayerViewModel
         _ = StopPlaybackDiagnosticsAsync();
         try
         {
-            _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested, DescribeDanmakuForDiagnostics);
+            var displayWindow = Window is { IsDisposed: false } host ? host.RenderHwnd : IntPtr.Zero;
+            _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested,
+                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics);
         }
         catch (Exception ex)
         {
@@ -130,6 +134,8 @@ public sealed partial class PlayerViewModel
 #endif
         private readonly object _heartbeatLock = new();
         private readonly bool _curlDisableRequested;
+        private readonly bool _displaySyncRequested;
+        private readonly nint _displayWindow;
         private readonly Func<(string Renderer, string Danmaku)> _describeDanmaku;
         private readonly Task _worker;
         private long _lastHeartbeatTimestamp = Stopwatch.GetTimestamp();
@@ -141,8 +147,11 @@ public sealed partial class PlayerViewModel
         private volatile bool _stopped;
 
         public PlaybackDiagnosticsSession(MpvClient client, DispatcherQueue dispatcherQueue, ILogger diagnosticsLogger,
-            bool curlDisableRequested, Func<(string Renderer, string Danmaku)> describeDanmaku)
+            bool curlDisableRequested, bool displaySyncRequested, nint displayWindow,
+            Func<(string Renderer, string Danmaku)> describeDanmaku)
         {
+            _displaySyncRequested = displaySyncRequested;
+            _displayWindow = displayWindow;
             _client = client;
             _queue = dispatcherQueue;
             _logger = diagnosticsLogger;
@@ -233,8 +242,11 @@ public sealed partial class PlayerViewModel
                 var previousNotifications = _client.TimePositionNotificationCount;
                 var previousUiPosts = _client.UiPostCount;
                 var previousRuntime = ReadRuntimeCounters();
+                var previousAvsyncChange = ReadDouble("total-avsync-change");
                 var previousTimestamp = Stopwatch.GetTimestamp();
                 var curlEnabled = ReadText("options/curl-enabled");
+                var videoSyncOption = ReadText("options/video-sync");
+                var (displayHertz, displayCount) = ReadDisplayInfo(_displayWindow);
                 if (_stopped) return;
                 var curlDisableRequested = _curlDisableRequested ? "yes" : "no";
                 if (_logger.IsEnabled(LogLevel.Information))
@@ -242,9 +254,11 @@ public sealed partial class PlayerViewModel
                     var serverGc = GCSettings.IsServerGC ? "yes" : "no";
                     var latencyMode = GCSettings.LatencyMode.ToString();
                     var concurrentGc = ReadConcurrentGc();
+                    var displaySyncRequested = _displaySyncRequested ? "yes" : "no";
                     _logger.LogInformation(
-                        "PlaybackStutter | start curl-enabled={CurlEnabled} curl-disable-requested={CurlDisableRequested} ui-heartbeat-interval-ms=100 build={Build} server-gc={ServerGc} gc-latency-mode={LatencyMode} gc-concurrent={ConcurrentGc}",
-                        curlEnabled, curlDisableRequested, BuildConfiguration, serverGc, latencyMode, concurrentGc);
+                        "PlaybackStutter | start curl-enabled={CurlEnabled} curl-disable-requested={CurlDisableRequested} ui-heartbeat-interval-ms=100 build={Build} server-gc={ServerGc} gc-latency-mode={LatencyMode} gc-concurrent={ConcurrentGc} video-sync={VideoSync} display-sync-requested={DisplaySyncRequested} display-hz={DisplayHz} displays={Displays}",
+                        curlEnabled, curlDisableRequested, BuildConfiguration, serverGc, latencyMode, concurrentGc,
+                        videoSyncOption, displaySyncRequested, displayHertz, displayCount);
                 }
 
                 while (await _samples.WaitForNextTickAsync().ConfigureAwait(false))
@@ -254,6 +268,7 @@ public sealed partial class PlayerViewModel
                     var notifications = _client.TimePositionNotificationCount;
                     var uiPosts = _client.UiPostCount;
                     var runtime = ReadRuntimeCounters();
+                    var avsyncChange = ReadDouble("total-avsync-change");
                     var counters = ReadFrameCounters();
                     var heartbeatInterval = ReadMaximumHeartbeatInterval(timestamp);
                     if (_client.GetProperty("pause", out bool userPaused) == MpvError.Success && userPaused)
@@ -263,6 +278,7 @@ public sealed partial class PlayerViewModel
                         previousNotifications = notifications;
                         previousUiPosts = uiPosts;
                         previousRuntime = runtime;
+                        previousAvsyncChange = avsyncChange;
                         previousTimestamp = timestamp;
                         continue;
                     }
@@ -274,6 +290,18 @@ public sealed partial class PlayerViewModel
                         ? duration.ToString("0.###", CultureInfo.InvariantCulture) : "n/a";
                     var hwdec = ReadText("hwdec-current");
                     var vo = ReadText("current-vo");
+                    var displayFps = FormatNumber(ReadDouble("display-fps"), "0.###");
+                    var containerFps = FormatNumber(ReadDouble("container-fps"), "0.###");
+                    var filterFps = FormatNumber(ReadDouble("estimated-vf-fps"), "0.###");
+                    var estimatedDisplayFps = FormatNumber(ReadDouble("estimated-display-fps"), "0.###");
+                    var videoSync = ReadText("video-sync");
+                    var avsync = FormatNumber(ReadDouble("avsync") * 1000d, "0.00");
+                    var avsyncChangeDelta = FormatNumber((avsyncChange - previousAvsyncChange) * 1000d, "0.00");
+                    var vsyncJitter = FormatNumber(ReadDouble("vsync-jitter"), "0.####");
+                    var vsyncRatio = FormatNumber(ReadDouble("vsync-ratio"), "0.###");
+                    var hasPassTimes = _client.GetFreshPassTimes(out var passPeak, out var passAverage) == MpvError.Success;
+                    var freshPeak = hasPassTimes ? (passPeak / 1e6).ToString("0.0", CultureInfo.InvariantCulture) : "n/a";
+                    var freshAverage = hasPassTimes ? (passAverage / 1e6).ToString("0.0", CultureInfo.InvariantCulture) : "n/a";
                     var interval = Stopwatch.GetElapsedTime(previousTimestamp, timestamp).TotalMilliseconds;
                     if (_stopped) return;
 
@@ -295,16 +323,19 @@ public sealed partial class PlayerViewModel
                     if (_logger.IsEnabled(LogLevel.Information))
                     {
                         _logger.LogInformation(
-                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku}",
+                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs}",
                             intervalText, frameDropDelta, voDelayedDelta, mistimedDelta, decoderDropDelta,
                             pausedForCache, bufferingState, cacheDuration, hwdec, vo, notificationDelta, heartbeatText,
-                            gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku);
+                            gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku,
+                            displayFps, containerFps, filterFps, estimatedDisplayFps, videoSync, avsync, avsyncChangeDelta,
+                            vsyncJitter, vsyncRatio, freshPeak, freshAverage);
                     }
 
                     previousCounters = counters;
                     previousNotifications = notifications;
                     previousUiPosts = uiPosts;
                     previousRuntime = runtime;
+                    previousAvsyncChange = avsyncChange;
                     previousTimestamp = timestamp;
                 }
             }
@@ -328,6 +359,61 @@ public sealed partial class PlayerViewModel
         private static string ReadConcurrentGc()
             => (AppContext.TryGetSwitch("System.GC.Concurrent", out var enabled)
                 ? enabled : GCSettings.LatencyMode != GCLatencyMode.Batch) ? "yes" : "no";
+
+        // The refresh rate of the display that holds the player, and the number of displays.
+        // Device names stay local; only the two numbers are logged.
+        private static unsafe (string Hertz, string Count) ReadDisplayInfo(nint window)
+        {
+            const int MonitorCountMetric = 80; // SM_CMONITORS
+            const int NearestMonitor = 2; // MONITOR_DEFAULTTONEAREST
+            const int CurrentSettings = -1; // ENUM_CURRENT_SETTINGS
+            const int MonitorInfoSize = 104; // MONITORINFOEXW
+            const int DeviceNameOffset = 40; // MONITORINFOEXW.szDevice
+            const int DisplayModeSize = 220; // DEVMODEW
+            const int DisplayModeSizeOffset = 68; // DEVMODEW.dmSize
+            const int DisplayFrequencyOffset = 184; // DEVMODEW.dmDisplayFrequency
+
+            var monitors = GetSystemMetrics(MonitorCountMetric);
+            var count = monitors > 0 ? monitors.ToString(CultureInfo.InvariantCulture) : "n/a";
+            var monitor = window == 0 ? 0 : MonitorFromWindow(window, NearestMonitor);
+            if (monitor == 0) return ("n/a", count);
+
+            var info = stackalloc byte[MonitorInfoSize];
+            new Span<byte>(info, MonitorInfoSize).Clear();
+            *(uint*)info = MonitorInfoSize;
+            if (GetMonitorInfoW(monitor, info) == 0) return ("n/a", count);
+
+            var mode = stackalloc byte[DisplayModeSize];
+            new Span<byte>(mode, DisplayModeSize).Clear();
+            *(ushort*)(mode + DisplayModeSizeOffset) = DisplayModeSize;
+            if (EnumDisplaySettingsW((char*)(info + DeviceNameOffset), CurrentSettings, mode) == 0) return ("n/a", count);
+
+            // 0 and 1 stand for the hardware default rate, which is not a number of hertz.
+            var hertz = *(uint*)(mode + DisplayFrequencyOffset);
+            return (hertz > 1 ? hertz.ToString(CultureInfo.InvariantCulture) : "n/a", count);
+        }
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll")]
+        private static extern nint MonitorFromWindow(nint window, int flags);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern unsafe int GetMonitorInfoW(nint monitor, byte* info);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern unsafe int EnumDisplaySettingsW(char* deviceName, int modeIndex, byte* mode);
+
+        private double? ReadDouble(string property)
+            => _client.GetProperty(property, out double value) == MpvError.Success && double.IsFinite(value) ? value : null;
+
+        private static string FormatNumber(double? value, string format)
+            => value?.ToString(format, CultureInfo.InvariantCulture) ?? "n/a";
 
         private long? ReadCounter(string property)
             => _client.GetProperty(property, out long value) == MpvError.Success ? value : null;
