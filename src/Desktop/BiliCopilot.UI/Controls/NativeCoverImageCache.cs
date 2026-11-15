@@ -101,7 +101,7 @@ internal static class NativeCoverImageCache
                 cachePath = null;
             }
 
-            using var response = await InternalHttpExtensions.ImageClient.GetAsync(source, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            using var response = await InternalHttpExtensions.PublicImageClient.GetAsync(source, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > MaxImageResponseBytes)
             {

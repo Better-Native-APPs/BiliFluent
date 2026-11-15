@@ -23,7 +23,9 @@ public sealed partial class BiliHttpClient : IDisposable
             AllowAutoRedirect = true,
             UseCookies = true,
             SslProtocols = SslProtocols.None,
+#if DEBUG
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+#endif
         }, disposeHandler: true);
         _client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69");
         _client.Timeout = TimeSpan.FromSeconds(30);
