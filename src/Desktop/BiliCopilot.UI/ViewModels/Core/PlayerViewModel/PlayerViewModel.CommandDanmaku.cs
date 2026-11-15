@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.Media;
+using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Media;
 using System.Collections.ObjectModel;
 
@@ -24,6 +25,26 @@ public sealed partial class PlayerViewModel
 
     [ObservableProperty]
     public partial bool IsCommandDanmakuEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Width / height of the current picture according to the media metadata, or null when unknown.
+    /// Read by the overlay while it lays out command danmaku cards; not observable and never
+    /// touched on the position path. The metadata ignores a rotation flag and per-part differences.
+    /// </summary>
+    public double? CommandDanmakuVideoAspectRatio
+    {
+        get
+        {
+            var ratio = Connector switch
+            {
+                VideoConnectorViewModel video => video._view?.AspectRatio,
+                PgcConnectorViewModel { _episode: { } episode }
+                    => episode.GetExtensionIfNotNull<MediaAspectRatio?>(EpisodeExtensionDataId.AspectRatio),
+                _ => null,
+            };
+            return ratio is { Width: > 0, Height: > 0 } value ? (double)value.Width / value.Height : null;
+        }
+    }
 
     partial void OnIsCommandDanmakuEnabledChanged(bool value)
     {

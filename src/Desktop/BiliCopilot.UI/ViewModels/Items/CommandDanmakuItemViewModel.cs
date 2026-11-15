@@ -46,6 +46,8 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
         DurationMs = duration is > 0 ? duration.Value : CommandDanmakuTimeline.DefaultDurationMs;
         PosX = information.Attention?.PosX ?? extra.PosX;
         PosY = information.Attention?.PosY ?? extra.PosY;
+        PosXPercent = extra.PosXPercent;
+        PosYPercent = extra.PosYPercent;
         IconUrl = (Kind switch
         {
             CommandDanmakuKind.Up => information.Up?.IconUrl,
@@ -97,6 +99,15 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
 
     /// <summary>Raw extra.posY in the same server video-overlay coordinate system as PosX.</summary>
     public double? PosY { get; }
+
+    /// <summary>
+    /// Raw extra.posX_2: the same horizontal position as a percentage (0-100) of the picture width.
+    /// Parsed once at construction for every kind; null when the server sent no such field.
+    /// </summary>
+    public double? PosXPercent { get; }
+
+    /// <summary>Raw extra.posY_2: the vertical position as a percentage (0-100) of the picture height.</summary>
+    public double? PosYPercent { get; }
 
     public string PositionCoordinateSystem => "BilibiliCommandExtra";
 
@@ -261,7 +272,7 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
         return new VideoInformation(new MediaIdentifier(aid, link.Title, default), default, bvId: link.Bvid);
     }
 
-    private static (int? DurationMs, double? PosX, double? PosY, string? IconUrl) ReadExtra(string? raw)
+    private static (int? DurationMs, double? PosX, double? PosY, double? PosXPercent, double? PosYPercent, string? IconUrl) ReadExtra(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return default;
         try
@@ -271,7 +282,8 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
             if (extra.ValueKind != JsonValueKind.Object) return default;
             var duration = ReadScalar(extra, "duration");
             return (int.TryParse(duration, NumberStyles.Integer, CultureInfo.InvariantCulture, out var milliseconds) ? milliseconds : null,
-                ReadCoordinate(extra, "posX"), ReadCoordinate(extra, "posY"), ReadScalar(extra, "icon"));
+                ReadCoordinate(extra, "posX"), ReadCoordinate(extra, "posY"),
+                ReadCoordinate(extra, "posX_2"), ReadCoordinate(extra, "posY_2"), ReadScalar(extra, "icon"));
         }
         catch (JsonException) { return default; }
     }
