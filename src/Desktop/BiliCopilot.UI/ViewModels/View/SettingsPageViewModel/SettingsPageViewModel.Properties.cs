@@ -218,6 +218,9 @@ public sealed partial class SettingsPageViewModel
     public partial bool DisableMpvCurlForDiagnostics { get; set; }
 
     [ObservableProperty]
+    public partial bool UseDisplaySyncForDiagnostics { get; set; }
+
+    [ObservableProperty]
     public partial bool HideMainWindowOnPlay { get; set; }
 
     [ObservableProperty]

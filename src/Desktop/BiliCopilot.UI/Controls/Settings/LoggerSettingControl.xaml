@@ -44,6 +44,12 @@
                 Visibility="{x:Bind ViewModel.PlaybackStutterDiagnosticsEnabled, Mode=OneWay}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.DisableMpvCurlForDiagnostics, Mode=TwoWay}" />
             </community:SettingsCard>
+            <community:SettingsCard
+                Description="{ext:Locale Name=UseDisplaySyncForDiagnosticsDescription}"
+                Header="{ext:Locale Name=UseDisplaySyncForDiagnostics}"
+                Visibility="{x:Bind ViewModel.PlaybackStutterDiagnosticsEnabled, Mode=OneWay}">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.UseDisplaySyncForDiagnostics, Mode=TwoWay}" />
+            </community:SettingsCard>
         </community:SettingsExpander.Items>
     </community:SettingsExpander>
 </local:SettingsPageControlBase>

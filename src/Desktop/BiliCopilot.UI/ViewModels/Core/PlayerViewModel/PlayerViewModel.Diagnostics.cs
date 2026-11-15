@@ -10,6 +10,7 @@ using Richasy.MpvKernel.Core.Enums;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
+using System.Runtime.InteropServices;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -19,6 +20,7 @@ public sealed partial class PlayerViewModel
     private PlaybackDiagnosticsSession? _playbackDiagnostics;
     private Task _playbackDiagnosticsDrain = Task.CompletedTask;
     private bool _curlDisableRequested;
+    private bool _displaySyncRequested;
 
     internal void RefreshPlaybackDiagnostics(bool startCurrentPlayback = true)
     {
@@ -74,7 +76,9 @@ public sealed partial class PlayerViewModel
         _ = StopPlaybackDiagnosticsAsync();
         try
         {
-            _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested, DescribeDanmakuForDiagnostics);
+            var displayWindow = Window is { IsDisposed: false } host ? host.RenderHwnd : IntPtr.Zero;
+            _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested,
+                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics);
         }
         catch (Exception ex)
         {
@@ -123,6 +127,11 @@ public sealed partial class PlayerViewModel
         private readonly DispatcherQueueTimer _heartbeat;
         private readonly PeriodicTimer _samples = new(TimeSpan.FromSeconds(1));
         private static readonly long _uiGapThresholdTicks = Stopwatch.Frequency * 150 / 1000;
+        private const int ProbeIntervalMilliseconds = 4;
+        private const double MaximumFrameStepSeconds = 2;
+        private const double MinimumReportedFrameGapMilliseconds = 50;
+        private const uint HighResolutionTimer = 0x00000002; // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+        private const uint TimerAllAccess = 0x001F0003; // TIMER_ALL_ACCESS
 #if DEBUG
         private const string BuildConfiguration = "Debug";
 #else
@@ -130,8 +139,18 @@ public sealed partial class PlayerViewModel
 #endif
         private readonly object _heartbeatLock = new();
         private readonly bool _curlDisableRequested;
+        private readonly bool _displaySyncRequested;
+        private readonly nint _displayWindow;
         private readonly Func<(string Renderer, string Danmaku)> _describeDanmaku;
         private readonly Task _worker;
+        private readonly Task _frameProbe;
+        private readonly object _frameGapLock = new();
+        private long _frameGapMaximumTicks;
+        private int _frameGapIntervals;
+        private int _frameGapOverTwice;
+        private int _frameProbePolls;
+        private long _frameProbeReadTicks;
+        private double _nominalFrameMilliseconds;
         private long _lastHeartbeatTimestamp = Stopwatch.GetTimestamp();
         private long _maximumHeartbeatTicks;
         private int _heartbeatGen2 = GC.CollectionCount(2);
@@ -141,8 +160,11 @@ public sealed partial class PlayerViewModel
         private volatile bool _stopped;
 
         public PlaybackDiagnosticsSession(MpvClient client, DispatcherQueue dispatcherQueue, ILogger diagnosticsLogger,
-            bool curlDisableRequested, Func<(string Renderer, string Danmaku)> describeDanmaku)
+            bool curlDisableRequested, bool displaySyncRequested, nint displayWindow,
+            Func<(string Renderer, string Danmaku)> describeDanmaku)
         {
+            _displaySyncRequested = displaySyncRequested;
+            _displayWindow = displayWindow;
             _client = client;
             _queue = dispatcherQueue;
             _logger = diagnosticsLogger;
@@ -156,14 +178,16 @@ public sealed partial class PlayerViewModel
             _heartbeat.Start();
             PlaybackStutterDiagnostics.Acquire(diagnosticsLogger);
             _worker = Task.Run(SampleAsync);
+            // A dedicated thread: a busy thread pool must not look like a frame gap.
+            _frameProbe = Task.Factory.StartNew(ProbeFrames, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
         public async ValueTask DisposeAsync()
         {
             Stop();
-            // This session owns the actual worker; native teardown must join it, not just stop the timer.
+            // This session owns the actual workers; native teardown must join them, not just stop the timer.
 #pragma warning disable VSTHRD003
-            await _worker.ConfigureAwait(false);
+            await Task.WhenAll(_worker, _frameProbe).ConfigureAwait(false);
 #pragma warning restore VSTHRD003
         }
 
@@ -233,8 +257,12 @@ public sealed partial class PlayerViewModel
                 var previousNotifications = _client.TimePositionNotificationCount;
                 var previousUiPosts = _client.UiPostCount;
                 var previousRuntime = ReadRuntimeCounters();
+                var previousAvsyncChange = ReadDouble("total-avsync-change");
                 var previousTimestamp = Stopwatch.GetTimestamp();
                 var curlEnabled = ReadText("options/curl-enabled");
+                var videoSyncOption = ReadText("options/video-sync");
+                var (displayHertz, displayCount) = ReadDisplayInfo(_displayWindow);
+                UpdateNominalFrameInterval(ReadDouble("estimated-vf-fps"), ReadDouble("container-fps"));
                 if (_stopped) return;
                 var curlDisableRequested = _curlDisableRequested ? "yes" : "no";
                 if (_logger.IsEnabled(LogLevel.Information))
@@ -242,9 +270,11 @@ public sealed partial class PlayerViewModel
                     var serverGc = GCSettings.IsServerGC ? "yes" : "no";
                     var latencyMode = GCSettings.LatencyMode.ToString();
                     var concurrentGc = ReadConcurrentGc();
+                    var displaySyncRequested = _displaySyncRequested ? "yes" : "no";
                     _logger.LogInformation(
-                        "PlaybackStutter | start curl-enabled={CurlEnabled} curl-disable-requested={CurlDisableRequested} ui-heartbeat-interval-ms=100 build={Build} server-gc={ServerGc} gc-latency-mode={LatencyMode} gc-concurrent={ConcurrentGc}",
-                        curlEnabled, curlDisableRequested, BuildConfiguration, serverGc, latencyMode, concurrentGc);
+                        "PlaybackStutter | start curl-enabled={CurlEnabled} curl-disable-requested={CurlDisableRequested} ui-heartbeat-interval-ms=100 build={Build} server-gc={ServerGc} gc-latency-mode={LatencyMode} gc-concurrent={ConcurrentGc} video-sync={VideoSync} display-sync-requested={DisplaySyncRequested} display-hz={DisplayHz} displays={Displays}",
+                        curlEnabled, curlDisableRequested, BuildConfiguration, serverGc, latencyMode, concurrentGc,
+                        videoSyncOption, displaySyncRequested, displayHertz, displayCount);
                 }
 
                 while (await _samples.WaitForNextTickAsync().ConfigureAwait(false))
@@ -254,6 +284,7 @@ public sealed partial class PlayerViewModel
                     var notifications = _client.TimePositionNotificationCount;
                     var uiPosts = _client.UiPostCount;
                     var runtime = ReadRuntimeCounters();
+                    var avsyncChange = ReadDouble("total-avsync-change");
                     var counters = ReadFrameCounters();
                     var heartbeatInterval = ReadMaximumHeartbeatInterval(timestamp);
                     if (_client.GetProperty("pause", out bool userPaused) == MpvError.Success && userPaused)
@@ -263,7 +294,9 @@ public sealed partial class PlayerViewModel
                         previousNotifications = notifications;
                         previousUiPosts = uiPosts;
                         previousRuntime = runtime;
+                        previousAvsyncChange = avsyncChange;
                         previousTimestamp = timestamp;
+                        _ = TakeFrameGapStatistics();
                         continue;
                     }
 
@@ -274,6 +307,29 @@ public sealed partial class PlayerViewModel
                         ? duration.ToString("0.###", CultureInfo.InvariantCulture) : "n/a";
                     var hwdec = ReadText("hwdec-current");
                     var vo = ReadText("current-vo");
+                    var displayFps = FormatNumber(ReadDouble("display-fps"), "0.###");
+                    var containerFpsValue = ReadDouble("container-fps");
+                    var filterFpsValue = ReadDouble("estimated-vf-fps");
+                    var containerFps = FormatNumber(containerFpsValue, "0.###");
+                    var filterFps = FormatNumber(filterFpsValue, "0.###");
+                    // The statistics of this second were judged against the previous nominal interval.
+                    var frameGaps = TakeFrameGapStatistics();
+                    var hadNominal = Volatile.Read(ref _nominalFrameMilliseconds) > 0;
+                    UpdateNominalFrameInterval(filterFpsValue, containerFpsValue);
+                    var frameGapMaximum = frameGaps.Intervals > 0
+                        ? PlaybackStutterDiagnostics.FormatMilliseconds(frameGaps.MaximumTicks * 1000d / Stopwatch.Frequency) : "n/a";
+                    var frameGapOverTwice = hadNominal ? frameGaps.OverTwice.ToString(CultureInfo.InvariantCulture) : "n/a";
+                    var probePolls = frameGaps.Polls;
+                    var probeRead = PlaybackStutterDiagnostics.FormatMilliseconds(frameGaps.ReadTicks * 1000d / Stopwatch.Frequency);
+                    var estimatedDisplayFps = FormatNumber(ReadDouble("estimated-display-fps"), "0.###");
+                    var videoSync = ReadText("video-sync");
+                    var avsync = FormatNumber(ReadDouble("avsync") * 1000d, "0.00");
+                    var avsyncChangeDelta = FormatNumber((avsyncChange - previousAvsyncChange) * 1000d, "0.00");
+                    var vsyncJitter = FormatNumber(ReadDouble("vsync-jitter"), "0.####");
+                    var vsyncRatio = FormatNumber(ReadDouble("vsync-ratio"), "0.###");
+                    var hasPassTimes = _client.GetFreshPassTimes(out var passPeak, out var passAverage) == MpvError.Success;
+                    var freshPeak = hasPassTimes ? (passPeak / 1e6).ToString("0.0", CultureInfo.InvariantCulture) : "n/a";
+                    var freshAverage = hasPassTimes ? (passAverage / 1e6).ToString("0.0", CultureInfo.InvariantCulture) : "n/a";
                     var interval = Stopwatch.GetElapsedTime(previousTimestamp, timestamp).TotalMilliseconds;
                     if (_stopped) return;
 
@@ -295,16 +351,20 @@ public sealed partial class PlayerViewModel
                     if (_logger.IsEnabled(LogLevel.Information))
                     {
                         _logger.LogInformation(
-                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku}",
+                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs} frame-gap-max-ms={FrameGapMaxMs} frame-gap-over2x={FrameGapOverTwice} frame-probe-polls={FrameProbePolls} frame-probe-read-ms={FrameProbeReadMs}",
                             intervalText, frameDropDelta, voDelayedDelta, mistimedDelta, decoderDropDelta,
                             pausedForCache, bufferingState, cacheDuration, hwdec, vo, notificationDelta, heartbeatText,
-                            gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku);
+                            gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku,
+                            displayFps, containerFps, filterFps, estimatedDisplayFps, videoSync, avsync, avsyncChangeDelta,
+                            vsyncJitter, vsyncRatio, freshPeak, freshAverage,
+                            frameGapMaximum, frameGapOverTwice, probePolls, probeRead);
                     }
 
                     previousCounters = counters;
                     previousNotifications = notifications;
                     previousUiPosts = uiPosts;
                     previousRuntime = runtime;
+                    previousAvsyncChange = avsyncChange;
                     previousTimestamp = timestamp;
                 }
             }
@@ -320,6 +380,141 @@ public sealed partial class PlayerViewModel
             => (ReadCounter("frame-drop-count"), ReadCounter("vo-delayed-frame-count"),
                 ReadCounter("mistimed-frame-count"), ReadCounter("decoder-frame-drop-count"));
 
+        // time-pos is the timestamp of the video frame that mpv handed to the video output last, so
+        // it changes once per frame. The interval between two changes is the pace at which frames
+        // are queued; how many refreshes the display then holds each frame is not visible here.
+        private void ProbeFrames()
+        {
+            var timer = CreateWaitableTimerExW(0, 0, HighResolutionTimer, TimerAllAccess);
+            try
+            {
+                var hasPosition = false;
+                var hasChange = false;
+                var lastPosition = 0d;
+                var lastChange = 0L;
+                while (!_stopped)
+                {
+                    WaitForNextProbe(timer);
+                    if (_stopped) return;
+                    var readStarted = Stopwatch.GetTimestamp();
+                    var position = 0d;
+                    var playing = _client.GetProperty("core-idle", out bool idle) == MpvError.Success && !idle
+                        && _client.GetProperty("time-pos", out position) == MpvError.Success && double.IsFinite(position);
+                    var timestamp = Stopwatch.GetTimestamp();
+                    lock (_frameGapLock)
+                    {
+                        _frameProbePolls++;
+                        _frameProbeReadTicks += timestamp - readStarted;
+                    }
+
+                    if (!playing)
+                    {
+                        // Paused, seeking, buffering or ended: what follows is not a frame interval.
+                        hasPosition = false;
+                        hasChange = false;
+                        continue;
+                    }
+
+                    if (!hasPosition)
+                    {
+                        lastPosition = position;
+                        hasPosition = true;
+                        continue;
+                    }
+
+                    if (position == lastPosition) continue;
+                    var step = position - lastPosition;
+                    var gapTicks = timestamp - lastChange;
+                    lastPosition = position;
+                    lastChange = timestamp;
+                    if (!hasChange || step < 0 || step > MaximumFrameStepSeconds)
+                    {
+                        // The first change after an interruption, or a jump, only starts the next interval.
+                        hasChange = true;
+                        continue;
+                    }
+
+                    var gap = gapTicks * 1000d / Stopwatch.Frequency;
+                    var nominal = Volatile.Read(ref _nominalFrameMilliseconds);
+                    lock (_frameGapLock)
+                    {
+                        _frameGapIntervals++;
+                        _frameGapMaximumTicks = Math.Max(_frameGapMaximumTicks, gapTicks);
+                        if (nominal > 0 && gap > 2 * nominal) _frameGapOverTwice++;
+                    }
+
+                    if (gap > Math.Max(MinimumReportedFrameGapMilliseconds, 2.5 * nominal) && _logger.IsEnabled(LogLevel.Information))
+                    {
+                        var gapText = PlaybackStutterDiagnostics.FormatMilliseconds(gap);
+                        var nominalText = nominal > 0 ? PlaybackStutterDiagnostics.FormatMilliseconds(nominal) : "n/a";
+                        var positionText = position.ToString("0.0", CultureInfo.InvariantCulture);
+                        var stepText = PlaybackStutterDiagnostics.FormatMilliseconds(step * 1000d);
+                        _logger.LogInformation("PlaybackStutter | frame-gap ms={Ms} nominal-ms={NominalMs} pos={Position} pts-step-ms={StepMs}",
+                            gapText, nominalText, positionText, stepText);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("PlaybackStutter | frame probe stopped error={Error}", ex.GetType().Name);
+            }
+            finally
+            {
+                if (timer != 0) _ = CloseHandle(timer);
+            }
+        }
+
+        private static void WaitForNextProbe(nint timer)
+        {
+            var due = -ProbeIntervalMilliseconds * 10000L; // Relative, in 100 ns units.
+            if (timer != 0 && SetWaitableTimer(timer, ref due, 0, 0, 0, 0) != 0)
+            {
+                _ = WaitForSingleObject(timer, 100);
+                return;
+            }
+
+            // Without a high resolution timer this follows the system timer; frame-probe-polls shows the rate.
+            Thread.Sleep(ProbeIntervalMilliseconds);
+        }
+
+        private (long MaximumTicks, int Intervals, int OverTwice, int Polls, long ReadTicks) TakeFrameGapStatistics()
+        {
+            lock (_frameGapLock)
+            {
+                var statistics = (_frameGapMaximumTicks, _frameGapIntervals, _frameGapOverTwice, _frameProbePolls, _frameProbeReadTicks);
+                _frameGapMaximumTicks = 0;
+                _frameGapIntervals = 0;
+                _frameGapOverTwice = 0;
+                _frameProbePolls = 0;
+                _frameProbeReadTicks = 0;
+                return statistics;
+            }
+        }
+
+        // The measured rate of the decoded frames, or else the container's; at the current playback speed.
+        private void UpdateNominalFrameInterval(double? filterFps, double? containerFps)
+        {
+            var fps = filterFps > 0 ? filterFps : containerFps;
+            var speed = ReadDouble("speed") is > 0 and var value ? value : 1d;
+            Volatile.Write(ref _nominalFrameMilliseconds, fps > 0 ? 1000d / (fps.Value * speed) : 0d);
+        }
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("kernel32.dll", ExactSpelling = true)]
+        private static extern nint CreateWaitableTimerExW(nint attributes, nint name, uint flags, uint access);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("kernel32.dll")]
+        private static extern int SetWaitableTimer(nint timer, ref long dueTime, int period, nint completionRoutine, nint argument, int resume);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("kernel32.dll")]
+        private static extern uint WaitForSingleObject(nint handle, uint milliseconds);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("kernel32.dll")]
+        private static extern int CloseHandle(nint handle);
+
         private static (int Gen0, int Gen1, int Gen2, TimeSpan Pause, long Allocated) ReadRuntimeCounters()
             => (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
                 GC.GetTotalPauseDuration(), GC.GetTotalAllocatedBytes(false));
@@ -328,6 +523,61 @@ public sealed partial class PlayerViewModel
         private static string ReadConcurrentGc()
             => (AppContext.TryGetSwitch("System.GC.Concurrent", out var enabled)
                 ? enabled : GCSettings.LatencyMode != GCLatencyMode.Batch) ? "yes" : "no";
+
+        // The refresh rate of the display that holds the player, and the number of displays.
+        // Device names stay local; only the two numbers are logged.
+        private static unsafe (string Hertz, string Count) ReadDisplayInfo(nint window)
+        {
+            const int MonitorCountMetric = 80; // SM_CMONITORS
+            const int NearestMonitor = 2; // MONITOR_DEFAULTTONEAREST
+            const int CurrentSettings = -1; // ENUM_CURRENT_SETTINGS
+            const int MonitorInfoSize = 104; // MONITORINFOEXW
+            const int DeviceNameOffset = 40; // MONITORINFOEXW.szDevice
+            const int DisplayModeSize = 220; // DEVMODEW
+            const int DisplayModeSizeOffset = 68; // DEVMODEW.dmSize
+            const int DisplayFrequencyOffset = 184; // DEVMODEW.dmDisplayFrequency
+
+            var monitors = GetSystemMetrics(MonitorCountMetric);
+            var count = monitors > 0 ? monitors.ToString(CultureInfo.InvariantCulture) : "n/a";
+            var monitor = window == 0 ? 0 : MonitorFromWindow(window, NearestMonitor);
+            if (monitor == 0) return ("n/a", count);
+
+            var info = stackalloc byte[MonitorInfoSize];
+            new Span<byte>(info, MonitorInfoSize).Clear();
+            *(uint*)info = MonitorInfoSize;
+            if (GetMonitorInfoW(monitor, info) == 0) return ("n/a", count);
+
+            var mode = stackalloc byte[DisplayModeSize];
+            new Span<byte>(mode, DisplayModeSize).Clear();
+            *(ushort*)(mode + DisplayModeSizeOffset) = DisplayModeSize;
+            if (EnumDisplaySettingsW((char*)(info + DeviceNameOffset), CurrentSettings, mode) == 0) return ("n/a", count);
+
+            // 0 and 1 stand for the hardware default rate, which is not a number of hertz.
+            var hertz = *(uint*)(mode + DisplayFrequencyOffset);
+            return (hertz > 1 ? hertz.ToString(CultureInfo.InvariantCulture) : "n/a", count);
+        }
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll")]
+        private static extern nint MonitorFromWindow(nint window, int flags);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern unsafe int GetMonitorInfoW(nint monitor, byte* info);
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern unsafe int EnumDisplaySettingsW(char* deviceName, int modeIndex, byte* mode);
+
+        private double? ReadDouble(string property)
+            => _client.GetProperty(property, out double value) == MpvError.Success && double.IsFinite(value) ? value : null;
+
+        private static string FormatNumber(double? value, string format)
+            => value?.ToString(format, CultureInfo.InvariantCulture) ?? "n/a";
 
         private long? ReadCounter(string property)
             => _client.GetProperty(property, out long value) == MpvError.Success ? value : null;

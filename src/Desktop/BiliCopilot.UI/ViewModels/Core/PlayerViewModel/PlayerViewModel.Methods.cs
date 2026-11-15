@@ -148,8 +148,11 @@ public sealed partial class PlayerViewModel
                 LoadScripts = true,
                 DisableCurl = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
                     && SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false),
+                UseDisplayResample = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                    && SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false),
             };
             _curlDisableRequested = options.DisableCurl;
+            _displaySyncRequested = options.UseDisplayResample;
             var client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
             Client = client;
             CheckMediaAdmission();
