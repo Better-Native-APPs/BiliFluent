@@ -53,13 +53,20 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
     public bool IsAuto { get; }
 
     /// <summary>
+    /// The name of the audio quality the automatic entry picked, when that is Dolby or Hi-Res.
+    /// It is part of the entry's name then. Null for the standard quality.
+    /// </summary>
+    public string? AutoAudioName { get; set; }
+
+    /// <summary>
     /// Creates the "automatic" entry of a quality list.
     /// </summary>
     public static SourceItemViewModel CreateAuto(Func<SourceItemViewModel, Task> activeFunc)
         => new(activeFunc);
 
     /// <summary>
-    /// Names the automatic entry after the quality that plays, such as "Auto (1080P)".
+    /// Names the automatic entry after what plays, such as "Auto (1080P)", or "Auto (1080P · Hi-Res lossless)"
+    /// when <see cref="AutoAudioName"/> is set.
     /// </summary>
     public void ShowAutoQuality(PlayerFormatInformation? playing)
     {
@@ -68,9 +75,18 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
             return;
         }
 
-        Name = string.IsNullOrWhiteSpace(playing?.Description)
-            ? ResourceToolkit.GetLocalizedString(StringNames.QualityAuto)
-            : string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.QualityAutoTemplate), playing.Description);
+        if (string.IsNullOrWhiteSpace(playing?.Description))
+        {
+            Name = ResourceToolkit.GetLocalizedString(StringNames.QualityAuto);
+        }
+        else if (string.IsNullOrWhiteSpace(AutoAudioName))
+        {
+            Name = string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.QualityAutoTemplate), playing.Description);
+        }
+        else
+        {
+            Name = string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.QualityAutoWithAudioTemplate), playing.Description, AutoAudioName);
+        }
     }
 
     public override bool Equals(object? obj) => obj is SourceItemViewModel model && Id == model.Id;

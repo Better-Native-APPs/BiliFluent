@@ -87,6 +87,9 @@
   <data name="QualityAutoTemplate" xml:space="preserve">
     <value>Auto ({0})</value>
   </data>
+  <data name="QualityAutoWithAudioTemplate" xml:space="preserve">
+    <value>Auto ({0} · {1})</value>
+  </data>
   <data name="PreferQualityDescription" xml:space="preserve">
     <value>A quality you pick while playing stays in use. Pick Auto in the player to follow this preference again.</value>
   </data>

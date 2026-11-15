@@ -1119,7 +1119,7 @@ public sealed partial class PlayerViewModel
         }
 
         Task Activate(SourceItemViewModel item)
-            => IsCurrentPlayback(version) ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask;
+            => IsCurrentPlayback(version) ? OwnWork(SelectQualityEntryAsync(item)) : Task.CompletedTask;
 
         Sources.Add(SourceItemViewModel.CreateAuto(Activate));
         foreach (var source in sources)
@@ -1127,7 +1127,7 @@ public sealed partial class PlayerViewModel
             Sources.Add(new SourceItemViewModel(source, Activate));
         }
 
-        MarkSelectedSource();
+        MarkQualityMenu();
     }
 
     private async Task LoadSubtitlesAsync()

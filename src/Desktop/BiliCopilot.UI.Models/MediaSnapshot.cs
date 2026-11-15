@@ -68,9 +68,15 @@ public sealed class MediaSnapshot
 
     /// <summary>
     /// The stable ID of the audio quality the user picked (for example "std:30280", "dolby:30250" or "hires:30251").
-    /// Only the ID is kept, never a signed address. Null plays the default quality.
+    /// Only the ID is kept, never a signed address. Null is automatic: the best quality that can play.
     /// </summary>
     public string? PreferAudioQualityId { get; set; }
+
+    /// <summary>
+    /// Whether the automatic audio choice leaves out Dolby and Hi-Res for this playback, because such a
+    /// stream was picked and did not load.
+    /// </summary>
+    public bool IsAutomaticAudioStandardOnly { get; set; }
 
     /// <summary>
     /// The combined ID used before language and quality became two choices: "ai:{language}" named a dubbing

@@ -218,7 +218,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var preferCodec = AppToolkit.GetPreferCodecId();
         var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
             ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
-        // The quality the user picked, or the highest standard quality when nothing (available) is picked.
+        // The quality the user picked, or the automatic choice when nothing (available) is picked.
         var aSeg = GetSelectedAudioQuality()?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
@@ -244,5 +244,5 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
     }
 
     private AudioQualityInformation? GetSelectedAudioQuality()
-        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId);
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId, _snapshot.IsAutomaticAudioStandardOnly);
 }

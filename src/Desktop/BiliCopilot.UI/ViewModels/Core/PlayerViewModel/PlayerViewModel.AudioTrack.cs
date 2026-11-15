@@ -22,6 +22,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// The audio qualities the quality menu offers under the video qualities: one entry for the standard
     /// quality, which always plays the highest standard bitrate, then Dolby and Hi-Res when the media has them.
+    /// The one that plays is the selected one, also while the quality is automatic.
     /// </summary>
     public ObservableCollection<AudioQualityItemViewModel> AudioQualities { get; } = [];
 
@@ -91,7 +92,7 @@ public sealed partial class PlayerViewModel
 
         // The standard bitrates are not offered one by one: the best one that can play stands for all of them.
         // Dolby and Hi-Res follow it.
-        var standard = AudioSelections.PickQuality(selections.Qualities, default);
+        var standard = AudioSelections.PickStandard(selections.Qualities);
         var qualities = selections.Qualities
             .Where(quality => quality.Kind != AudioQualityKind.Standard || ReferenceEquals(quality, standard))
             .DistinctBy(quality => quality.Id)
@@ -131,6 +132,9 @@ public sealed partial class PlayerViewModel
         MarkSelectedAudioQuality(AudioQualities.FirstOrDefault(item => IsPlaying(selections, item))?.Id);
         HasMultipleAudioLanguages = AudioLanguages.Count > 1;
         HasMultipleAudioQualities = AudioQualities.Count > 1 && AudioQualities.Any(item => !item.IsStandard);
+
+        // The automatic entry of the quality menu covers the audio quality as well.
+        MarkQualityMenu();
     }
 
     // Whether the loaded media plays the quality of this entry. The standard entry stands for every standard bitrate.
@@ -235,9 +239,10 @@ public sealed partial class PlayerViewModel
 
     private Task SelectAudioQualityAsync(AudioQualityItemViewModel quality)
     {
+        var resolver = _sourceResolver;
         if (quality is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
-            || !AudioQualities.Any(item => ReferenceEquals(item, quality)) || ReferenceEquals(quality, SelectedAudioQuality)
-            || _sourceResolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
+            || !AudioQualities.Any(item => ReferenceEquals(item, quality))
+            || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
             return Task.CompletedTask;
         }
@@ -245,22 +250,35 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var position = player.Position;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
         var version = _mediaVersion;
+        if (IsPlaying(GetResolverAudioSelections(resolver), quality))
+        {
+            // The quality already plays, picked automatically. Choosing it keeps it; nothing is loaded again.
+            if (string.IsNullOrEmpty(snapshot.PreferAudioQualityId))
+            {
+                PinQuality();
+                ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
+                ApplyAudioSelections(GetResolverAudioSelections(resolver), keepRows: true);
+            }
+
+            return Task.CompletedTask;
+        }
+
         return RunWithoutPlayerInputAsync(async () =>
         {
-            if (!AudioQualities.Any(item => ReferenceEquals(item, quality)) || ReferenceEquals(quality, SelectedAudioQuality))
+            if (!AudioQualities.Any(item => ReferenceEquals(item, quality)) || !ReferenceEquals(resolver, _sourceResolver))
             {
                 return;
             }
 
             // Only the stable ID is remembered. The resolver looks the address up again on every load.
-            // The standard entry remembers nothing: without a choice the highest standard bitrate plays.
             var previousId = snapshot.PreferAudioQualityId;
+            var previousVideoQuality = snapshot.PreferQuality;
             var previousSelectedId = SelectedAudioQuality?.Id;
-            snapshot.PreferAudioQualityId = quality.IsStandard ? default : quality.Id;
+            PinQuality();
             ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
             MarkSelectedAudioQuality(quality.Id);
+            MarkQualityMenu();
 
             await ReplayWithSubtitleRestoreAsync(player, position);
             if (!IsCurrentPlayback(version) || !ReferenceEquals(resolver, _sourceResolver))
@@ -275,9 +293,11 @@ public sealed partial class PlayerViewModel
                 return;
             }
 
+            // The choice did not take effect, so it is given up, together with the video quality it kept.
+            snapshot.PreferQuality = previousVideoQuality;
             if (selections.Qualities.Count > 0)
             {
-                // The loaded media has no such quality. Its default one is already playing,
+                // The loaded media has no such quality. The automatic one is already playing,
                 // which is what "no choice" means.
                 snapshot.PreferAudioQualityId = default;
                 ApplyAudioSelections(selections, keepRows: true);
@@ -306,9 +326,21 @@ public sealed partial class PlayerViewModel
             {
                 // Nothing is loaded. Keep the list, so the user can try again.
                 MarkSelectedAudioQuality(previousSelectedId);
+                MarkQualityMenu();
             }
 
             Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioQualitySwitchFailed), InfoType.Error);
         }, nativeReplay: true);
+
+        // An audio quality chosen by hand leaves "automatic", which covers the video quality too. The video
+        // quality that plays is kept with it, for this playback only: it is not remembered for other media.
+        void PinQuality()
+        {
+            snapshot.PreferAudioQualityId = quality.Id;
+            if (snapshot.PreferQuality is not > 0 && GetPlayingFormat(resolver) is { } playing)
+            {
+                snapshot.PreferQuality = playing.Quality;
+            }
+        }
     }
 }

@@ -289,7 +289,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 12 || p.Codecs.Contains("hev", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 13 || p.Codecs.Contains("av01", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
-        // The quality the user picked, or the highest standard quality when nothing (available) is picked.
+        // The quality the user picked, or the automatic choice when nothing (available) is picked.
         var aSeg = GetSelectedAudioQuality()?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
@@ -319,5 +319,5 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         => string.IsNullOrWhiteSpace(languageId) || languageId == AudioLanguageInformation.OriginalId ? default : languageId;
 
     private AudioQualityInformation? GetSelectedAudioQuality()
-        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId);
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId, _snapshot.IsAutomaticAudioStandardOnly);
 }

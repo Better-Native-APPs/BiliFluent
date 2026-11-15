@@ -288,6 +288,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         CheckMediaAdmission();
         CheckHostReady();
+        WatchAutomaticAudio();
         await Player.InitializeAsync();
 
         CheckMediaAdmission();
