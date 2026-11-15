@@ -825,9 +825,6 @@
   <data name="PreferCodecDescription" xml:space="preserve">
     <value>优先选择该编码的视频流，HEVC/H.265 和 AV1 需要额外安装解码器</value>
   </data>
-  <data name="PreferHighQuality" xml:space="preserve">
-    <value>画质优先</value>
-  </data>
   <data name="PreferQuality" xml:space="preserve">
     <value>画质偏好</value>
   </data>
@@ -1766,9 +1763,6 @@
   </data>
   <data name="AudioTrackQuality" xml:space="preserve">
     <value>音质</value>
-  </data>
-  <data name="AudioTrackSwitchFailed" xml:space="preserve">
-    <value>这条声轨暂时播放不了，已切回原来的声轨。</value>
   </data>
   <data name="AudioLanguageSwitchFailed" xml:space="preserve">
     <value>这个语言暂时播放不了，已切回原来的语言。</value>

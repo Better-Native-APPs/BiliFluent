@@ -72,9 +72,6 @@
   <data name="AudioTrackQuality" xml:space="preserve">
     <value>Audio quality</value>
   </data>
-  <data name="AudioTrackSwitchFailed" xml:space="preserve">
-    <value>This audio track can't be played right now. The previous one is back.</value>
-  </data>
   <data name="AudioLanguageSwitchFailed" xml:space="preserve">
     <value>This language can't be played right now. The previous one is back.</value>
   </data>
