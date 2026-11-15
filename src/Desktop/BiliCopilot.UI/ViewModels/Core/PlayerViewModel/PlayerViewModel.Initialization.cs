@@ -173,6 +173,7 @@ public sealed partial class PlayerViewModel
         _closeTask = completion.Task;
         _isClosing = true;
         _ = SuspendPlaybackDiagnosticsAsync();
+        _ = SuspendNetworkMonitorAsync();
         ClearActiveCommandDanmakus();
         HideMpvDanmaku();
         StartSponsorApplicationCleanup();

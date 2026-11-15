@@ -51,6 +51,7 @@ public sealed partial class PlayerViewModel
         ResetChapters();
         InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
+        _subtitleToRestore = null; // This reload restores the subtitle itself.
         var subtitle = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
         if (subtitle is null || Connector is not VideoConnectorViewModel video)
         {
@@ -70,8 +71,27 @@ public sealed partial class PlayerViewModel
         {
             await player.ReplayAsync(preferPosition);
             // Replay returns after issuing loadfile, not after the replacement file is ready.
-            if (!await loaded.Task.WaitAsync(token))
+            bool isLoaded;
+            try
             {
+                isLoaded = await loaded.Task.WaitAsync(PlaybackNetworkPolicy.SubtitleRestoreWait, token);
+            }
+            catch (TimeoutException)
+            {
+                // A node that hangs must not keep the media gate: the next loaded file restores the subtitle.
+                if (CanRestore()) _subtitleToRestore = subtitle;
+                return;
+            }
+
+            if (!isLoaded)
+            {
+                if (_failover.IsAwaitingLoad)
+                {
+                    // The address failed and another one is tried: the file that loads restores the subtitle.
+                    if (CanRestore()) _subtitleToRestore = subtitle;
+                    return;
+                }
+
                 if (CanRestore()) ShowSubtitleFailure(MpvResult.Fail("Mpv | replay ended before file-loaded"), selecting: true);
                 return;
             }

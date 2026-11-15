@@ -327,6 +327,7 @@ public sealed partial class PlayerViewModel
         }
 
         RefreshPlaybackDiagnostics(startCurrentPlayback: false);
+        StartNetworkMonitor();
 
         if (_tripleTimer == null)
         {
@@ -413,6 +414,9 @@ public sealed partial class PlayerViewModel
 
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
     {
+        Volatile.Write(ref _forwardCacheBytes, e.FwBytes);
+        Volatile.Write(ref _rawInputRate, e.RawInputRate);
+        Volatile.Write(ref _cacheState, e);
         lock (_cacheStateUpdateLock)
         {
             _pendingCacheState = e;
@@ -458,6 +462,11 @@ public sealed partial class PlayerViewModel
                 return;
             }
 
+            return;
+        }
+        else if (TryDeferLoadError(e))
+        {
+            // The automatic node switch answers for this load once it has succeeded or failed.
             return;
         }
         else if (Player.Duration < 1 && !_isBroken)
