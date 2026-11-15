@@ -78,7 +78,7 @@ public sealed partial class PlayerViewModel
         {
             var displayWindow = Window is { IsDisposed: false } host ? host.RenderHwnd : IntPtr.Zero;
             _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested,
-                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics);
+                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics, DescribeNetworkForDiagnostics);
         }
         catch (Exception ex)
         {
@@ -130,6 +130,7 @@ public sealed partial class PlayerViewModel
         private const int ProbeIntervalMilliseconds = 4;
         private const double MaximumFrameStepSeconds = 2;
         private const double MinimumReportedFrameGapMilliseconds = 50;
+        private const double ResumeWatchSeconds = 20; // Samples carry the time since a resume this long.
         private const uint HighResolutionTimer = 0x00000002; // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
         private const uint TimerAllAccess = 0x001F0003; // TIMER_ALL_ACCESS
 #if DEBUG
@@ -142,6 +143,7 @@ public sealed partial class PlayerViewModel
         private readonly bool _displaySyncRequested;
         private readonly nint _displayWindow;
         private readonly Func<(string Renderer, string Danmaku)> _describeDanmaku;
+        private readonly Func<NetworkDiagnostics> _describeNetwork;
         private readonly Task _worker;
         private readonly Task _frameProbe;
         private readonly object _frameGapLock = new();
@@ -158,11 +160,16 @@ public sealed partial class PlayerViewModel
         private volatile string _renderer = "n/a";
         private volatile string _danmaku = "n/a";
         private volatile bool _stopped;
+        private readonly object _snapshotLock = new();
+        private Task _snapshots = Task.CompletedTask;
+        private long _pausedAt;
+        private long _resumedAt;
 
         public PlaybackDiagnosticsSession(MpvClient client, DispatcherQueue dispatcherQueue, ILogger diagnosticsLogger,
             bool curlDisableRequested, bool displaySyncRequested, nint displayWindow,
-            Func<(string Renderer, string Danmaku)> describeDanmaku)
+            Func<(string Renderer, string Danmaku)> describeDanmaku, Func<NetworkDiagnostics> describeNetwork)
         {
+            _describeNetwork = describeNetwork;
             _displaySyncRequested = displaySyncRequested;
             _displayWindow = displayWindow;
             _client = client;
@@ -172,6 +179,7 @@ public sealed partial class PlayerViewModel
             _describeDanmaku = describeDanmaku;
             (_renderer, _danmaku) = describeDanmaku();
             _client.IsTimePositionNotificationCountingEnabled = true;
+            _client.PauseChanged += OnPauseChanged;
             _heartbeat = dispatcherQueue.CreateTimer();
             _heartbeat.Interval = TimeSpan.FromMilliseconds(100);
             _heartbeat.Tick += OnHeartbeat;
@@ -187,7 +195,9 @@ public sealed partial class PlayerViewModel
             Stop();
             // This session owns the actual workers; native teardown must join them, not just stop the timer.
 #pragma warning disable VSTHRD003
-            await Task.WhenAll(_worker, _frameProbe).ConfigureAwait(false);
+            Task snapshots;
+            lock (_snapshotLock) snapshots = _snapshots;
+            await Task.WhenAll(_worker, _frameProbe, snapshots).ConfigureAwait(false);
 #pragma warning restore VSTHRD003
         }
 
@@ -197,6 +207,7 @@ public sealed partial class PlayerViewModel
             _stopped = true;
             PlaybackStutterDiagnostics.Release();
             _client.IsTimePositionNotificationCountingEnabled = false;
+            _client.PauseChanged -= OnPauseChanged;
             _samples.Dispose();
             _heartbeat.Tick -= OnHeartbeat;
             try
@@ -237,6 +248,89 @@ public sealed partial class PlayerViewModel
             (_renderer, _danmaku) = _describeDanmaku();
         }
 
+        // Raised on the mpv event thread the moment the pause changes. The state is read right away
+        // on a worker: a read that hangs in the audio output must not hold up the event loop.
+        private void OnPauseChanged(object? sender, bool paused)
+        {
+            if (_stopped) return;
+            var timestamp = Stopwatch.GetTimestamp();
+            var pausedSeconds = "n/a";
+            if (paused)
+            {
+                Interlocked.Exchange(ref _pausedAt, timestamp);
+            }
+            else
+            {
+                var pausedAt = Interlocked.Exchange(ref _pausedAt, 0);
+                Volatile.Write(ref _resumedAt, timestamp);
+                if (pausedAt != 0)
+                    pausedSeconds = Stopwatch.GetElapsedTime(pausedAt, timestamp).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture);
+            }
+
+            var name = paused ? "pause-snapshot" : "resume-snapshot";
+            lock (_snapshotLock)
+            {
+                // One at a time and in order; DisposeAsync joins the last one before native teardown.
+                var previous = _snapshots;
+                _snapshots = Task.Run(async () =>
+                {
+#pragma warning disable VSTHRD003
+                    await previous.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+                    if (_stopped) return;
+                    try
+                    {
+                        WriteSnapshot(name, pausedSeconds);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("PlaybackStutter | snapshot failed error={Error}", ex.GetType().Name);
+                    }
+                });
+            }
+        }
+
+        private void WriteSnapshot(string name, string pausedSeconds)
+        {
+            if (!_logger.IsEnabled(LogLevel.Information)) return;
+            var network = _describeNetwork();
+            var position = ReadDouble("time-pos");
+            var audioPosition = ReadDouble("audio-pts");
+            var positionText = FormatNumber(position, "0.###");
+            var audioPositionText = FormatNumber(audioPosition, "0.###");
+            // Positive when the audio position is ahead of the picture.
+            var audioLead = FormatNumber((audioPosition - position) * 1000d, "0");
+            var coreIdle = ReadFlag("core-idle");
+            var pausedForCache = ReadFlag("paused-for-cache");
+            var audioOutput = ReadText("current-ao");
+            // The name of a chosen device stays local; only whether one was chosen is logged.
+            var device = _client.GetPropertyString("audio-device");
+            var audioDevice = string.IsNullOrEmpty(device) ? "n/a" : device == "auto" ? "auto" : "set";
+            var audioParams = ReadCounter("audio-params/samplerate").HasValue ? "yes" : "no";
+            var outputRate = ReadCounter("audio-out-params/samplerate");
+            var outputParams = outputRate.HasValue ? "yes" : "no";
+            var outputRateText = outputRate?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+            var outputChannels = ReadCounter("audio-out-params/channel-count")?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+            var mute = ReadFlag("mute");
+            var volume = FormatNumber(ReadDouble("volume"), "0.#");
+            var videoCache = FormatNumber(network.VideoCacheSeconds, "0.###");
+            var audioCache = FormatNumber(network.AudioCacheSeconds, "0.###");
+            var forwardCache = FormatNumber(ReadDouble("demuxer-cache-duration"), "0.###");
+            var avsync = FormatNumber(ReadDouble("avsync") * 1000d, "0.00");
+            var cdn = network.VideoCdn + "/" + network.AudioCdn;
+            // Asked of the audio device itself, so they come last: everything above is read by then.
+            var outputVolume = FormatNumber(ReadDouble("ao-volume"), "0.#");
+            var outputMute = ReadFlag("ao-mute");
+            _logger.LogInformation(
+                "PlaybackStutter | {Name} paused-secs={PausedSecs} time-pos={TimePos} audio-pts={AudioPts} audio-lead-ms={AudioLeadMs} core-idle={CoreIdle} paused-for-cache={PausedForCache} current-ao={Ao} audio-device={AudioDevice} audio-params={AudioParams} audio-out-params={AudioOutParams} ao-samplerate={AoSampleRate} ao-channels={AoChannels} ao-volume={AoVolume} ao-mute={AoMute} mute={Mute} volume={Volume} v-cache-secs={VCacheSecs} a-cache-secs={ACacheSecs} fw-cache-secs={FwCacheSecs} avsync-ms={AvsyncMs} cdn={Cdn}",
+                name, pausedSeconds, positionText, audioPositionText, audioLead, coreIdle, pausedForCache, audioOutput,
+                audioDevice, audioParams, outputParams, outputRateText, outputChannels, outputVolume, outputMute, mute, volume,
+                videoCache, audioCache, forwardCache, avsync, cdn);
+        }
+
+        private string ReadFlag(string property)
+            => _client.GetProperty(property, out bool value) == MpvError.Success ? value ? "yes" : "no" : "n/a";
+
         private double ReadMaximumHeartbeatInterval(long timestamp)
         {
             lock (_heartbeatLock)
@@ -259,6 +353,8 @@ public sealed partial class PlayerViewModel
                 var previousRuntime = ReadRuntimeCounters();
                 var previousAvsyncChange = ReadDouble("total-avsync-change");
                 var previousTimestamp = Stopwatch.GetTimestamp();
+                var previousForwardBytes = _describeNetwork().ForwardBytes;
+                var previousAudioPosition = ReadDouble("audio-pts");
                 var curlEnabled = ReadText("options/curl-enabled");
                 var videoSyncOption = ReadText("options/video-sync");
                 var (displayHertz, displayCount) = ReadDisplayInfo(_displayWindow);
@@ -287,8 +383,12 @@ public sealed partial class PlayerViewModel
                     var avsyncChange = ReadDouble("total-avsync-change");
                     var counters = ReadFrameCounters();
                     var heartbeatInterval = ReadMaximumHeartbeatInterval(timestamp);
+                    var network = _describeNetwork();
+                    var audioPosition = ReadDouble("audio-pts");
                     if (_client.GetProperty("pause", out bool userPaused) == MpvError.Success && userPaused)
                     {
+                        previousForwardBytes = network.ForwardBytes;
+                        previousAudioPosition = audioPosition;
                         // Nothing is being presented while the user has paused; keep the baselines current.
                         previousCounters = counters;
                         previousNotifications = notifications;
@@ -348,17 +448,45 @@ public sealed partial class PlayerViewModel
                     var uiPostDelta = uiPosts - previousUiPosts;
                     var renderer = _renderer;
                     var danmaku = _danmaku;
+                    var cdn = network.VideoCdn + "/" + network.AudioCdn;
+                    var quality = network.Quality?.ToString(CultureInfo.InvariantCulture) ?? "n/a";
+                    var videoKbps = network.VideoBandwidth > 0 ? (network.VideoBandwidth / 1000).ToString(CultureInfo.InvariantCulture) : "n/a";
+                    var audioKbps = network.AudioBandwidth > 0 ? (network.AudioBandwidth / 1000).ToString(CultureInfo.InvariantCulture) : "n/a";
+                    var rawInputRate = network.RawInputRate;
+                    var forwardBytesDelta = network.ForwardBytes - previousForwardBytes;
+                    var cdnSwitches = network.Switches;
+                    // Both rates are about the main file, the only one mpv measures: what playback takes
+                    // from it at the current speed, and what was downloaded of it.
+                    var requiredKbps = network.MainBandwidth > 0
+                        ? (network.MainBandwidth / 1000d * (ReadDouble("speed") is > 0 and var playbackSpeed ? playbackSpeed : 1d)).ToString("0", CultureInfo.InvariantCulture)
+                        : "n/a";
+                    var downloadKbps = FormatNumber(network.DownloadRate * 8 / 1000, "0");
+                    var audioPositionText = FormatNumber(audioPosition, "0.###");
+                    var audioCache = FormatNumber(network.AudioCacheSeconds, "0.###");
+                    var videoCache = FormatNumber(network.VideoCacheSeconds, "0.###");
+                    // Whether sound is being played: an audio position that stands still means no audio data.
+                    var audioAdvancing = audioPosition.HasValue && previousAudioPosition.HasValue
+                        ? audioPosition > previousAudioPosition ? "yes" : "no" : "n/a";
+                    var resumedAt = Volatile.Read(ref _resumedAt);
+                    var sinceResume = resumedAt != 0 && Stopwatch.GetElapsedTime(resumedAt, timestamp).TotalSeconds is <= ResumeWatchSeconds and var resumedFor
+                        ? resumedFor.ToString("0.0", CultureInfo.InvariantCulture) : "n/a";
                     if (_logger.IsEnabled(LogLevel.Information))
                     {
                         _logger.LogInformation(
-                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs} frame-gap-max-ms={FrameGapMaxMs} frame-gap-over2x={FrameGapOverTwice} frame-probe-polls={FrameProbePolls} frame-probe-read-ms={FrameProbeReadMs}",
+                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs} frame-gap-max-ms={FrameGapMaxMs} frame-gap-over2x={FrameGapOverTwice} frame-probe-polls={FrameProbePolls} frame-probe-read-ms={FrameProbeReadMs} cdn={Cdn} qn={Quality} v-kbps={VideoKbps} a-kbps={AudioKbps} raw-input-rate={RawInputRate} fw-bytes-delta={ForwardBytesDelta} cdn-switches={CdnSwitches} fw-cache-secs={ForwardCacheSecs} dl-kbps={DownloadKbps} need-kbps={RequiredKbps} audio-pts={AudioPts} a-cache-secs={AudioCacheSecs} v-cache-secs={VideoCacheSecs} audio-advancing={AudioAdvancing} since-resume-secs={SinceResumeSecs}",
                             intervalText, frameDropDelta, voDelayedDelta, mistimedDelta, decoderDropDelta,
                             pausedForCache, bufferingState, cacheDuration, hwdec, vo, notificationDelta, heartbeatText,
                             gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku,
                             displayFps, containerFps, filterFps, estimatedDisplayFps, videoSync, avsync, avsyncChangeDelta,
                             vsyncJitter, vsyncRatio, freshPeak, freshAverage,
-                            frameGapMaximum, frameGapOverTwice, probePolls, probeRead);
+                            frameGapMaximum, frameGapOverTwice, probePolls, probeRead,
+                            cdn, quality, videoKbps, audioKbps, rawInputRate, forwardBytesDelta, cdnSwitches,
+                            cacheDuration, downloadKbps, requiredKbps, audioPositionText, audioCache, videoCache,
+                            audioAdvancing, sinceResume);
                     }
+
+                    previousForwardBytes = network.ForwardBytes;
+                    previousAudioPosition = audioPosition;
 
                     previousCounters = counters;
                     previousNotifications = notifications;
