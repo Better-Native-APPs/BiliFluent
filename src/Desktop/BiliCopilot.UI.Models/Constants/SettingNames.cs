@@ -137,4 +137,6 @@ public enum SettingNames
     ClassicUseWebPlayerWhenLive = 140,
     DanmakuRendererMpvMigrated = 141,
     DanmakuDefaultFontMigrated = 142,
+    PlaybackStutterDiagnosticsEnabled = 144,
+    DisableMpvCurlForDiagnostics = 145,
 }

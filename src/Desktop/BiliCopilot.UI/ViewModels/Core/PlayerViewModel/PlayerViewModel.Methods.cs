@@ -146,7 +146,10 @@ public sealed partial class PlayerViewModel
             {
                 UseConfig = false,
                 LoadScripts = true,
+                DisableCurl = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                    && SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false),
             };
+            _curlDisableRequested = options.DisableCurl;
             var client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
             Client = client;
             CheckMediaAdmission();
@@ -318,6 +321,8 @@ public sealed partial class PlayerViewModel
             await AwaitInitializationStepAsync(() => Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No));
             _clientConfigured = true;
         }
+
+        RefreshPlaybackDiagnostics(startCurrentPlayback: false);
 
         if (_tripleTimer == null)
         {

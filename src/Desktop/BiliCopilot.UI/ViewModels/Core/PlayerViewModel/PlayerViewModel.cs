@@ -156,6 +156,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     private async Task InitializeMediaAsync(MediaSnapshot snapshot)
     {
         CheckMediaAdmission();
+        await SuspendPlaybackDiagnosticsAsync();
+        CheckMediaAdmission();
         _snapshot = snapshot;
         ErrorMessage = default;
         CacheSpeedText = default;
