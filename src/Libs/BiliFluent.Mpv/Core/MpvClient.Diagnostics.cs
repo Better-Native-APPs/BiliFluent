@@ -27,6 +27,22 @@ public sealed partial class MpvClient
     /// </summary>
     public long UiPostCount => Interlocked.Read(ref _uiPostCount);
 
+    /// <summary>
+    /// Sums the peak and the average render time of the passes of fresh frames, in nanoseconds,
+    /// as the video output reports them in <c>vo-passes</c>. Blocks like the other direct reads.
+    /// </summary>
+    public MpvError GetFreshPassTimes(out long peakNanoseconds, out long averageNanoseconds)
+    {
+        if (IsDisposed)
+        {
+            peakNanoseconds = 0;
+            averageNanoseconds = 0;
+            return MpvError.Uninitialized;
+        }
+
+        return _handle.GetFreshPassTimes(out peakNanoseconds, out averageNanoseconds);
+    }
+
     internal void CountUiPost()
     {
         if (IsTimePositionNotificationCountingEnabled)

@@ -43,4 +43,10 @@ public sealed class MpvInitializeOptions
     /// Unsupported options are logged without failing initialization.
     /// </summary>
     public bool DisableCurl { get; set; }
+
+    /// <summary>
+    /// Uses <c>--video-sync=display-resample</c> for diagnostic comparisons, without interpolation.
+    /// A rejected option is logged without failing initialization.
+    /// </summary>
+    public bool UseDisplayResample { get; set; }
 }

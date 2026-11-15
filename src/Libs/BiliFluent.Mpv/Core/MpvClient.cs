@@ -334,6 +334,15 @@ public sealed partial class MpvClient : IAsyncDisposable
                 }
             }
 
+            if (options?.UseDisplayResample == true)
+            {
+                var syncError = _handle.SetOptionString("video-sync", "display-resample");
+                if (syncError != MpvError.Success)
+                {
+                    _logger.LogWarning("Mpv | set video-sync=display-resample failed error={Error}", syncError);
+                }
+            }
+
             errorCode = _handle.Initialize();
         });
 

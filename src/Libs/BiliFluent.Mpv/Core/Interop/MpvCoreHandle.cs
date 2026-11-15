@@ -145,6 +145,79 @@ internal sealed unsafe class MpvCoreHandle
     }
 
     /// <summary>
+    /// Sums the <c>peak</c> and <c>avg</c> times of the fresh frame passes in <c>vo-passes</c>.
+    /// The node is walked in place, so the sample arrays of the passes are never copied.
+    /// </summary>
+    public MpvError GetFreshPassTimes(out long peak, out long average)
+    {
+        peak = 0;
+        average = 0;
+        var node = default(NativeNode);
+        var error = ToError(MpvApi.GetProperty(_ctx, "vo-passes", NativeFormat.Node, &node));
+        if (error != MpvError.Success)
+        {
+            return error;
+        }
+
+        try
+        {
+            var types = node.Format == NativeFormat.NodeMap ? node.U.List : null;
+            if (types == null || types->Keys == null)
+            {
+                return MpvError.PropertyUnavailable;
+            }
+
+            for (var i = 0; i < types->Num; i++)
+            {
+                if (!KeyEquals(types->Keys[i], "fresh"u8))
+                {
+                    continue;
+                }
+
+                var passes = types->Values[i].Format == NativeFormat.NodeArray ? types->Values[i].U.List : null;
+                if (passes == null || passes->Num == 0)
+                {
+                    return MpvError.PropertyUnavailable;
+                }
+
+                for (var pass = 0; pass < passes->Num; pass++)
+                {
+                    var fields = passes->Values[pass].Format == NativeFormat.NodeMap ? passes->Values[pass].U.List : null;
+                    if (fields == null || fields->Keys == null)
+                    {
+                        continue;
+                    }
+
+                    for (var field = 0; field < fields->Num; field++)
+                    {
+                        if (fields->Values[field].Format != NativeFormat.Int64)
+                        {
+                            continue;
+                        }
+
+                        if (KeyEquals(fields->Keys[field], "peak"u8))
+                        {
+                            peak += fields->Values[field].U.Int64;
+                        }
+                        else if (KeyEquals(fields->Keys[field], "avg"u8))
+                        {
+                            average += fields->Values[field].U.Int64;
+                        }
+                    }
+                }
+
+                return MpvError.Success;
+            }
+
+            return MpvError.PropertyUnavailable;
+        }
+        finally
+        {
+            MpvApi.FreeNodeContents(&node);
+        }
+    }
+
+    /// <summary>
     /// Reads a property as text. Returns <c>null</c> when the property is unavailable.
     /// </summary>
     public string? GetPropertyString(string name)
@@ -222,4 +295,7 @@ internal sealed unsafe class MpvCoreHandle
     public void Destroy() => MpvApi.Destroy(_ctx);
 
     private static MpvError ToError(int code) => code >= 0 ? MpvError.Success : (MpvError)code;
+
+    private static bool KeyEquals(byte* key, ReadOnlySpan<byte> expected)
+        => key != null && MemoryMarshal.CreateReadOnlySpanFromNullTerminated(key).SequenceEqual(expected);
 }
