@@ -22,6 +22,11 @@ public interface IPlayerService
     Task<DashMediaInformation> GetVideoPlayDetailAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default, string? curLanguage = default);
 
     /// <summary>
+    /// Gets video chapters without requiring a signed-in account.
+    /// </summary>
+    Task<IReadOnlyList<VideoChapter>> GetVideoChaptersAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 获取直播页面详情.
     /// </summary>
     Task<LivePlayerView> GetLivePageDetailAsync(MediaIdentifier live, CancellationToken cancellationToken = default);

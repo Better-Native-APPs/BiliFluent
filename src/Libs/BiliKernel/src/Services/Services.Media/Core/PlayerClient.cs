@@ -96,6 +96,38 @@ internal sealed class PlayerClient
         return pageResponse.ToVideoPlayerView(progress, operation);
     }
 
+    public async Task<IReadOnlyList<VideoChapter>> GetVideoChaptersAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken)
+    {
+        var idType = GetVideoIdType(video.Id, out var videoId);
+        if (string.IsNullOrEmpty(idType))
+        {
+            throw new ArgumentOutOfRangeException(nameof(video), "Unrecognized video ID.");
+        }
+
+        var queryParameters = new Dictionary<string, string>
+        {
+            { idType == "av" ? "aid" : "bvid", videoId },
+            { "cid", cid.ToString() },
+        };
+
+        await _authenticator.InitializeWbiAsync(cancellationToken).ConfigureAwait(false);
+        using var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri(BiliApis.Video.PlayerWbi));
+        // RequireCookie attaches existing cookies only; anonymous requests remain valid.
+        _authenticator.AuthorizeRestRequest(request, queryParameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.Web,
+            ForceNoToken = true,
+            RequireCookie = true,
+            NeedRID = true,
+        });
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponsePlayerWbiResponse).ConfigureAwait(false)
+            ?? throw new KernelException("Failed to parse video chapters.");
+        var points = responseObj.Data?.view_points;
+        return points?.Select(point => new VideoChapter(point.from, point.to, point.content ?? string.Empty, point.imgUrl, point.type)).ToArray()
+            ?? Array.Empty<VideoChapter>();
+    }
+
     public async Task<DashMediaInformation> GetVideoPlayDetailWithRestAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken, string? curLanguage = default)
     {
         var idType = GetVideoIdType(video.Id, out var videoId);
