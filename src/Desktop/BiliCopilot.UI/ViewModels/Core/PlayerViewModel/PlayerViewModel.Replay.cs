@@ -48,6 +48,8 @@ public sealed partial class PlayerViewModel
         var client = player.Client;
         if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(client, Client)) return;
 
+        ResetChapters();
+        InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
         var subtitle = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
         if (subtitle is null || Connector is not VideoConnectorViewModel video)
