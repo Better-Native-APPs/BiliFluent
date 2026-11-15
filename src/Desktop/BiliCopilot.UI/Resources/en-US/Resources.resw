@@ -66,6 +66,12 @@
   <data name="AudioTrackVipTemplate" xml:space="preserve">
     <value>{0}, needs a premium membership</value>
   </data>
+  <data name="AudioTrackOriginal" xml:space="preserve">
+    <value>Original audio</value>
+  </data>
+  <data name="AudioTrackQuality" xml:space="preserve">
+    <value>Audio quality</value>
+  </data>
   <data name="AudioTrackSwitchFailed" xml:space="preserve">
     <value>This audio track can't be played right now. The previous one is back.</value>
   </data>

@@ -4,9 +4,9 @@
 namespace Richasy.BiliKernel.Models.Media;
 
 /// <summary>
-/// The type of an audio track.
+/// The type of an audio quality.
 /// </summary>
-public enum AudioTrackKind
+public enum AudioQualityKind
 {
     /// <summary>
     /// A standard DASH audio track.
@@ -23,8 +23,4 @@ public enum AudioTrackKind
     /// </summary>
     HiRes,
 
-    /// <summary>
-    /// An AI dubbing language.
-    /// </summary>
-    AiDubbing,
 }

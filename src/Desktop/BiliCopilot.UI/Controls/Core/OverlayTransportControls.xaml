@@ -363,10 +363,10 @@
                     </Button.Flyout>
                 </Button>
                 <!--
-                    Audio track: shown only when there is more than one track to choose from.
+                    Audio track: shown only when the media offers a language besides its original audio.
                     The narrow layout hides the button itself, so the binding stays on this wrapper.
                 -->
-                <Grid Visibility="{x:Bind ViewModel.IsAudioTrackSelectable, Mode=OneWay}">
+                <Grid Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}">
                     <Button
                         x:Name="AudioTrackButton"
                         Margin="0,0,8,0"
@@ -401,11 +401,18 @@
                                         Padding="16,0"
                                         HorizontalScrollMode="Disabled"
                                         VerticalScrollBarVisibility="Auto">
-                                        <Grid Margin="0,0,0,12">
-                                            <ItemsRepeater x:Name="AudioTrackRepeater" ItemsSource="{x:Bind ViewModel.AudioTracks, Mode=OneWay}">
+                                        <StackPanel Margin="0,0,0,12" Spacing="8">
+                                            <!--  The API's own title for its dubbing languages, shown as it is.  -->
+                                            <TextBlock
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{x:Bind ViewModel.AudioLanguageGroupTitle, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                                            <ItemsRepeater x:Name="AudioLanguageRepeater" ItemsSource="{x:Bind ViewModel.AudioLanguages, Mode=OneWay}">
                                                 <ItemsRepeater.ItemTemplate>
-                                                    <DataTemplate x:DataType="items:AudioTrackItemViewModel">
-                                                        <!--  Same card as a subtitle row; a track without an address disables itself through the command.  -->
+                                                    <DataTemplate x:DataType="items:AudioLanguageItemViewModel">
+                                                        <!--  Same card as a subtitle row; an entry that cannot be played disables itself through the command.  -->
                                                         <base:AppToggleCard
                                                             MinWidth="200"
                                                             MaxWidth="280"
@@ -442,7 +449,7 @@
                                                                             Text="AI" />
                                                                     </Border>
                                                                 </Grid>
-                                                                <!--  A quiet note at the far end: this track needs a premium membership.  -->
+                                                                <!--  A quiet note at the far end: this entry needs a premium membership.  -->
                                                                 <TextBlock
                                                                     Grid.Column="1"
                                                                     VerticalAlignment="Center"
@@ -459,7 +466,63 @@
                                                     <StackLayout Spacing="8" />
                                                 </ItemsRepeater.Layout>
                                             </ItemsRepeater>
-                                        </Grid>
+                                            <!--  Second section: the qualities of the language that plays.  -->
+                                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay}">
+                                                <TextBlock
+                                                    Margin="0,4,0,0"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackQuality}" />
+                                                <ItemsRepeater x:Name="AudioQualityRepeater" ItemsSource="{x:Bind ViewModel.AudioQualities, Mode=OneWay}">
+                                                    <ItemsRepeater.ItemTemplate>
+                                                        <DataTemplate x:DataType="items:AudioQualityItemViewModel">
+                                                            <!--  Same card as a subtitle row; an entry that cannot be played disables itself through the command.  -->
+                                                            <base:AppToggleCard
+                                                                MinWidth="200"
+                                                                MaxWidth="280"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                AutomationProperties.Name="{x:Bind AccessibleName}"
+                                                                BorderBrush="Transparent"
+                                                                BorderThickness="2"
+                                                                Command="{x:Bind ActiveCommand}"
+                                                                IsChecked="{x:Bind IsSelected, Mode=OneWay}"
+                                                                IsEnableCheck="False">
+                                                                <Grid ColumnSpacing="8">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                                    <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <base:TrimTextBlock
+                                                                            VerticalAlignment="Center"
+                                                                            MaxLines="1"
+                                                                            Text="{x:Bind Name}" />
+                                                                    </Grid>
+                                                                    <!--  A quiet note at the far end: this entry needs a premium membership.  -->
+                                                                    <TextBlock
+                                                                        Grid.Column="1"
+                                                                        VerticalAlignment="Center"
+                                                                        AutomationProperties.AccessibilityView="Raw"
+                                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                                        Text="{ext:Locale Name=AudioTrackVip}"
+                                                                        Visibility="{x:Bind NeedVip}" />
+                                                                </Grid>
+                                                            </base:AppToggleCard>
+                                                        </DataTemplate>
+                                                    </ItemsRepeater.ItemTemplate>
+                                                    <ItemsRepeater.Layout>
+                                                        <StackLayout Spacing="8" />
+                                                    </ItemsRepeater.Layout>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </ScrollView>
                                 </Grid>
                             </Flyout>

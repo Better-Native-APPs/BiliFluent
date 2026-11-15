@@ -47,15 +47,20 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
     }
 
     /// <summary>
-    /// The audio tracks of the loaded media and the ID of the one that plays. Empty until the media is loaded.
+    /// The play detail of an episode names no audio language, so the original audio is the only one
+    /// and the choice is among its qualities.
     /// </summary>
-    internal (List<AudioTrackInformation> Tracks, string? CurrentId) GetAudioTracks()
+    internal AudioSelections GetAudioSelections()
     {
         lock (InitializationSync)
         {
-            return _playbackInfo?.AudioTracks is { Count: > 0 } loaded
-                ? ([.. loaded], GetSelectedAudioTrack()?.Id ?? GetDefaultAudioTrackId())
-                : ([], default);
+            return _playbackInfo is { } info
+                ? new(
+                    [new(AudioLanguageInformation.OriginalId)],
+                    AudioLanguageInformation.OriginalId,
+                    info.AudioQualities is { } qualities ? [.. qualities] : [],
+                    GetSelectedAudioQuality()?.Id)
+                : AudioSelections.Empty;
         }
     }
 
@@ -227,8 +232,8 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var preferCodec = AppToolkit.GetPreferCodecId();
         var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
             ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
-        // The track the user picked, or the highest standard quality when nothing (available) is picked.
-        var aSeg = GetSelectedAudioTrack()?.Segment
+        // The quality the user picked, or the highest standard quality when nothing (available) is picked.
+        var aSeg = GetSelectedAudioQuality()?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
         var videoUrl = vSeg?.BaseUrl;
@@ -253,15 +258,6 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         return (videoUrl, audioUrl);
     }
 
-    // The picked track, when the loaded media has it and it comes with an address.
-    private AudioTrackInformation? GetSelectedAudioTrack()
-    {
-        var id = _snapshot.PreferAudioTrackId;
-        return string.IsNullOrEmpty(id)
-            ? default
-            : _playbackInfo?.AudioTracks?.FirstOrDefault(p => p.Id == id && !string.IsNullOrEmpty(p.Segment?.BaseUrl));
-    }
-
-    private string? GetDefaultAudioTrackId()
-        => _playbackInfo?.Audios is { Count: > 0 } audios ? $"std:{audios.Max(p => Convert.ToInt32(p.Id))}" : default;
+    private AudioQualityInformation? GetSelectedAudioQuality()
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId);
 }

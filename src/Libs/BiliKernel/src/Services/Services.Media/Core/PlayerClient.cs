@@ -126,7 +126,7 @@ internal sealed class PlayerClient
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponsePlayerInformation).ConfigureAwait(false)
             ?? throw new KernelException("解析视频播放详情失败");
-        return responseObj.Data.ToDashMediaInformation(includeAiDubbing: true, requestedLanguage: curLanguage);
+        return responseObj.Data.ToDashMediaInformation(includeAudioLanguages: true, requestedLanguage: curLanguage);
     }
 
     public async Task<DashMediaInformation> GetVideoPlayDetailWithGrpcAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken)

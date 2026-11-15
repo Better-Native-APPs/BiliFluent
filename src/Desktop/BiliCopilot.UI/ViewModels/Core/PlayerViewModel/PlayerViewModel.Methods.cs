@@ -993,7 +993,7 @@ public sealed partial class PlayerViewModel
 
         try
         {
-            CarryAudioTrackToEpisode(e);
+            CarryAudioSelectionToEpisode(e);
             await InitializeAsync(e);
         }
         catch (Exception ex)

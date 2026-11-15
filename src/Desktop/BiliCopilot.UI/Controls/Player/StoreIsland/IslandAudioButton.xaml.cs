@@ -10,7 +10,8 @@ namespace BiliCopilot.UI.Controls.Player.StoreIsland;
 
 /// <summary>
 /// The audio track button on the right of the island transport bar. It follows <see cref="IslandFormatButton"/>:
-/// the list shows <see cref="PlayerViewModel.AudioTracks"/> and one click switches to the chosen track.
+/// the first list shows <see cref="PlayerViewModel.AudioLanguages"/>, the second <see cref="PlayerViewModel.AudioQualities"/>,
+/// and one click switches to the chosen entry.
 /// </summary>
 public sealed partial class IslandAudioButton : PlayerControlBase
 {
@@ -23,8 +24,8 @@ public sealed partial class IslandAudioButton : PlayerControlBase
     private bool _loaded;
     private bool _synchronizing;
     private long _epoch;
-    private AudioTrackItemViewModel? _activating;
-    private AudioTrackItemViewModel? _tapped;
+    private object? _activating;
+    private object? _tapped;
     private long _tappedAt;
 
     public bool IsActive
@@ -34,7 +35,7 @@ public sealed partial class IslandAudioButton : PlayerControlBase
     }
 
     private bool CanInteract => _loaded && IsActive && ViewModel is { IsWindowDeactivated: false,
-        IsPlaybackClosing: false, IsConnecting: false, IsAudioTrackSelectable: true }
+        IsPlaybackClosing: false, IsConnecting: false, HasMultipleAudioLanguages: true }
         && ViewModel.Player?.IsPlaybackInitialized == true;
 
     /// <summary>
@@ -96,8 +97,7 @@ public sealed partial class IslandAudioButton : PlayerControlBase
     private void OnOwnerChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
-        if (args.PropertyName is nameof(PlayerViewModel.MediaGeneration) or nameof(PlayerViewModel.AudioTracks)
-            || !CanInteract) CancelPendingInput();
+        if (args.PropertyName == nameof(PlayerViewModel.MediaGeneration) || !CanInteract) CancelPendingInput();
         Synchronize();
     }
 
@@ -108,13 +108,19 @@ public sealed partial class IslandAudioButton : PlayerControlBase
         try
         {
             IsEnabled = CanInteract;
-            AudioView.ItemsSource = _loaded ? ViewModel?.AudioTracks : null;
-            var index = _loaded && ViewModel is { } vm
-                ? vm.AudioTracks.ToList().FindIndex(item => ReferenceEquals(item, vm.SelectedAudioTrack)) : -1;
-            if (index >= 0) AudioView.Select(index);
-            else AudioView.DeselectAll();
+            var vm = _loaded ? ViewModel : null;
+            AudioView.ItemsSource = vm?.AudioLanguages;
+            QualityView.ItemsSource = vm?.AudioQualities;
+            Select(AudioView, vm is null ? -1 : vm.AudioLanguages.IndexOf(vm.SelectedAudioLanguage!));
+            Select(QualityView, vm is null ? -1 : vm.AudioQualities.IndexOf(vm.SelectedAudioQuality!));
         }
         finally { _synchronizing = false; }
+    }
+
+    private static void Select(ItemsView view, int index)
+    {
+        if (index >= 0) view.Select(index);
+        else view.DeselectAll();
     }
 
     private void OnFlyoutOpened(object sender, object e)
@@ -138,7 +144,7 @@ public sealed partial class IslandAudioButton : PlayerControlBase
         // While the list tracks a selection, ItemsView raises ItemInvoked only for a double tap
         // or Enter. A single click or tap on an item activates it here.
         var item = (sender as FrameworkElement)?.Tag;
-        _tapped = item as AudioTrackItemViewModel;
+        _tapped = item;
         _tappedAt = Environment.TickCount64;
         Activate(item);
     }
@@ -146,23 +152,34 @@ public sealed partial class IslandAudioButton : PlayerControlBase
     private async void Activate(object? item)
     {
         if (_synchronizing || !CanInteract || !_popups.IsCurrent(_popups.Get(AudioFlyout), ViewModel, _epoch)
-            || !ReferenceEquals(AudioView.ItemsSource, ViewModel.AudioTracks)
-            || item is not AudioTrackItemViewModel { IsEnabled: true } track
-            || !ViewModel.AudioTracks.Any(item => ReferenceEquals(item, track))
-            || ReferenceEquals(track, ViewModel.SelectedAudioTrack)
-            || ReferenceEquals(track, _activating)) return;
-        _activating = track;
+            || ReferenceEquals(item, _activating)) return;
+
+        // An entry is activated only while its own list still shows it and it is not the one that plays.
+        CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command;
+        if (item is AudioLanguageItemViewModel { IsEnabled: true } language
+            && ReferenceEquals(AudioView.ItemsSource, ViewModel.AudioLanguages)
+            && ViewModel.AudioLanguages.Any(entry => ReferenceEquals(entry, language))
+            && !ReferenceEquals(language, ViewModel.SelectedAudioLanguage))
+            command = language.ActiveCommand;
+        else if (item is AudioQualityItemViewModel { IsEnabled: true } quality
+            && ReferenceEquals(QualityView.ItemsSource, ViewModel.AudioQualities)
+            && ViewModel.AudioQualities.Any(entry => ReferenceEquals(entry, quality))
+            && !ReferenceEquals(quality, ViewModel.SelectedAudioQuality))
+            command = quality.ActiveCommand;
+        else return;
+
+        _activating = item;
         try
         {
-            await track.ActiveCommand.ExecuteAsync(null);
+            await command.ExecuteAsync(null);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Island audio track selection failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Island audio selection failed: {ex.Message}");
         }
         finally
         {
-            if (ReferenceEquals(_activating, track)) _activating = null;
+            if (ReferenceEquals(_activating, item)) _activating = null;
         }
     }
 }

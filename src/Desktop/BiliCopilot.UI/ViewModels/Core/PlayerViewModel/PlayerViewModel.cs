@@ -165,7 +165,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         CacheSpeedText = default;
         ShowPlayerWindow();
         IsSourceSelectable = false;
-        IsAudioTrackSelectable = false;
+        HasMultipleAudioLanguages = false;
+        HasMultipleAudioQualities = false;
         IsDanmakuEnabled = false;
         IsDanmakuLoading = false;
         IsStatsOverlayShown = false;
@@ -297,7 +298,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         await LoadSourcesAsync();
         CheckMediaAdmission();
 
-        LoadAudioTracks();
+        LoadAudioSelections();
 
         await LoadSubtitlesAsync();
     }
