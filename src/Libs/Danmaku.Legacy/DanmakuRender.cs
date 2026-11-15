@@ -187,6 +187,20 @@ namespace Richasy.Danmaku.Legacy
 
         public bool TryHitTest(double x, double y, out DanmakuHitInfo info)
         {
+            long lockWaitTicks = 0;
+            if (!DanmakuRenderDiagnostics.IsEnabled)
+            {
+                return TryHitTestCore(x, y, out info, false, ref lockWaitTicks);
+            }
+
+            long start = Stopwatch.GetTimestamp();
+            bool hit = TryHitTestCore(x, y, out info, true, ref lockWaitTicks);
+            DanmakuRenderDiagnostics.Report("TryHitTest", Stopwatch.GetTimestamp() - start, lockWaitTicks, -1);
+            return hit;
+        }
+
+        private bool TryHitTestCore(double x, double y, out DanmakuHitInfo info, bool measure, ref long lockWaitTicks)
+        {
             info = default;
             if (_canvas == null || _isStopped || !double.IsFinite(x) || !double.IsFinite(y))
             {
@@ -206,8 +220,14 @@ namespace Richasy.Danmaku.Legacy
             for (int layerId = _renderLayerList.Length - 1; layerId >= 0; layerId--)
             {
                 RenderLayer layer = _renderLayerList[layerId];
+                long lockRequested = measure ? Stopwatch.GetTimestamp() : 0;
                 lock (layer.RenderList)
                 {
+                    if (measure)
+                    {
+                        lockWaitTicks += Stopwatch.GetTimestamp() - lockRequested;
+                    }
+
                     if (_isStopped)
                     {
                         return false;
@@ -854,6 +874,20 @@ namespace Richasy.Danmaku.Legacy
 
         private void OnCanvasDraw(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
         {
+            if (!DanmakuRenderDiagnostics.IsEnabled)
+            {
+                DrawCanvas(args, out _);
+                return;
+            }
+
+            long start = Stopwatch.GetTimestamp();
+            DrawCanvas(args, out int itemCount);
+            DanmakuRenderDiagnostics.Report("OnCanvasDraw", Stopwatch.GetTimestamp() - start, -1, itemCount);
+        }
+
+        private void DrawCanvas(CanvasAnimatedDrawEventArgs args, out int totalCount)
+        {
+            totalCount = 0;
             if (_canvas is null || CanvasWidth <= 0 || CanvasHeight <= 0)
             {
                 return;
@@ -861,7 +895,6 @@ namespace Richasy.Danmaku.Legacy
 
             try
             {
-                int totalCount = 0;
                 args.DrawingSession.Transform = new Matrix3x2 { M11 = 1f / _scale, M22 = 1f / _scale };
                 for (uint layerId = 0; layerId < _renderLayerList.Length; layerId++)
                 {
