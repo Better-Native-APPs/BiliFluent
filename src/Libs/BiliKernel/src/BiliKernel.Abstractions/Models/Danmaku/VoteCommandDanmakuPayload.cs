@@ -11,6 +11,9 @@ public sealed class VoteCommandDanmakuPayload
     /// <summary>Gets or sets the vote identifier from vote_id as a string.</summary>
     public string? VoteId { get; set; }
 
+    /// <summary>Gets or sets the voting type from vote_type, when supplied.</summary>
+    public int? VoteType { get; set; }
+
     /// <summary>Gets or sets the question text.</summary>
     public string? Question { get; set; }
 
@@ -19,6 +22,9 @@ public sealed class VoteCommandDanmakuPayload
 
     /// <summary>Gets or sets the original current-user selection from my_vote.</summary>
     public int? MyVote { get; set; }
+
+    /// <summary>Gets or sets the participant count from join_num, when supplied.</summary>
+    public long? ParticipantCount { get; set; }
 
     /// <summary>Gets or sets the card duration in milliseconds.</summary>
     public int? DurationMs { get; set; }
