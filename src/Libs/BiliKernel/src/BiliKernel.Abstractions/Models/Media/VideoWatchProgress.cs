@@ -4,12 +4,13 @@
 namespace Richasy.BiliKernel.Models.Media;
 
 /// <summary>
-/// How far the signed-in account has watched a video, as reported by the server alongside a card.
+/// How far the signed-in account has watched a video.
 /// </summary>
 /// <remarks>
-/// This type is the single place that interprets the raw progress fields.
-/// Their unit and their "finished" value are not documented, so every assumption is listed on
-/// <see cref="FromPartProgress(bool, long, long, long)"/> and can be corrected there once a real sample is available.
+/// This type is the single place that decides between "not watched", "partly watched" and "finished".
+/// There are two sources: the watch history (<see cref="FromHistory(long, long)"/>), whose values are known,
+/// and the progress fields of a dynamic card (<see cref="FromPartProgress(bool, long, long, long)"/>),
+/// which the server has so far been seen to leave empty.
 /// </remarks>
 public sealed class VideoWatchProgress
 {
@@ -62,6 +63,29 @@ public sealed class VideoWatchProgress
     public double Ratio { get; }
 
     /// <summary>
+    /// Interprets a watch history record, or a playback position of the same shape.
+    /// </summary>
+    /// <param name="progress">Last watched second. 0 is not watched and -1 is finished.</param>
+    /// <param name="duration">Duration in seconds of the part that was watched. 0 when the record does not carry it.</param>
+    /// <returns>The watch progress, or <see langword="null"/> when the video has not been watched.</returns>
+    /// <remarks>
+    /// The history interface reports seconds, never reports a progress past the duration, and marks a finished video
+    /// either with -1 or with a progress equal to the duration. A record without a duration only yields the position.
+    /// A video left within the last few seconds also counts as finished here, which is more lenient than the server.
+    /// </remarks>
+    public static VideoWatchProgress? FromHistory(long progress, long duration)
+    {
+        if (progress == 0)
+        {
+            return null;
+        }
+
+        return progress < 0
+            ? new VideoWatchProgress(true, 0, Math.Max(duration, 0), 1d)
+            : Evaluate(progress, Math.Max(duration, 0));
+    }
+
+    /// <summary>
     /// Interprets the progress fields of a dynamic archive card (<c>show_progress</c>, <c>part_progress</c>, <c>part_duration</c>).
     /// </summary>
     /// <param name="showProgress">The server's flag that there is progress to show.</param>
@@ -70,13 +94,12 @@ public sealed class VideoWatchProgress
     /// <param name="totalDuration">Duration of the whole video in seconds, used when the part duration is missing.</param>
     /// <returns>The watch progress, or <see langword="null"/> when the video carries no watched mark.</returns>
     /// <remarks>
-    /// Assumptions (not confirmed against a real response):
+    /// The server has not been seen to fill these fields, so the reading below is an assumption kept for the day it does:
     /// <list type="number">
     /// <item>No flag or a zero position means the video has not been watched.</item>
-    /// <item>A negative position means finished, as <c>-1</c> does in the history and view interfaces.</item>
+    /// <item>A negative position means finished, as -1 does in the history interface.</item>
     /// <item>Position and part duration are in seconds like the card's own duration. They are read as milliseconds only when they are implausibly large for seconds.</item>
     /// <item>The position belongs to the part whose duration is given, so the share is position / part duration.</item>
-    /// <item>Reaching the end, 97%, or the last 5 seconds (past 80%) counts as finished.</item>
     /// </list>
     /// </remarks>
     public static VideoWatchProgress? FromPartProgress(bool showProgress, long partProgress, long partDuration, long totalDuration)
@@ -101,20 +124,28 @@ public sealed class VideoWatchProgress
             }
         }
 
-        var duration = partDuration > 0 ? partDuration : Math.Max(totalDuration, 0);
+        return Evaluate(partProgress, partDuration > 0 ? partDuration : Math.Max(totalDuration, 0));
+    }
+
+    /// <summary>
+    /// Decides between partly watched and finished for a positive position.
+    /// Reaching the end, 97%, or the last 5 seconds (past 80%) counts as finished.
+    /// </summary>
+    private static VideoWatchProgress Evaluate(long position, long duration)
+    {
         if (duration == 0)
         {
-            return new VideoWatchProgress(false, partProgress, 0, 0d);
+            return new VideoWatchProgress(false, position, 0, 0d);
         }
 
-        var ratio = Math.Min(1d, partProgress / (double)duration);
-        var remaining = duration - partProgress;
+        var ratio = Math.Min(1d, position / (double)duration);
+        var remaining = duration - position;
         var isFinished = remaining <= 0
             || ratio >= FinishedRatio
             || (remaining <= FinishedRemainingSeconds && ratio >= FinishedRemainingMinRatio);
 
         return isFinished
             ? new VideoWatchProgress(true, duration, duration, 1d)
-            : new VideoWatchProgress(false, partProgress, duration, ratio);
+            : new VideoWatchProgress(false, position, duration, ratio);
     }
 }

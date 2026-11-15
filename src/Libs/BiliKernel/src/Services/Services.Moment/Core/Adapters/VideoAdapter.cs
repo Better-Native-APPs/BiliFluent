@@ -40,6 +40,7 @@ internal static class VideoAdapter
         info.AddExtensionIfNotNull(VideoExtensionDataId.Cid, archive.Cid);
         info.AddExtensionIfNotNull(VideoExtensionDataId.MediaType, Models.MediaType.Video);
         info.AddExtensionIfNotNull(VideoExtensionDataId.WatchProgress, archive.ToWatchProgress());
+        info.AddExtensionIfNotNull(VideoExtensionDataId.HasShowProgressFlag, archive.ShowProgress ? true : default(bool?));
         return info;
     }
 
