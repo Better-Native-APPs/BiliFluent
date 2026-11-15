@@ -165,7 +165,13 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
                 throw new InvalidOperationException("必须先初始化媒体信息.");
             }
 
-            loadTask = _initTask ??= LoadMediaInfoCoreAsync(_episode, request);
+            if (_initTask is null || _initTask.IsFaulted || _initTask.IsCanceled)
+            {
+                // A failed request is not kept: the next source asks again, as a reload does.
+                _initTask = LoadMediaInfoCoreAsync(_episode, request);
+            }
+
+            loadTask = _initTask;
         }
 
         await loadTask;
@@ -222,25 +228,9 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var aSeg = GetSelectedAudioQuality()?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
-        var videoUrl = vSeg?.BaseUrl;
-        var audioUrl = aSeg?.BaseUrl;
-
-        if (SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false))
-        {
-            if (vSeg?.BackupUrls is not null)
-            {
-                string[] videoUrls = [vSeg?.BaseUrl, .. vSeg?.BackupUrls];
-                videoUrl = Array.Find(videoUrls, p => !AppToolkit.IsP2PUrl(p)) ?? vSeg?.BaseUrl;
-            }
-
-            if (aSeg?.BackupUrls is not null)
-            {
-                string[] audioUrls = [aSeg?.BaseUrl, .. aSeg?.BackupUrls];
-                audioUrl = Array.Find(audioUrls, p => !AppToolkit.IsP2PUrl(p)) ?? aSeg?.BaseUrl;
-            }
-        }
-
-        return (videoUrl, audioUrl);
+        // Each stream is read from the first usable address among its main and backup URLs.
+        var urls = SelectStreams(vSeg, aSeg, selectedFormat.Quality);
+        return urls;
     }
 
     private AudioQualityInformation? GetSelectedAudioQuality()

@@ -158,7 +158,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     private async Task InitializeMediaAsync(MediaSnapshot snapshot)
     {
         CheckMediaAdmission();
+        ResetNetworkFailover();
         await SuspendPlaybackDiagnosticsAsync();
+        await SuspendNetworkMonitorAsync();
         CheckMediaAdmission();
         _snapshot = snapshot;
         ResetCommandDanmakuMedia();

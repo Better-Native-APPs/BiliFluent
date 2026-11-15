@@ -39,4 +39,21 @@ public sealed class MpvCacheStateEventArgs(List<MpvSeekableRange> ranges) : Even
     /// file-cache-bytes 是文件缓存中存储的字节数.
     /// </summary>
     public long FileCacheBytes { get; set; }
+
+    /// <summary>
+    /// raw-input-rate is the estimated rate at which the stream is read, in bytes per second.
+    /// </summary>
+    public long RawInputRate { get; set; }
+
+    /// <summary>
+    /// Seconds of video buffered ahead, from ts-per-stream; null when mpv does not report it.
+    /// </summary>
+    public double? VideoCacheSeconds { get; set; }
+
+    /// <summary>
+    /// Seconds of audio buffered ahead, from ts-per-stream; null when mpv does not report it.
+    /// mpv only reports the streams of the main file, so an audio stream that was added as an
+    /// external file (audio-file) is never listed.
+    /// </summary>
+    public double? AudioCacheSeconds { get; set; }
 }

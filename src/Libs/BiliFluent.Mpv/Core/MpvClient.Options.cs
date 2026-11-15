@@ -190,6 +190,28 @@ public sealed partial class MpvClient
     }
 
     /// <summary>
+    /// Pauses playback when the cache runs dry and resumes once <paramref name="waitSeconds"/> of
+    /// media are buffered again (cache-pause, cache-pause-wait). Starting and seeking stay immediate,
+    /// because cache-pause-initial is left alone.
+    /// </summary>
+    /// <param name="waitSeconds">Seconds of media to buffer before playback resumes.</param>
+    /// <returns><see cref="Task"/>.</returns>
+    public async Task SetCachePauseWaitAsync(double waitSeconds)
+    {
+        if (!double.IsFinite(waitSeconds) || waitSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(waitSeconds), "Seconds must not be negative.");
+        }
+
+        var errorCode = MpvError.Success;
+        await Task.Run(() => errorCode = _handle.SetOptionString("cache-pause", "yes"));
+        ThrowIfFailed(errorCode, "Mpv | set cache-pause failed");
+        var wait = waitSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        await Task.Run(() => errorCode = _handle.SetOptionString("cache-pause-wait", wait));
+        ThrowIfFailed(errorCode, "Mpv | set cache-pause-wait failed");
+    }
+
+    /// <summary>
     /// 设置内置配置文件.
     /// </summary>
     public async Task SetBuiltInProfileAsync(string? profileName)

@@ -213,8 +213,9 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 throw new InvalidOperationException("必须先初始化媒体信息.");
             }
 
-            if (_initTask is null)
+            if (_initTask is null || _initTask.IsFaulted || _initTask.IsCanceled)
             {
+                // A failed request is not kept: the next source asks again, as a reload does.
                 _initTask = LoadMediaInfoCoreAsync(_snapshot, _part, GetRequestedLanguage(_snapshot.PreferAudioLanguageId), request);
             }
 
@@ -293,25 +294,9 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         var aSeg = GetSelectedAudioQuality()?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
-        var videoUrl = vSeg?.BaseUrl;
-        var audioUrl = aSeg?.BaseUrl;
-
-        if (SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false))
-        {
-            if (vSeg?.BackupUrls is not null)
-            {
-                string[] videoUrls = [vSeg?.BaseUrl, .. vSeg?.BackupUrls];
-                videoUrl = Array.Find(videoUrls, p => !AppToolkit.IsP2PUrl(p)) ?? vSeg?.BaseUrl;
-            }
-
-            if (aSeg?.BackupUrls is not null)
-            {
-                string[] audioUrls = [aSeg?.BaseUrl, .. aSeg?.BackupUrls];
-                audioUrl = Array.Find(audioUrls, p => !AppToolkit.IsP2PUrl(p)) ?? aSeg?.BaseUrl;
-            }
-        }
-
-        return (videoUrl, audioUrl);
+        // Each stream is read from the first usable address among its main and backup URLs.
+        var urls = SelectStreams(vSeg, aSeg, selectedFormat.Quality);
+        return urls;
     }
 
     // The language code to request with cur_language; the original audio is requested without one.

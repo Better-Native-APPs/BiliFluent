@@ -82,7 +82,10 @@ public sealed partial class MpvClient
 
             if (options.StartPosition != null)
             {
-                commandOptions.Add($"start={Math.Round(options.StartPosition.Value)}");
+                // mpv reads start as a relative time, so fractions of a second are valid. A culture with
+                // a decimal comma would split the option list, hence the invariant format.
+                var start = Math.Max(0, options.StartPosition.Value).ToString("0.###", CultureInfo.InvariantCulture);
+                commandOptions.Add($"start={start}");
             }
 
             if (options.InitialVolume != null)
@@ -92,7 +95,7 @@ public sealed partial class MpvClient
 
             if (options.InitialSpeed != null)
             {
-                commandOptions.Add($"speed={Math.Round(options.InitialSpeed.Value, 2)}");
+                commandOptions.Add($"speed={Math.Round(options.InitialSpeed.Value, 2).ToString(CultureInfo.InvariantCulture)}");
             }
 
             //if (!string.IsNullOrEmpty(options.MediaName))

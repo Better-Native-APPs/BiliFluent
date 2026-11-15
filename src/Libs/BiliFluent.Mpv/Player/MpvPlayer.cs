@@ -187,8 +187,11 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// <summary>
     /// 重新播放当前媒体.
     /// </summary>
-    /// <returns><see cref="Task"/>.</returns>
-    public async Task ReplayAsync(double? preferPosition = null)
+    /// <param name="preferPosition">Position to start from, in seconds.</param>
+    /// <param name="resume">Whether to resume playback after loading; <c>false</c> keeps the user's pause.</param>
+    /// <param name="speed">Playback speed to load with, instead of the one the source asks for.</param>
+    /// <returns>Whether the media was handed to mpv; <c>false</c> when no source could be served or loaded.</returns>
+    public async Task<bool> ReplayAsync(double? preferPosition = null, bool resume = true, double? speed = null)
     {
         try
         {
@@ -203,15 +206,25 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
                 _cachedSource.Options?.StartPosition = preferPosition.Value;
             }
 
+            if (speed is > 0)
+            {
+                _cachedSource.Options?.InitialSpeed = speed.Value;
+            }
+
             Title = _cachedSource.Title;
             await Client.PlayAsync(_cachedSource.Url, _cachedSource.Options);
-            await Client.ResumeAsync();
+            if (resume)
+            {
+                await Client.ResumeAsync();
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get media source.");
             Client.ThrowError(MpvError.VoInitFailed);
-            return;
+            return false;
         }
     }
 
