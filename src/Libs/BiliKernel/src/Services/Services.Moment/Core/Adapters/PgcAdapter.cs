@@ -43,6 +43,7 @@ internal static class PgcAdapter
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.Aid, aid);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.SeasonId, ssid);
         info.AddExtensionIfNotNull(EpisodeExtensionDataId.IsPreview, isPv);
+        info.AddExtensionIfNotNull(EpisodeExtensionDataId.WatchProgress, archive.ToWatchProgress());
         return info;
     }
 }

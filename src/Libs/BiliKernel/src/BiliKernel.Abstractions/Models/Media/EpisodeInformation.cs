@@ -114,4 +114,9 @@ public static class EpisodeExtensionDataId
     /// 比例.
     /// </summary>
     public const string AspectRatio = "AspectRatio";
+
+    /// <summary>
+    /// Watch progress reported with a dynamic card. <see cref="VideoWatchProgress"/>.
+    /// </summary>
+    public const string WatchProgress = "WatchProgress";
 }

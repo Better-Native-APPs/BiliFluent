@@ -39,6 +39,13 @@ internal static class VideoAdapter
         var info = new VideoInformation(identifier, default, duration, bvid, communityInformation: communityInfo);
         info.AddExtensionIfNotNull(VideoExtensionDataId.Cid, archive.Cid);
         info.AddExtensionIfNotNull(VideoExtensionDataId.MediaType, Models.MediaType.Video);
+        info.AddExtensionIfNotNull(VideoExtensionDataId.WatchProgress, archive.ToWatchProgress());
         return info;
     }
+
+    /// <summary>
+    /// Reads the watch progress the server sends with an archive card. Shared by the video and the PGC adapters.
+    /// </summary>
+    public static VideoWatchProgress? ToWatchProgress(this MdlDynArchive archive)
+        => VideoWatchProgress.FromPartProgress(archive.ShowProgress, archive.PartProgress, archive.PartDuration, archive.Duration);
 }
