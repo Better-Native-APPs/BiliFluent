@@ -8,8 +8,9 @@ namespace BiliCopilot.UI.ViewModels.Items;
 
 /// <summary>
 /// What a dynamic card shows on its cover for a video the account has already watched.
+/// Two marks with the same content are equal, so setting an unchanged mark again does not refresh the card.
 /// </summary>
-public sealed class WatchMark
+public sealed record WatchMark
 {
     /// <summary>
     /// Keeps a few watched seconds of a long video visible on the cover bar.
@@ -39,18 +40,9 @@ public sealed class WatchMark
     public string Text { get; }
 
     /// <summary>
-    /// Creates the mark for a video, or <see langword="null"/> when it has not been watched.
+    /// Creates the mark for a watch progress, or <see langword="null"/> when there is none.
     /// </summary>
-    public static WatchMark? Create(VideoInformation? video)
-        => Create(video?.GetExtensionIfNotNull<VideoWatchProgress>(VideoExtensionDataId.WatchProgress));
-
-    /// <summary>
-    /// Creates the mark for an episode, or <see langword="null"/> when it has not been watched.
-    /// </summary>
-    public static WatchMark? Create(EpisodeInformation? episode)
-        => Create(episode?.GetExtensionIfNotNull<VideoWatchProgress>(EpisodeExtensionDataId.WatchProgress));
-
-    private static WatchMark? Create(VideoWatchProgress? progress)
+    public static WatchMark? Create(VideoWatchProgress? progress)
     {
         if (progress is null)
         {

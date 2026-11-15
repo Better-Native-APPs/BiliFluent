@@ -74,6 +74,7 @@ internal static class GlobalDependencies
             .AddSingleton<NavigationViewModel>()
             .AddSingleton<StartupPageViewModel>()
             .AddSingleton<AccountViewModel>()
+            .AddSingleton<BiliCopilot.UI.Services.WatchRecords.WatchRecordIndex>()
             .AddSingleton<SearchBoxViewModel>()
             .AddSingleton<PopularPageViewModel>()
             .AddSingleton<MomentPageViewModel>()

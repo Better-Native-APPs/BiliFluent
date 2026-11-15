@@ -1,5 +1,6 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using BiliCopilot.UI.ViewModels.View;
@@ -91,14 +92,18 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
                 _preventLoadMore = view.HasMoreMoments != true;
                 IsPrefetchExhausted = _preventLoadMore;
                 var ids = Items.Select(item => item.Data.Id).ToHashSet(StringComparer.Ordinal);
+                var added = new List<MomentItemViewModel>();
                 foreach (var item in view.Moments)
                 {
                     if (token.IsCancellationRequested || generation != _account.AccountGeneration) return;
                     if (!ids.Add(item.Id)) continue;
-                    Items.Add(new MomentItemViewModel(item, Models.Constants.MomentCardStyle.Video, ShowComment, showWatchMark: true));
+                    var row = new MomentItemViewModel(item, Models.Constants.MomentCardStyle.Video, ShowComment, showWatchMark: true);
+                    Items.Add(row);
+                    added.Add(row);
                 }
 
                 if (token.IsCancellationRequested || generation != _account.AccountGeneration) return;
+                MomentItemViewModel.TrackFeedLoad(this.Get<WatchRecordIndex>(), added, first);
                 if (first) SaveLastTenMomentIds();
                 ListUpdated?.Invoke(this, EventArgs.Empty);
             }

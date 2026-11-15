@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Pages.Overlay;
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
@@ -48,6 +49,7 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         Description = data.Description;
         NoData = data.Data is null;
         Style = style;
+        _showWatchMark = showWatchMark;
 
         if (!NoData)
         {
@@ -57,11 +59,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
             }
             else if (data.Data is VideoInformation video)
             {
-                InnerContent = new VideoItemViewModel(video, VideoCardStyle.Moment) { WatchMark = showWatchMark ? WatchMark.Create(video) : null };
+                InnerContent = new VideoItemViewModel(video, VideoCardStyle.Moment);
             }
             else if (data.Data is EpisodeInformation episode)
             {
-                InnerContent = new EpisodeItemViewModel(episode, EpisodeCardStyle.Moment) { WatchMark = showWatchMark ? WatchMark.Create(episode) : null };
+                InnerContent = new EpisodeItemViewModel(episode, EpisodeCardStyle.Moment);
             }
             else if (data.Data is IEnumerable<BiliImage> images)
             {
@@ -73,7 +75,6 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoTitle = vinfo.Identifier.Title ?? ResourceToolkit.GetLocalizedString(StringNames.NoTitleVideo);
                 VideoCover = vinfo.Identifier.Cover.Uri;
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(vinfo.Duration!.Value));
-                WatchMark = showWatchMark ? WatchMark.Create(vinfo) : null;
             }
             else if (FindInnerContent<EpisodeInformation>() is EpisodeInformation einfo)
             {
@@ -81,7 +82,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoTitle = einfo.Identifier.Title;
                 VideoCover = einfo.Identifier.Cover.Uri;
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(einfo.Duration!.Value));
-                WatchMark = showWatchMark ? WatchMark.Create(einfo) : null;
+            }
+
+            if (showWatchMark)
+            {
+                RefreshWatchMark(this.Get<WatchRecordIndex>());
             }
         }
     }
