@@ -229,6 +229,14 @@
                 <RowDefinition Height="60" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
+            <!--
+                互动弹幕卡片层：铺满整个播放区域，由面板自身按服务端坐标把卡片放进画面内，并避开标题区、
+                控制栏与空降助手提示条；面板没有背景，卡片以外的区域不拦截播放器手势.
+            -->
+            <danmaku:CommandDanmakuPanel
+                x:Name="CommandDanmakuLayer"
+                Grid.RowSpan="2"
+                Visibility="Collapsed" />
             <Grid x:Name="TransportLayer" Grid.Row="1">
                 <local:OverlayTransportControls
                     x:Name="TransportControls"
