@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Extensions;
+using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.Extensions.Logging;
 using Richasy.MpvKernel;
@@ -246,6 +247,12 @@ public sealed class IslandPlaybackBackend : IClassicPlaybackBackend
             await client.SetHardwareDecodeAsync(decode).ConfigureAwait(false);
             await client.ConfigureHdrOutputAsync().ConfigureAwait(false);
             Check(await client.UseKeepOpenAsync(true).ConfigureAwait(false), "Island keep-open configuration failed.");
+            if (media.Live is null)
+            {
+                // Video on demand refills the cache before resuming, like the main player.
+                // A live stream keeps the mpv default, so it stays close to real time.
+                await client.SetCachePauseWaitAsync(PlaybackNetworkPolicy.CachePauseWaitSeconds).ConfigureAwait(false);
+            }
             EnsureCurrent(generation, cancellationToken);
             failureStage = FailureStage.IslandPlay;
             await client.PlayAsync(uri.AbsoluteUri, new MpvPlayOptions
