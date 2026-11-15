@@ -4,6 +4,8 @@ using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Hosting;
@@ -18,7 +20,7 @@ namespace BiliCopilot.UI.Controls.Danmaku;
 
 /// <summary>
 /// One interactive danmaku card shown over the video: an uploader message, a related video,
-/// a follow / like / coin prompt, a poll result or a star rating, depending on the item's kind.
+/// a follow / like / coin prompt, a poll or a star rating, depending on the item's kind.
 /// </summary>
 public sealed partial class InteractiveDanmakuCard : UserControl
 {
@@ -34,6 +36,15 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     private int _shownSeconds = -1;
     private bool _isRatingSynchronizing;
     private bool _isLoaded;
+    private CommandDanmakuVoteRow[]? _voteRows;
+    private CommandDanmakuVoteRow? _pendingVoteRow;
+    private Button? _pendingVoteButton;
+    private FocusState _pendingVoteFocus;
+    private bool _wasVoteSubmitting;
+    private Rect? _arrangedSlot;
+    private bool _glideRequested;
+    private bool _glidedInArrange;
+    private int _resizeVersion;
 
     /// <summary>Initializes a new instance of the <see cref="InteractiveDanmakuCard"/> class.</summary>
     public InteractiveDanmakuCard()
@@ -70,7 +81,19 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     internal Rect? Slot { get; set; }
 
     /// <summary>Gets or sets the rectangle used by the last arrange pass.</summary>
-    internal Rect? ArrangedSlot { get; set; }
+    internal Rect? ArrangedSlot
+    {
+        get => _arrangedSlot;
+        set
+        {
+            _arrangedSlot = value;
+
+            // The panel asks for a glide before it arranges a card it may animate. No request in this
+            // pass (first layout, window resize, reduced motion) means the card must not animate either.
+            _glidedInArrange = _glideRequested;
+            _glideRequested = false;
+        }
+    }
 
     /// <summary>Gets or sets the height last measured while the card was visible.</summary>
     internal double MeasuredHeight { get; set; }
@@ -131,6 +154,7 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     /// </summary>
     internal void GlideFrom(double offsetX, double offsetY)
     {
+        _glideRequested = true;
         if (Math.Abs(offsetX) < 1 && Math.Abs(offsetY) < 1) return;
         var compositor = ElementCompositionPreview.GetElementVisual(CardRoot).Compositor;
         var move = compositor.CreateVector3KeyFrameAnimation();
@@ -161,6 +185,7 @@ public sealed partial class InteractiveDanmakuCard : UserControl
         UpdateRemaining();
         UpdateAttention();
         UpdateGrade(announce: false);
+        UpdateVote(announce: false);
 
         // Tell a screen reader that something appeared, without moving focus away from the player.
         if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
@@ -178,11 +203,21 @@ public sealed partial class InteractiveDanmakuCard : UserControl
 
     private void Observe(CommandDanmakuItemViewModel? viewModel)
     {
-        if (_observed is not null) _observed.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_observed is not null)
+        {
+            _observed.PropertyChanged -= OnViewModelPropertyChanged;
+            foreach (var option in _observed.VoteOptions) option.PropertyChanged -= OnVoteOptionPropertyChanged;
+        }
+
         if (_observedConnector is not null) _observedConnector.PropertyChanged -= OnConnectorPropertyChanged;
         _observed = viewModel;
         _observedConnector = viewModel?.AttentionConnector;
-        if (_observed is not null) _observed.PropertyChanged += OnViewModelPropertyChanged;
+        if (_observed is not null)
+        {
+            _observed.PropertyChanged += OnViewModelPropertyChanged;
+            foreach (var option in _observed.VoteOptions) option.PropertyChanged += OnVoteOptionPropertyChanged;
+        }
+
         if (_observedConnector is not null) _observedConnector.PropertyChanged += OnConnectorPropertyChanged;
     }
 
@@ -318,28 +353,71 @@ public sealed partial class InteractiveDanmakuCard : UserControl
         var options = vm.VoteOptions;
         if (options.Count == 0) return;
         _ = FindName(nameof(VoteSection));
-        long total = 0;
-        foreach (var option in options) total += Math.Max(0, option.Count ?? 0);
-
         var rows = new CommandDanmakuVoteRow[options.Count];
-        for (var index = 0; index < rows.Length; index++)
+        for (var index = 0; index < rows.Length; index++) rows[index] = new CommandDanmakuVoteRow(options[index]);
+        _voteRows = rows;
+        VoteList.ItemsSource = rows;
+        AutomationProperties.SetName(VoteScroller, KindLabel.Text);
+        UpdateVote(announce: false);
+    }
+
+    private void UpdateVote(bool announce)
+    {
+        if (VoteSection is null || _voteRows is not { } rows || _viewModel is not { Kind: CommandDanmakuKind.Vote } vm) return;
+
+        // Options are offered while a vote can still be cast. Once it is cast, or when this poll cannot
+        // take a vote at all (no id, or the server did not say whether the user voted), results are shown.
+        var choosing = !vm.IsSubmitted && !string.IsNullOrEmpty(vm.VoteId) && vm.MyVote == 0;
+        var canChoose = choosing && vm.CanSubmit;
+        long total = 0;
+        foreach (var option in vm.VoteOptions) total += Math.Max(0, option.Count ?? 0);
+        foreach (var row in rows)
         {
-            var option = options[index];
+            var option = row.Option;
             var count = Math.Max(0, option.Count ?? 0);
             var percent = total > 0 ? Math.Round(count * 100d / total) : 0;
             var countText = count.ToString("N0", CultureInfo.CurrentCulture);
-            rows[index] = new CommandDanmakuVoteRow(
-                option.Text,
-                option.Count.HasValue ? Format(StringNames.CommandDanmakuVoteStatsTemplate, countText, percent) : string.Empty,
-                percent,
-                option.IsSelected,
-                Format(option.IsSelected ? StringNames.CommandDanmakuVoteOptionSelectedNameTemplate
-                    : StringNames.CommandDanmakuVoteOptionNameTemplate, option.Text, countText, percent));
+            row.Stats = option.Count.HasValue ? Format(StringNames.CommandDanmakuVoteStatsTemplate, countText, percent) : string.Empty;
+            row.Percent = percent;
+            row.IsSelected = option.IsSelected;
+            row.AutomationName = Format(option.IsSelected ? StringNames.CommandDanmakuVoteOptionSelectedNameTemplate
+                : StringNames.CommandDanmakuVoteOptionNameTemplate, option.Text, countText, percent);
+            row.IsPending = vm.IsSubmitting && ReferenceEquals(row, _pendingVoteRow);
+            row.CanChoose = canChoose && option.Index is > 0;
+            row.IsChoice = choosing;
         }
 
-        VoteList.ItemsSource = rows;
-        VoteSummary.Text = Format(StringNames.CommandDanmakuVoteSummaryTemplate, total.ToString("N0", CultureInfo.CurrentCulture));
-        AutomationProperties.SetName(VoteScroller, KindLabel.Text);
+        if (_wasVoteSubmitting && !vm.IsSubmitting)
+        {
+            // Sending is over. If it did not go through, give keyboard focus back to the option that was
+            // picked, so Enter tries again; after a successful vote focus stays on the results.
+            if (choosing && _pendingVoteButton is { } button && VoteScroller.FocusState != FocusState.Unfocused)
+                button.Focus(_pendingVoteFocus == FocusState.Unfocused ? FocusState.Programmatic : _pendingVoteFocus);
+            _pendingVoteRow = null;
+            _pendingVoteButton = null;
+        }
+
+        _wasVoteSubmitting = vm.IsSubmitting;
+
+        // The list itself takes focus only when its rows cannot: while sending and when showing results.
+        VoteScroller.IsTabStop = !choosing || vm.IsSubmitting;
+
+        // "Sending" stays until the vote has fully settled, so the total is announced once, with the new vote in it.
+        var failed = choosing && vm.HasSubmissionFailed;
+        var status = vm.IsSubmitting
+            ? Text(StringNames.CommandDanmakuVoteSubmitting)
+            : !choosing
+                ? (total > 0 ? Format(StringNames.CommandDanmakuVoteSummaryTemplate, total.ToString("N0", CultureInfo.CurrentCulture)) : string.Empty)
+                : failed
+                    ? Text(vm.VoteSubmissionFailure == CommandDanmakuVoteFailure.SignInRequired
+                        ? StringNames.CommandDanmakuVoteSignInRequired : StringNames.CommandDanmakuVoteFailed)
+                    : Text(StringNames.CommandDanmakuVoteHint);
+        var changed = VoteStatusText.Text != status;
+        VoteStatusText.Text = status;
+        VoteStatus.Visibility = status.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        VoteFailedIcon.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
+        if (announce && changed && status.Length > 0)
+            FrameworkElementAutomationPeer.FromElement(VoteStatusText)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     private void BuildGrade(CommandDanmakuItemViewModel vm)
@@ -432,6 +510,24 @@ public sealed partial class InteractiveDanmakuCard : UserControl
         {
             UpdateGrade(announce: true);
         }
+
+        if (name is null or "" or nameof(CommandDanmakuItemViewModel.VoteState) or nameof(CommandDanmakuItemViewModel.VoteSubmissionFailure)
+            or nameof(CommandDanmakuItemViewModel.MyVote) or nameof(CommandDanmakuItemViewModel.CanSubmit))
+        {
+            UpdateVote(announce: true);
+        }
+    }
+
+    private void OnVoteOptionPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // A count or the user's choice changed: after a vote, and again when fresh counts arrive.
+        if (DispatcherQueue.HasThreadAccess) ApplyVoteOptionChange();
+        else DispatcherQueue.TryEnqueue(ApplyVoteOptionChange);
+    }
+
+    private void ApplyVoteOptionChange()
+    {
+        if (_observed is { IsActive: true }) UpdateVote(announce: false);
     }
 
     private void OnConnectorPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -479,6 +575,78 @@ public sealed partial class InteractiveDanmakuCard : UserControl
         if (_viewModel is { } vm && stars > 0 && vm.SubmitGradeCommand.CanExecute(stars)) vm.SubmitGradeCommand.Execute(stars);
     }
 
+    private void OnVoteOptionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: CommandDanmakuVoteRow row } button || _viewModel is not { } vm
+            || !vm.SubmitVoteCommand.CanExecute(row.Option)) return;
+
+        // Every option is about to be disabled. Park focus on the list first so it is not thrown out of
+        // the card, and remember the option so its progress ring shows and focus can return on failure.
+        _pendingVoteRow = row;
+        _pendingVoteButton = button;
+        _pendingVoteFocus = button.FocusState;
+        if (button.FocusState != FocusState.Unfocused)
+        {
+            VoteScroller.IsTabStop = true;
+            VoteScroller.Focus(button.FocusState);
+        }
+
+        vm.SubmitVoteCommand.Execute(row.Option);
+    }
+
+    /// <summary>
+    /// The card became taller or shorter (a poll turning into results, a status line appearing).
+    /// Layout has already jumped to the final size and place; only the picture catches up: the surface
+    /// stretches from its old height while the content is uncovered with it. Together with the glide the
+    /// panel started in the same pass, the visible card moves straight from its old rectangle to the new
+    /// one and never reaches outside either of them.
+    /// </summary>
+    private void OnCardSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var from = e.PreviousSize.Height;
+        var to = e.NewSize.Height;
+        if (!_glidedInArrange || !(from > 0) || !(to > 0) || Math.Abs(to - from) < 1
+            || e.PreviousSize.Width != e.NewSize.Width) return;
+
+        var content = ElementCompositionPreview.GetElementVisual(CardContent);
+        var compositor = content.Compositor;
+        var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f));
+        var duration = TimeSpan.FromMilliseconds(MoveMilliseconds);
+        var version = ++_resizeVersion;
+        var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+
+        var stretch = compositor.CreateVector3KeyFrameAnimation();
+        stretch.Target = "Scale";
+        stretch.Duration = duration;
+        stretch.InsertKeyFrame(0f, new Vector3(1f, (float)(from / to), 1f));
+        stretch.InsertKeyFrame(1f, Vector3.One, easing);
+        CardSurface.Scale = Vector3.One;
+        CardSurface.StartAnimation(stretch);
+
+        if (to > from)
+        {
+            // Growing: keep what lies below the old height covered until the surface gets there.
+            var clip = compositor.CreateInsetClip();
+            var uncover = compositor.CreateScalarKeyFrameAnimation();
+            uncover.Duration = duration;
+            uncover.InsertKeyFrame(0f, (float)(to - from));
+            uncover.InsertKeyFrame(1f, 0f, easing);
+            content.Clip = clip;
+            clip.StartAnimation("BottomInset", uncover);
+        }
+        else
+        {
+            content.Clip = null;
+        }
+
+        batch.End();
+        batch.Completed += (_, _) =>
+        {
+            // Only the latest change may clean up; an older one must not uncover a newer animation.
+            if (version == _resizeVersion) content.Clip = null;
+        };
+    }
+
     // A press, tap or double tap on the card belongs to the card: the player must not pause,
     // open its menu or toggle full screen because of it.
     private void OnCardPointerHandled(object sender, PointerRoutedEventArgs e) => e.Handled = true;
@@ -492,32 +660,79 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     private void OnCardHolding(object sender, HoldingRoutedEventArgs e) => e.Handled = true;
 }
 
-/// <summary>One option of a poll, prepared for display.</summary>
-public sealed partial class CommandDanmakuVoteRow
+/// <summary>One option of a poll as the card shows it: a button to vote with, or its result.</summary>
+public sealed partial class CommandDanmakuVoteRow : ObservableObject
 {
-    internal CommandDanmakuVoteRow(string text, string stats, double percent, bool isSelected, string automationName)
-    {
-        Text = text;
-        Stats = stats;
-        Percent = percent;
-        IsSelected = isSelected;
-        AutomationName = automationName;
-    }
+    private bool _isChoice;
+    private bool _canChoose;
+    private bool _isPending;
+    private bool _isSelected;
+    private double _percent;
+    private string _stats = string.Empty;
+    private string _automationName = string.Empty;
+
+    internal CommandDanmakuVoteRow(CommandDanmakuVoteOptionViewModel option) => Option = option;
 
     /// <summary>Gets the option text as sent by the server.</summary>
-    public string Text { get; }
+    public string Text => Option.Text;
 
-    /// <summary>Gets the vote count and share, ready to show.</summary>
-    public string Stats { get; }
+    /// <summary>Gets or sets a value indicating whether the row is a button to vote with.</summary>
+    public bool IsChoice
+    {
+        get => _isChoice;
+        set
+        {
+            if (SetProperty(ref _isChoice, value)) OnPropertyChanged(nameof(IsResult));
+        }
+    }
 
-    /// <summary>Gets the share of all votes, 0-100.</summary>
-    public double Percent { get; }
+    /// <summary>Gets a value indicating whether the row shows the result of the option.</summary>
+    public bool IsResult => !_isChoice;
 
-    /// <summary>Gets a value indicating whether this is the option the signed-in user chose.</summary>
-    public bool IsSelected { get; }
+    /// <summary>Gets or sets a value indicating whether the option can be picked right now.</summary>
+    public bool CanChoose
+    {
+        get => _canChoose;
+        set => SetProperty(ref _canChoose, value);
+    }
 
-    /// <summary>Gets the sentence a screen reader says for this option.</summary>
-    public string AutomationName { get; }
+    /// <summary>Gets or sets a value indicating whether a vote for this option is being sent.</summary>
+    public bool IsPending
+    {
+        get => _isPending;
+        set => SetProperty(ref _isPending, value);
+    }
+
+    /// <summary>Gets or sets the vote count and share, ready to show.</summary>
+    public string Stats
+    {
+        get => _stats;
+        set => SetProperty(ref _stats, value);
+    }
+
+    /// <summary>Gets or sets the share of all votes, 0-100.</summary>
+    public double Percent
+    {
+        get => _percent;
+        set => SetProperty(ref _percent, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether this is the option the signed-in user chose.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    /// <summary>Gets or sets the sentence a screen reader says for the result of this option.</summary>
+    public string AutomationName
+    {
+        get => _automationName;
+        set => SetProperty(ref _automationName, value);
+    }
+
+    /// <summary>Gets the option this row stands for; the object the vote command expects.</summary>
+    internal CommandDanmakuVoteOptionViewModel Option { get; }
 }
 
 /// <summary>Presents a card to assistive technology as one named group.</summary>
