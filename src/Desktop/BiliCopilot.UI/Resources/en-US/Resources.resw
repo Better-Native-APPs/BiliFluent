@@ -87,4 +87,16 @@
   <data name="DanmakuCopyFailed" xml:space="preserve">
     <value>Couldn't copy. Try again.</value>
   </data>
+  <data name="PlaybackStutterDiagnostics" xml:space="preserve">
+    <value>Playback stutter diagnostics</value>
+  </data>
+  <data name="PlaybackStutterDiagnosticsDescription" xml:space="preserve">
+    <value>Log frame drops, cache state, and UI heartbeats every second, without video or user information.</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnostics" xml:space="preserve">
+    <value>Disable mpv's libcurl network backend (comparison)</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnosticsDescription" xml:space="preserve">
+    <value>Compare network buffering; takes effect when the player is reopened.</value>
+  </data>
 </root>

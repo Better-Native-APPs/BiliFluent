@@ -209,6 +209,12 @@ public sealed partial class SettingsPageViewModel
     public partial MpvLogLevel LogLevel { get; set; }
 
     [ObservableProperty]
+    public partial bool PlaybackStutterDiagnosticsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool DisableMpvCurlForDiagnostics { get; set; }
+
+    [ObservableProperty]
     public partial bool HideMainWindowOnPlay { get; set; }
 
     [ObservableProperty]

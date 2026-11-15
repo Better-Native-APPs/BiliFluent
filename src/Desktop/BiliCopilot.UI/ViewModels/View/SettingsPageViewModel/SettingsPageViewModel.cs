@@ -38,6 +38,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         AppTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
         CheckTheme();
         LogLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+        PlaybackStutterDiagnosticsEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false);
+        DisableMpvCurlForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false);
         HideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
         IsTopNavShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
         IsAutoPlayNextRecommendVideo = SettingsToolkit.ReadLocalSetting(SettingNames.AutoPlayNextRecommendVideo, false);
@@ -326,6 +328,18 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnLogLevelChanged(MpvLogLevel value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MpvLogLevel, value);
+
+    partial void OnPlaybackStutterDiagnosticsEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, value);
+        foreach (var player in this.Get<AppViewModel>().Players)
+        {
+            player.RefreshPlaybackDiagnostics();
+        }
+    }
+
+    partial void OnDisableMpvCurlForDiagnosticsChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, value);
 
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);
