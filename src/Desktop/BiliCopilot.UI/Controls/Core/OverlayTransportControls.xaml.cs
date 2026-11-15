@@ -199,8 +199,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         // Kernel property notifications can arrive off the UI thread. State/seek changes bypass pixel filtering.
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (ReferenceEquals(sender, _subscribedPlayer) && CaptureInput() is { } owner)
-                SynchronizeProgress(owner.ViewModel.Player.Position, true);
+            if (ReferenceEquals(sender, _subscribedPlayer) && CaptureDisplay() is { } owner)
+                SynchronizeProgress(owner.Player.Position, true);
         });
     }
 
@@ -208,8 +208,16 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     {
         if (!_loaded) return;
         if (Visibility != Visibility.Visible || Opacity <= 0) CancelPendingInput();
-        else if (CaptureInput() is { } owner) SynchronizeProgress(owner.ViewModel.Player.Position, true);
+        else if (CaptureDisplay() is { } owner) SynchronizeProgress(owner.Player.Position, true);
     }
+
+    // What the progress bar shows follows playback whenever the bar is on screen. Unlike input, that does
+    // not need the control to be active: a window that lost activation still shows the bar.
+    private PlayerViewModel? CaptureDisplay()
+        => _loaded && !_cancelingInput && ViewModel is { } vm
+            && ReferenceEquals(vm, _subscribedViewModel) && !vm.IsPlaybackClosing
+            && !vm.IsConnecting && vm.Player?.IsPlaybackInitialized == true
+            ? vm : null;
 
     private InputOwner? CaptureInput()
         => _loaded && IsActive && !_cancelingInput && ViewModel is { } vm
@@ -224,7 +232,14 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void SynchronizeControls()
     {
         IsEnabled = CaptureInput().HasValue;
-        if (!_loaded || !IsActive) return;
+        if (!_loaded) return;
+        if (!IsActive)
+        {
+            // Nothing takes input, but a bar that is still on screen keeps showing the position.
+            if (CaptureDisplay() is { } display) SynchronizeProgress(display.Player.Position, true);
+            return;
+        }
+
         _synchronizingSliders = true;
         try
         {
@@ -315,8 +330,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnContactEnded(object sender, PointerRoutedEventArgs args)
     {
         _contacts.Remove(args.Pointer.PointerId);
-        if (_progressContacts.Remove(args.Pointer.PointerId) && CaptureInput() is { } owner)
-            SynchronizeProgress(owner.ViewModel.Player.Position, true);
+        if (_progressContacts.Remove(args.Pointer.PointerId) && CaptureDisplay() is { } owner)
+            SynchronizeProgress(owner.Player.Position, true);
         UpdateInteractionState();
     }
 
@@ -383,7 +398,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (!IsActive || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        // Shown is enough; active is not needed. An inactive window keeps its bar moving.
+        if (!_loaded || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
             || ViewModel?.IsControlsVisible != true || !ReferenceEquals(sender, _subscribedViewModel)) return;
         var seekedBackwards = e < _lastProgressPosition;
         _lastProgressPosition = e;
@@ -392,9 +408,10 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void SynchronizeProgress(double position, bool force)
     {
-        if (CaptureInput() is not { } owner || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        // A drag or a pending seek owns the slider; nothing is written back over it.
+        if (CaptureDisplay() is not { } owner || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
             || _pendingProgressOwner.HasValue || _progressContacts.Count > 0 || !double.IsFinite(position)) return;
-        var duration = owner.ViewModel.Player.Duration;
+        var duration = owner.Player.Duration;
         var durationChanged = ProgressSlider.Maximum != duration;
         var pixelStep = duration / Math.Max(1, ProgressSlider.ActualWidth);
         if (!force && !durationChanged && position > 0 && position < duration
