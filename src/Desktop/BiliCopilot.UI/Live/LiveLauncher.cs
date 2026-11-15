@@ -1,8 +1,6 @@
 #nullable enable
 
 using System.Runtime.InteropServices;
-using BiliCopilot.UI.Classic;
-using BiliCopilot.UI.Classic.Backends.Island;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Hosting;
 using BiliCopilot.UI.Live.Playback;
@@ -85,7 +83,7 @@ public sealed class LiveLauncher : IAsyncDisposable
     public bool HasWork => _opening is { IsCompleted: false } || _closeCurrent is { IsCompleted: false }
         || _current is { ReleaseConfirmed: false };
 
-    public Task<LiveWindow> OpenAsync(LiveInformation live, ClassicDecodePreference decode,
+    public Task<LiveWindow> OpenAsync(LiveInformation live, LiveDecodePreference decode,
         CancellationToken cancellationToken)
     {
         CheckUi();
@@ -99,7 +97,7 @@ public sealed class LiveLauncher : IAsyncDisposable
         return _opening;
     }
 
-    private async Task<LiveWindow> OpenCoreAsync(LiveInformation live, ClassicDecodePreference decode,
+    private async Task<LiveWindow> OpenCoreAsync(LiveInformation live, LiveDecodePreference decode,
         CancellationTokenSource opening)
     {
         await Task.Yield(); // Publish pending-open ownership before entering parent arbitration.
@@ -125,12 +123,10 @@ public sealed class LiveLauncher : IAsyncDisposable
             var vip = _account.MyProfile?.IsVip == true;
             // Set once the hosting window is known; the first resolve runs later, inside OpenAsync.
             var hdrDisplay = false;
-            var sources = new ClassicMediaSourceService(_player, _cookies,
-                new ClassicSourcePreferences(false, false, false),
+            var sources = new LiveMediaSourceService(_player, _cookies,
                 format => (!format.NeedLogin || loggedIn) && (!format.NeedVip || vip),
                 () => hdrDisplay);
-            var options = new ClassicSessionOptions(PlaybackExperience.Classic, ClassicBackendKind.Island,
-                ClassicDisplayMode.Default, decode, string.Empty, false, false);
+            var options = new LiveSessionOptions(decode);
             var architecture = RuntimeInformation.ProcessArchitecture switch
             {
                 Architecture.X64 => "x64",
@@ -152,7 +148,7 @@ public sealed class LiveLauncher : IAsyncDisposable
             failureStage = FailureStage.LiveNativeInitialize;
             created.InitializeNative();
             failureStage = FailureStage.LiveBackendCreate;
-            var backend = new IslandPlaybackBackend(created.Surface.RenderHwnd, library, options);
+            var backend = new LivePlaybackBackend(created.Surface.RenderHwnd, library, options);
             created.AdoptBackend(backend);
             failureStage = FailureStage.LiveChatCreate;
             var chat = _createChat(stamp); // Factory must retain/clean any internal partial allocation on throw.

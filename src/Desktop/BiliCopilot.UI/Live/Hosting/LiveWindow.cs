@@ -1,7 +1,6 @@
 #nullable enable
 
 using System.ComponentModel;
-using BiliCopilot.UI.Classic;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Controls;
 using BiliCopilot.UI.Live.Playback;
@@ -31,7 +30,7 @@ public sealed partial class LiveWindow : ILivePresentation, IAsyncDisposable
     #pragma warning restore CA2213
     private readonly object _closeSync = new();
     private LiveIslandSurface? _surface;
-    private IClassicPlaybackBackend? _backend;
+    private ILivePlaybackBackend? _backend;
     private ILiveChatClient? _chat;
     private LiveSession? _session;
     private LiveView? _view;
@@ -77,7 +76,7 @@ public sealed partial class LiveWindow : ILivePresentation, IAsyncDisposable
     }
 
     internal LiveIslandSurface Surface => _surface ?? throw new InvalidOperationException("Live surface is unavailable.");
-    internal void AdoptBackend(IClassicPlaybackBackend backend)
+    internal void AdoptBackend(ILivePlaybackBackend backend)
     {
         CheckUi();
         if (_backend is not null) throw new InvalidOperationException("Live backend adoption is unavailable.");

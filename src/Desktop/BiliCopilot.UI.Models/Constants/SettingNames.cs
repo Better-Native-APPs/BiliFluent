@@ -85,6 +85,7 @@ public enum SettingNames
     SelectedWebDavConfigId,
     LastMomentSectionIsVideo,
     LastUserSpaceSectionIsVideo,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ExternalPlayer,
     AppVersion = 87,
     BewlyExtensionVersion = 89,
@@ -93,6 +94,7 @@ public enum SettingNames
     IsGpuChecked,
     IsTopNavBarShown,
     MTCBehavior,
+    [Obsolete("Retired setting; live playback never opens the web player.")]
     UseWebPlayerWhenLive = 96,
     ShowSearchRecommend,
     ScrollAccelerate,
@@ -130,11 +132,17 @@ public enum SettingNames
     D3D11AdapterName,
     VulkanDeviceName,
     MaxBackCacheSize,
+    [Obsolete("Playback always uses the current player; this key is ignored.")]
     PlaybackExperience = 135,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerBackend = 136,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerDisplayMode = 137,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerDecodePreference = 138,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicExternalPlayerPath = 139,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicUseWebPlayerWhenLive = 140,
     DanmakuRendererMpvMigrated = 141,
     DanmakuDefaultFontMigrated = 142,

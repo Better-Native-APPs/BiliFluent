@@ -110,13 +110,7 @@ public sealed partial class SettingsPageViewModel
     private List<PreferDecodeType> _preferDecodeCollection;
 
     [ObservableProperty]
-    private List<ExternalPlayerType> _externalPlayerTypeCollection;
-
-    [ObservableProperty]
     private List<MTCBehavior> _mTCBehaviorCollection;
-
-    [ObservableProperty]
-    private bool _useWebPlayerWhenLive;
 
     [ObservableProperty]
     private bool _showSearchRecommend;

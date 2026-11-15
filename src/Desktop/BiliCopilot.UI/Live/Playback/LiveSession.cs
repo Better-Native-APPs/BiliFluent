@@ -3,7 +3,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
-using BiliCopilot.UI.Classic;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -20,8 +19,8 @@ namespace BiliCopilot.UI.Live.Playback;
 /// </summary>
 public sealed class LiveSession : ILiveSession
 {
-    private readonly IClassicPlaybackBackend _backend;
-    private readonly Func<ClassicPlaybackRequest, CancellationToken, Task<ClassicSourceResult>> _resolve;
+    private readonly ILivePlaybackBackend _backend;
+    private readonly Func<LivePlaybackRequest, CancellationToken, Task<LiveSourceResult>> _resolve;
     private readonly ILiveChatClient _chat;
     private readonly Func<LiveAccountStamp> _account;
     private readonly DispatcherQueue _dispatcher;
@@ -34,7 +33,7 @@ public sealed class LiveSession : ILiveSession
     private readonly object _closeSync = new();
     private readonly object _inboxSync = new();
     private readonly Queue<(Scope Scope, LiveChatMessage Message)> _inbox = new();
-    private (Scope Scope, ClassicBackendStatus Status)? _backendStatus;
+    private (Scope Scope, LiveBackendStatus Status)? _backendStatus;
     private (Scope Scope, LiveChatStatus Status)? _chatStatus;
     private (Scope Scope, LiveAudienceUpdate Update)? _audience;
     private LiveAudienceMetric? _audienceMetric;
@@ -56,13 +55,13 @@ public sealed class LiveSession : ILiveSession
     private bool _controlPending;
     private bool _releaseBlocked;
 
-    public LiveSession(IClassicPlaybackBackend backend, ClassicMediaSourceService sources,
+    public LiveSession(ILivePlaybackBackend backend, LiveMediaSourceService sources,
         ILiveChatClient chat, Func<LiveAccountStamp> account, DispatcherQueue dispatcher)
         : this(backend, BindSources(sources), chat, account, dispatcher) { }
 
-    // Narrow fake-resolver seam; production always binds the unchanged Classic source service.
-    internal LiveSession(IClassicPlaybackBackend backend,
-        Func<ClassicPlaybackRequest, CancellationToken, Task<ClassicSourceResult>> resolve,
+    // Narrow fake-resolver seam; production binds the live-only source service.
+    internal LiveSession(ILivePlaybackBackend backend,
+        Func<LivePlaybackRequest, CancellationToken, Task<LiveSourceResult>> resolve,
         ILiveChatClient chat, Func<LiveAccountStamp> account, DispatcherQueue dispatcher)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -70,19 +69,15 @@ public sealed class LiveSession : ILiveSession
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        if (backend.Kind != ClassicBackendKind.Island)
-            throw new InvalidOperationException("Live requires the Island backend.");
         Messages = new(_messages);
         SelectQualityCommand = new AsyncRelayCommand<PlayerFormatInformation>(SelectQualityFromCommandAsync,
             quality => CanChangeQuality && quality is not null && Qualities.Contains(quality));
     }
 
-    private static Func<ClassicPlaybackRequest, CancellationToken, Task<ClassicSourceResult>> BindSources(ClassicMediaSourceService sources)
+    private static Func<LivePlaybackRequest, CancellationToken, Task<LiveSourceResult>> BindSources(LiveMediaSourceService sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
-        if (sources.Preferences.AutoLoadHistory || sources.Preferences.AutoPlayRecommendations || sources.Preferences.ReportProgress)
-            throw new InvalidOperationException("Live source preferences must disable history, recommendations and reporting.");
-        return (request, token) => sources.ResolveAsync(request, ClassicBackendKind.Island, token);
+        return sources.ResolveAsync;
     }
 
     public LiveBinding? Binding { get; private set; }
@@ -184,9 +179,7 @@ public sealed class LiveSession : ILiveSession
                 if (previous is not null) await StopScopeAsync(previous);
                 EnsureCurrent(scope);
                 failureStage = FailureStage.LiveResolve;
-                var request = ClassicRequestMapper.FromLive(_live!);
-                request = request with { Item = request.Item with { PreferQuality = requestedQuality?.Quality,
-                    PreferLiveEotf = requestedQuality?.Eotf } };
+                var request = new LivePlaybackRequest(_live!, requestedQuality?.Quality, requestedQuality?.Eotf);
                 var result = await _resolve(request, scope.Token);
                 EnsureCurrent(scope); // SDK parsing can complete after cancellation.
                 failureStage = FailureStage.LiveValidateSource;
@@ -196,7 +189,7 @@ public sealed class LiveSession : ILiveSession
                 failureStage = FailureStage.LivePublishBinding;
                 scope.Binding = new(_id, scope.Generation, room, scope.Account.Generation, scope.Account.AccountId);
                 Binding = scope.Binding;
-                ApplyAnchor(result.LivePage!.Information);
+                ApplyAnchor(result.LivePage.Information);
                 Subscribe(scope);
                 Notify();
                 failureStage = FailureStage.LiveSetVolume;
@@ -206,7 +199,7 @@ public sealed class LiveSession : ILiveSession
                 await _backend.OpenAsync(result.Media, scope.Token);
                 EnsureCurrent(scope);
                 // Global descriptions must be checked against this room's matching SDR/PQ/HLG lines.
-                Qualities = Array.AsReadOnly(result.Qualities.Where(format => result.Media.Live!.Lines.Any(line => line.Eotf == format.Eotf
+                Qualities = Array.AsReadOnly(result.Qualities.Where(format => result.Media.Live.Lines.Any(line => line.Eotf == format.Eotf
                     && (line.Quality == format.Quality || line.AcceptQualities.Contains(format.Quality))))
                     .Distinct().ToArray());
                 SelectedQuality = Qualities.FirstOrDefault(format => Equals(format, result.SelectedQuality));
@@ -258,15 +251,12 @@ public sealed class LiveSession : ILiveSession
         };
     }
 
-    private static long CanonicalRoom(ClassicSourceResult result)
+    private static long CanonicalRoom(LiveSourceResult result)
     {
         var media = result.Media;
         if (!TryRoom(result.LivePage?.Information.Identifier.Id, out var room)
-            || !TryRoom(media.Live?.Id, out var streamRoom) || streamRoom != room
-            || !TryRoom(media.Request.Item.Live?.Identifier.Id, out var requestRoom) || requestRoom != room
-            || media.StartSeconds != 0 || media.Dash is not null || result.ProgressIdentity is not null
-            || media.Request.Item.Video is not null || media.Request.Item.Episode is not null
-            || media.Request.Playlist.Count != 0 || media.Request.Item.StartPosition is not null)
+            || !TryRoom(media.Live.Id, out var streamRoom) || streamRoom != room
+            || !TryRoom(media.Request.Live.Identifier.Id, out var requestRoom) || requestRoom != room)
             throw new InvalidOperationException("Live canonical room or source scope is invalid.");
         return room;
     }
@@ -297,9 +287,8 @@ public sealed class LiveSession : ILiveSession
         CheckAdmission(cancellationToken);
         RequireSameAccount();
         if (PlaybackState == LivePlaybackState.Playing) return Task.CompletedTask;
-        // Island.PlayAsync can seek when EOF races its command queue. There is no atomic
-        // resume-without-replay API. Resume at live edge with fresh resolution, including Paused.
-        // Never call that backend method, even if an earlier UI status said Paused.
+        // Resume at the live edge with fresh resolution, including Paused. The live backend
+        // deliberately exposes no replay/seek command that could race EOF.
         return RefreshAsync(cancellationToken);
     }
 
@@ -623,7 +612,7 @@ public sealed class LiveSession : ILiveSession
     private void DrainInbox()
     {
         (Scope Scope, LiveChatMessage Message)[] messages;
-        (Scope Scope, ClassicBackendStatus Status)? backend;
+        (Scope Scope, LiveBackendStatus Status)? backend;
         (Scope Scope, LiveChatStatus Status)? chat;
         (Scope Scope, LiveAudienceUpdate Update)? audience;
         lock (_inboxSync)
@@ -638,13 +627,13 @@ public sealed class LiveSession : ILiveSession
         {
             PlaybackState = b.Status.State switch
             {
-                ClassicPlaybackState.Playing => LivePlaybackState.Playing,
-                ClassicPlaybackState.Paused => LivePlaybackState.Paused,
-                ClassicPlaybackState.Ended => LivePlaybackState.Ended,
-                ClassicPlaybackState.Failed => LivePlaybackState.Failed,
+                LiveBackendState.Playing => LivePlaybackState.Playing,
+                LiveBackendState.Paused => LivePlaybackState.Paused,
+                LiveBackendState.Ended => LivePlaybackState.Ended,
+                LiveBackendState.Failed => LivePlaybackState.Failed,
                 _ => LivePlaybackState.Opening,
             };
-            if (b.Status.State == ClassicPlaybackState.Failed) PlaybackError = "Live playback failed. Refresh to resolve a new stream.";
+            if (b.Status.State == LiveBackendState.Failed) PlaybackError = "Live playback failed. Refresh to resolve a new stream.";
             if (double.IsFinite(b.Status.Volume)) Volume = Math.Clamp(b.Status.Volume, 0, 1);
         }
         if (chat is { } c && IsCurrent(c.Scope) && Binding == c.Status.Binding)
@@ -724,7 +713,7 @@ public sealed class LiveSession : ILiveSession
         public Task Connect { get; set; } = Task.CompletedTask;
         public Task Send { get; set; } = Task.CompletedTask;
         public Task? Stop { get; set; }
-        public EventHandler<ClassicBackendStatus>? BackendHandler { get; set; }
+        public EventHandler<LiveBackendStatus>? BackendHandler { get; set; }
         public EventHandler<LiveChatStatus>? ChatHandler { get; set; }
         public EventHandler<LiveChatMessage>? MessageHandler { get; set; }
         public EventHandler<LiveAudienceUpdate>? AudienceHandler { get; set; }

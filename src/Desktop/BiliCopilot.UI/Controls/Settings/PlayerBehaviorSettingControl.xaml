@@ -14,7 +14,6 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <converters:PreferQualityTypeConverter x:Key="PreferQualityConverter" />
-        <converters:ExternalPlayerTypeConverter x:Key="ExternalPlayerTypeConverter" />
         <converters:DisplayModeConverter x:Key="DisplayModeConverter" />
         <converters:PreferDecodeTypeConverter x:Key="PreferDecodeConverter" />
     </UserControl.Resources>

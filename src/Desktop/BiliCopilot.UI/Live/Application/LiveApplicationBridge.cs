@@ -1,8 +1,8 @@
 #nullable enable
 
-using BiliCopilot.UI.Classic;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Hosting;
+using BiliCopilot.UI.Live.Playback;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.UI.Dispatching;
@@ -65,7 +65,7 @@ internal sealed class LiveApplicationBridge : ILivePlaybackAdmission, ILiveWindo
     internal LiveLaunchAccount CaptureLaunchAccount()
         => new(CaptureAccount(), _tokens.GetToken() is not null, _account.MyProfile?.IsVip == true);
 
-    internal async Task OpenLiveAsync(LiveInformation information, ClassicDecodePreference decode,
+    internal async Task OpenLiveAsync(LiveInformation information, LiveDecodePreference decode,
         LiveLaunchAccount capturedAccount, CancellationToken token)
     {
         CheckAccess();

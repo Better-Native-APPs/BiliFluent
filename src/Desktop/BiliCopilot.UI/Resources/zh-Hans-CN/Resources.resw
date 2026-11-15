@@ -1212,9 +1212,6 @@
   <data name="RecommendLivePartition" xml:space="preserve">
     <value>推荐的直播分区</value>
   </data>
-  <data name="ExternalPlayerType" xml:space="preserve">
-    <value>外部播放器类型</value>
-  </data>
   <data name="Name" xml:space="preserve">
     <value>名称</value>
   </data>
@@ -1322,9 +1319,6 @@
   </data>
   <data name="CustomMpvConfigDescription" xml:space="preserve">
     <value>MPV 用户请参考 mpv.io 的说明进行自定义配置</value>
-  </data>
-  <data name="UseWebPlayerWhenLive" xml:space="preserve">
-    <value>使用网页播放器观看直播</value>
   </data>
   <data name="ShowSearchRecommend" xml:space="preserve">
     <value>显示搜索推荐</value>
