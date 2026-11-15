@@ -411,7 +411,7 @@ public sealed partial class InteractiveDanmakuCard : UserControl
                 : failed
                     ? Text(vm.VoteSubmissionFailure == CommandDanmakuVoteFailure.SignInRequired
                         ? StringNames.CommandDanmakuVoteSignInRequired : StringNames.CommandDanmakuVoteFailed)
-                    : Text(StringNames.CommandDanmakuVoteHint);
+                    : string.Empty;
         var changed = VoteStatusText.Text != status;
         VoteStatusText.Text = status;
         VoteStatus.Visibility = status.Length > 0 ? Visibility.Visible : Visibility.Collapsed;

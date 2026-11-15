@@ -174,9 +174,6 @@
   <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
     <value>{0} votes</value>
   </data>
-  <data name="CommandDanmakuVoteHint" xml:space="preserve">
-    <value>Pick an option to vote. You can't change it later.</value>
-  </data>
   <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
     <value>Sending your vote…</value>
   </data>

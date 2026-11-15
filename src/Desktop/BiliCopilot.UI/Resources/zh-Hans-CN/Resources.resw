@@ -1857,9 +1857,6 @@
   <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
     <value>共 {0} 票</value>
   </data>
-  <data name="CommandDanmakuVoteHint" xml:space="preserve">
-    <value>点选项即可投票，投后不能更改</value>
-  </data>
   <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
     <value>正在提交…</value>
   </data>
