@@ -20,27 +20,24 @@ public sealed partial class PlayerViewModel
     public ObservableCollection<AudioLanguageItemViewModel> AudioLanguages { get; } = [];
 
     /// <summary>
-    /// The audio qualities of the language that plays: best standard quality first, then Dolby and Hi-Res.
+    /// The audio qualities the quality menu offers under the video qualities: one entry for the standard
+    /// quality, which always plays the highest standard bitrate, then Dolby and Hi-Res when the media has them.
     /// </summary>
     public ObservableCollection<AudioQualityItemViewModel> AudioQualities { get; } = [];
 
     /// <summary>
-    /// Whether there is a language besides the original audio. The audio track button shows only then.
+    /// Whether there is a language besides the original audio. The subtitle menu lists the languages only then.
     /// </summary>
     [ObservableProperty]
     public partial bool HasMultipleAudioLanguages { get; set; }
 
     /// <summary>
-    /// Whether there is more than one quality to choose from. The quality section shows only then.
+    /// Whether the media has Dolby or Hi-Res audio besides the standard quality. The quality menu lists
+    /// the audio qualities only then.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsQualityMenuAvailable))]
     public partial bool HasMultipleAudioQualities { get; set; }
-
-    /// <summary>
-    /// The title the API gives to its dubbing languages, shown as it is. Null when it gives none.
-    /// </summary>
-    [ObservableProperty]
-    public partial string? AudioLanguageGroupTitle { get; set; }
 
     [ObservableProperty]
     public partial AudioLanguageItemViewModel? SelectedAudioLanguage { get; set; }
@@ -88,12 +85,15 @@ public sealed partial class PlayerViewModel
         var version = _mediaVersion;
         var languages = selections.Languages
             .DistinctBy(language => language.Id)
-            .Select(language => new AudioLanguageItemViewModel(language, selections.LanguageGroupTitle, item => IsCurrentPlayback(version)
+            .Select(language => new AudioLanguageItemViewModel(language, item => IsCurrentPlayback(version)
                 ? OwnWork(SelectAudioLanguageAsync(item)) : Task.CompletedTask))
             .ToList();
 
-        // The default quality sits at the top: standard qualities, then Dolby and Hi-Res.
+        // The standard bitrates are not offered one by one: the best one that can play stands for all of them.
+        // Dolby and Hi-Res follow it.
+        var standard = AudioSelections.PickQuality(selections.Qualities, default);
         var qualities = selections.Qualities
+            .Where(quality => quality.Kind != AudioQualityKind.Standard || ReferenceEquals(quality, standard))
             .DistinctBy(quality => quality.Id)
             .OrderBy(quality => quality.Kind switch
             {
@@ -101,8 +101,6 @@ public sealed partial class PlayerViewModel
                 AudioQualityKind.Dolby => 1,
                 _ => 2,
             })
-            .ThenByDescending(quality => quality.Kind == AudioQualityKind.Standard ? quality.Segment?.Bandwidth ?? 0 : 0)
-            .ThenByDescending(quality => quality.Kind == AudioQualityKind.Standard ? quality.Id : string.Empty, StringComparer.Ordinal)
             .Select(quality => new AudioQualityItemViewModel(quality, item => IsCurrentPlayback(version)
                 ? OwnWork(SelectAudioQualityAsync(item)) : Task.CompletedTask))
             .ToList();
@@ -110,7 +108,7 @@ public sealed partial class PlayerViewModel
         // An open list keeps its rows when the same entries come back, as they do after a switch.
         if (!keepRows || languages.Count != AudioLanguages.Count
             || !languages.Zip(AudioLanguages).All(pair => pair.First.Id == pair.Second.Id && pair.First.Name == pair.Second.Name
-                && pair.First.GroupTitle == pair.Second.GroupTitle && pair.First.IsEnabled == pair.Second.IsEnabled))
+                && pair.First.IsEnabled == pair.Second.IsEnabled))
         {
             AudioLanguages.Clear();
             foreach (var item in languages)
@@ -130,11 +128,15 @@ public sealed partial class PlayerViewModel
         }
 
         MarkSelectedAudioLanguage(selections.LanguageId);
-        MarkSelectedAudioQuality(selections.QualityId);
-        AudioLanguageGroupTitle = selections.LanguageGroupTitle;
+        MarkSelectedAudioQuality(AudioQualities.FirstOrDefault(item => IsPlaying(selections, item))?.Id);
         HasMultipleAudioLanguages = AudioLanguages.Count > 1;
-        HasMultipleAudioQualities = AudioQualities.Count(item => item.IsEnabled) > 1;
+        HasMultipleAudioQualities = AudioQualities.Count > 1 && AudioQualities.Any(item => !item.IsStandard);
     }
+
+    // Whether the loaded media plays the quality of this entry. The standard entry stands for every standard bitrate.
+    private static bool IsPlaying(AudioSelections selections, AudioQualityItemViewModel item)
+        => selections.Qualities.FirstOrDefault(quality => quality.Id == selections.QualityId) is { } playing
+            && (item.IsStandard ? playing.Kind == AudioQualityKind.Standard : playing.Id == item.Id);
 
     private void MarkSelectedAudioLanguage(string? id)
     {
@@ -227,7 +229,7 @@ public sealed partial class PlayerViewModel
                 MarkSelectedAudioLanguage(previousSelectedId);
             }
 
-            Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioTrackSwitchFailed), InfoType.Error);
+            Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioLanguageSwitchFailed), InfoType.Error);
         }, nativeReplay: true);
     }
 
@@ -253,9 +255,10 @@ public sealed partial class PlayerViewModel
             }
 
             // Only the stable ID is remembered. The resolver looks the address up again on every load.
+            // The standard entry remembers nothing: without a choice the highest standard bitrate plays.
             var previousId = snapshot.PreferAudioQualityId;
             var previousSelectedId = SelectedAudioQuality?.Id;
-            snapshot.PreferAudioQualityId = quality.Id;
+            snapshot.PreferAudioQualityId = quality.IsStandard ? default : quality.Id;
             ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
             MarkSelectedAudioQuality(quality.Id);
 
@@ -266,7 +269,7 @@ public sealed partial class PlayerViewModel
             }
 
             var selections = GetResolverAudioSelections(resolver);
-            if (selections.QualityId == quality.Id)
+            if (IsPlaying(selections, quality))
             {
                 ApplyAudioSelections(selections, keepRows: true);
                 return;
@@ -305,7 +308,7 @@ public sealed partial class PlayerViewModel
                 MarkSelectedAudioQuality(previousSelectedId);
             }
 
-            Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioTrackSwitchFailed), InfoType.Error);
+            Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioQualitySwitchFailed), InfoType.Error);
         }, nativeReplay: true);
     }
 }

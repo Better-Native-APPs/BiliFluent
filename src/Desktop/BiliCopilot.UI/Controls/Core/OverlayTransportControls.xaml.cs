@@ -141,7 +141,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         SubscribeViewModel(null);
         SubtitleRepeater?.ItemsSource = null;
         AudioLanguageRepeater?.ItemsSource = null;
-        AudioQualityRepeater?.ItemsSource = null;
         IsEnabled = false;
     }
 
@@ -232,7 +231,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             Bindings.Update();
             SubtitleRepeater.ItemsSource = ViewModel?.Subtitles;
             AudioLanguageRepeater.ItemsSource = ViewModel?.AudioLanguages;
-            AudioQualityRepeater.ItemsSource = ViewModel?.AudioQualities;
             if (ViewModel?.Player is { } player)
             {
                 SynchronizeProgress(player.Position, true);
@@ -555,6 +553,17 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnSubtitleFlyoutOpened(object sender, object e)
         => OpenPopup(sender);
+
+    // The subtitle menu holds the subtitles and, when the media has dubbing languages, the audio track.
+    // A media without subtitles still shows the button for its languages.
+    private Visibility GetSubtitleMenuVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => (isSubtitleEnabled && !isSubtitleEmpty) || hasMultipleAudioLanguages ? Visibility.Visible : Visibility.Collapsed;
+
+    private Visibility GetSubtitleListVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty)
+        => isSubtitleEnabled && !isSubtitleEmpty ? Visibility.Visible : Visibility.Collapsed;
+
+    private string GetSubtitleMenuTitle(bool hasMultipleAudioLanguages)
+        => ResourceToolkit.GetLocalizedString(hasMultipleAudioLanguages ? Models.Constants.StringNames.AudioTrack : Models.Constants.StringNames.Subtitle);
 
     private void OnRightPanelSizeChanged(object sender, SizeChangedEventArgs e)
     {

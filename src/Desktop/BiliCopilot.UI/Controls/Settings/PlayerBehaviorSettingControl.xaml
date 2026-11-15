@@ -58,7 +58,7 @@
                     Command="{x:Bind ViewModel.OpenMpvConfigInEditorCommand, Mode=OneWay}"
                     Content="{ext:Locale Name=OpenConfig}" />
             </community:SettingsCard>
-            <community:SettingsCard Header="{ext:Locale Name=PreferQuality}">
+            <community:SettingsCard Description="{ext:Locale Name=PreferQualityDescription}" Header="{ext:Locale Name=PreferQuality}">
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PreferQualityCollection, Mode=OneWay}"

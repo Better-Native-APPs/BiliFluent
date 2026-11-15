@@ -11,6 +11,7 @@ namespace BiliCopilot.UI.Controls.Player.StoreIsland;
 /// <summary>
 /// 岛式传输条右侧的字幕按钮。由 Store 源 <c>SubtitleButton</c> 迁移而来，
 /// 数据源映射到当前 <see cref="PlayerViewModel.Subtitles"/> 与 <see cref="PlayerViewModel.IsSubtitleEnabled"/>。
+/// 媒体带配音语言时，字幕上方另列 <see cref="PlayerViewModel.AudioLanguages"/>，点一下即切换声轨。
 /// </summary>
 public sealed partial class IslandSubtitleButton : PlayerControlBase
 {
@@ -23,8 +24,8 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
     private bool _loaded;
     private bool _synchronizing;
     private long _epoch;
-    private SubtitleItemViewModel? _activating;
-    private SubtitleItemViewModel? _tapped;
+    private object? _activating;
+    private object? _tapped;
     private long _tappedAt;
 
     public bool IsActive
@@ -34,7 +35,8 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
     }
 
     private bool CanInteract => _loaded && IsActive && ViewModel is { IsWindowDeactivated: false,
-        IsPlaybackClosing: false, IsConnecting: false, IsSubtitleEmpty: false }
+        IsPlaybackClosing: false, IsConnecting: false }
+        && (!ViewModel.IsSubtitleEmpty || ViewModel.HasMultipleAudioLanguages)
         && ViewModel.Player?.IsPlaybackInitialized == true;
 
     /// <summary>
@@ -112,9 +114,18 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
             var index = _loaded && ViewModel is { } vm ? vm.Subtitles.ToList().FindIndex(item => item.IsSelected) : -1;
             if (index >= 0) SubtitleView.Select(index);
             else SubtitleView.DeselectAll();
+
+            AudioView.ItemsSource = _loaded ? ViewModel?.AudioLanguages : null;
+            index = _loaded && ViewModel is { } owner ? owner.AudioLanguages.ToList().FindIndex(item => item.IsSelected) : -1;
+            if (index >= 0) AudioView.Select(index);
+            else AudioView.DeselectAll();
         }
         finally { _synchronizing = false; }
     }
+
+    // The button shows for subtitles, and for a media that has dubbing languages even without subtitles.
+    private Visibility GetMenuVisibility(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => !isSubtitleEmpty || hasMultipleAudioLanguages ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnFlyoutOpened(object sender, object e)
     {
@@ -136,9 +147,50 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
         // While the list tracks a selection, ItemsView raises ItemInvoked only for a double tap
         // or Enter. A single click or tap on an item activates it here.
         var item = (sender as FrameworkElement)?.Tag;
-        _tapped = item as SubtitleItemViewModel;
+        _tapped = item;
         _tappedAt = Environment.TickCount64;
         Activate(item);
+    }
+
+    private void OnAudioItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    {
+        // Same as a subtitle: the second click of a double click is the activation the tap already handled.
+        if (IslandPopupClaims.IsDoubleTapEcho(args.InvokedItem, _tapped, _tappedAt)) return;
+        ActivateLanguage(args.InvokedItem);
+    }
+
+    private void OnAudioItemTapped(object sender, TappedRoutedEventArgs args)
+    {
+        var item = (sender as FrameworkElement)?.Tag;
+        _tapped = item;
+        _tappedAt = Environment.TickCount64;
+        ActivateLanguage(item);
+    }
+
+    private async void ActivateLanguage(object? item)
+    {
+        var claim = _popups.Get(SubtitleFlyout);
+        if (_synchronizing || !CanInteract || !_popups.IsCurrent(claim, ViewModel, _epoch)
+            || !ReferenceEquals(AudioView.ItemsSource, ViewModel.AudioLanguages)
+            || item is not AudioLanguageItemViewModel { IsEnabled: true } language
+            || !ViewModel.AudioLanguages.Any(entry => ReferenceEquals(entry, language))
+            || ReferenceEquals(language, ViewModel.SelectedAudioLanguage)
+            || ReferenceEquals(language, _activating)) return;
+        _activating = language;
+        try
+        {
+            // Choosing the language that already plays does nothing; a language is never switched off.
+            await language.ActiveCommand.ExecuteAsync(null);
+            if (CanInteract && _popups.IsCurrent(claim, ViewModel, _epoch)) Synchronize();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Island audio language selection failed: {ex.Message}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_activating, language)) _activating = null;
+        }
     }
 
     private async void Activate(object? item)

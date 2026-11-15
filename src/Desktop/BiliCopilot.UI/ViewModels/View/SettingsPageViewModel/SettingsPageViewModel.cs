@@ -57,12 +57,14 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
-        PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
+        // "High" plays what "Auto" plays, so the list offers it only as "Auto".
+        PreferQualityCollection = [PreferQualityType.Auto, PreferQualityType.UHD, PreferQualityType.HD];
         PreferDecodeCollection = Enum.GetValues<PreferDecodeType>().ToList();
         MTCBehaviorCollection = Enum.GetValues<MTCBehavior>().ToList();
         DefaultPlayerDisplayMode = SettingsToolkit.ReadLocalSetting(SettingNames.DefaultPlayerDisplayMode, PlayerDisplayMode.Default);
         PreferCodec = SettingsToolkit.ReadLocalSetting(SettingNames.PreferCodec, PreferCodecType.H264);
-        PreferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        var preferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        PreferQuality = preferQuality == PreferQualityType.High ? PreferQualityType.Auto : preferQuality;
         IsPopularNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(PopularPage).Name}Visible", true);
         IsMomentNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(MomentPage).Name}Visible", true);
         IsVideoNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(VideoPartitionPage).Name}Visible", true);
@@ -416,7 +418,19 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.AutoPlayNextRecommendVideo, value);
 
     partial void OnPreferQualityChanged(PreferQualityType value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.PreferQuality, value);
+    {
+        var saved = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        if (saved == value || (saved == PreferQualityType.High && value == PreferQualityType.Auto))
+        {
+            // Loading the page is not a change.
+            return;
+        }
+
+        SettingsToolkit.WriteLocalSetting(SettingNames.PreferQuality, value);
+
+        // A new preference takes effect at once: a quality chosen by hand in the player no longer overrides it.
+        SettingsToolkit.DeleteLocalSetting(SettingNames.ManualVideoQuality);
+    }
 
     partial void OnHideWhenCloseWindowChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideWhenCloseWindow, value);

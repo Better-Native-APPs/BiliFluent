@@ -12,13 +12,12 @@
 
     <!--
         全屏（TeachingTip，最小宽 320 含 12 内边距）与窗口化（Flyout，内边距 12,10）共用同一面板：
-        固定内容宽度使两处尺寸一致；可用高度不足时在面板内部滚动.
+        固定内容宽度使两处尺寸一致.
+        This panel does not scroll by itself. Both hosts already scroll their content when it does not fit
+        (the TeachingTip content area and the FlyoutPresenter each have a ScrollViewer), so a scroll viewer
+        here would be a second one inside theirs and show a second scroll bar.
     -->
-    <ScrollViewer
-        MaxHeight="560"
-        HorizontalScrollMode="Disabled"
-        HorizontalScrollBarVisibility="Disabled"
-        VerticalScrollBarVisibility="Auto">
+    <Grid>
         <StackPanel Width="296" Padding="8,4" Spacing="12">
             <ComboBox
                 x:Name="RendererComboBox"
@@ -155,5 +154,5 @@
                     Text="{x:Bind ViewModel.DanmakuCountText, Mode=OneWay}" />
             </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </local:DanmakuControlBase>

@@ -557,10 +557,12 @@ internal static class VideoAdapter
                     continue;
                 }
 
-                // The API has no per-language AI marker, so none is set here.
+                // The API has no AI flag of its own. Production type 2 is its AI dubbing ("AI 原声翻译"),
+                // which the official web player marks with an AI tag.
                 audioLanguages.Add(new AudioLanguageInformation(
                     language.Language,
                     language.Title,
+                    isAI: language.ProductionType == 2,
                     needVip: language.NeedVip ?? false,
                     hasAudio: language.Language == servedLanguage,
                     productionType: language.ProductionType));

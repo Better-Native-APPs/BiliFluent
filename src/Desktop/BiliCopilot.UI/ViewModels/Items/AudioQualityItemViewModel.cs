@@ -11,7 +11,7 @@ using System.Globalization;
 namespace BiliCopilot.UI.ViewModels.Items;
 
 /// <summary>
-/// One entry of the audio quality list: a standard bitrate, Dolby, or Hi-Res lossless.
+/// One entry of the audio quality list: the standard quality, Dolby, or Hi-Res lossless.
 /// </summary>
 public sealed partial class AudioQualityItemViewModel : ViewModelBase<AudioQualityInformation>
 {
@@ -30,6 +30,12 @@ public sealed partial class AudioQualityItemViewModel : ViewModelBase<AudioQuali
     public string Id => Data.Id;
 
     public string Name { get; }
+
+    /// <summary>
+    /// Whether this is the entry for the standard quality. It stands for every standard bitrate of the media;
+    /// the highest one that can play is the one that plays.
+    /// </summary>
+    public bool IsStandard => Data.Kind == AudioQualityKind.Standard;
 
     /// <summary>
     /// Whether the quality needs a premium membership. The list shows a quiet note for it.
@@ -62,7 +68,7 @@ public sealed partial class AudioQualityItemViewModel : ViewModelBase<AudioQuali
             // 30250 is the API's Dolby Atmos stream. Any other Dolby stream is only called Dolby.
             AudioQualityKind.Dolby => ResourceToolkit.GetLocalizedString(GetStreamId(quality) == "30250" ? StringNames.AudioTrackDolbyAtmos : StringNames.AudioTrackDolby),
             AudioQualityKind.HiRes => ResourceToolkit.GetLocalizedString(StringNames.AudioTrackHiRes),
-            _ => GetBitrateName(quality),
+            _ => ResourceToolkit.GetLocalizedString(StringNames.AudioTrackStandard),
         };
 
     // The part of the quality ID after the kind prefix, which is the stream ID the API uses.
@@ -70,25 +76,6 @@ public sealed partial class AudioQualityItemViewModel : ViewModelBase<AudioQuali
     {
         var index = quality.Id.IndexOf(':', StringComparison.Ordinal);
         return index >= 0 ? quality.Id[(index + 1)..] : quality.Id;
-    }
-
-    private static string GetBitrateName(AudioQualityInformation quality)
-    {
-        // The API's well-known standard streams. Their real bandwidth varies from video to video.
-        switch (GetStreamId(quality))
-        {
-            case "30216":
-                return "64K";
-            case "30232":
-                return "132K";
-            case "30280":
-                return "192K";
-        }
-
-        var bandwidth = quality.Segment?.Bandwidth ?? 0;
-        return bandwidth > 0
-            ? string.Create(CultureInfo.InvariantCulture, $"{Math.Round(bandwidth / 1000d)}K")
-            : ResourceToolkit.GetLocalizedString(StringNames.AudioTrackStandard);
     }
 
     [RelayCommand(CanExecute = nameof(IsEnabled))]

@@ -88,49 +88,50 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         }
     }
 
+    /// <summary>
+    /// The quality that plays: the one chosen by hand when there is one, otherwise the automatic choice.
+    /// Null until the media is loaded.
+    /// </summary>
     internal PlayerFormatInformation? GetCurrentFormat()
     {
-        var preferFormatSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.PreferQuality, PreferQualityType.Auto);
-        var availableFormats = _playbackInfo.Formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default));
+        if (_playbackInfo?.Formats is not { } formats)
+        {
+            return default;
+        }
+
+        var availableFormats = formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default));
         if (_snapshot.Video.Publisher?.User?.Id != this.Get<AccountViewModel>().MyProfile.User.Id)
         {
             availableFormats = [.. availableFormats.Where(p => p.IsEnabled)];
         }
 
-        SourceItemViewModel? selectedFormat = default;
-        if (_snapshot.PreferQuality > 0)
+        return VideoQualityPreference.Pick(
+            KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos),
+            GetManualQuality(_snapshot),
+            SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
+    }
+
+    /// <summary>
+    /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
+    /// </summary>
+    internal bool IsAutoQuality() => GetManualQuality(_snapshot) <= 0;
+
+    // The quality chosen by hand: the one of this playback, or the one remembered from an earlier media.
+    internal static int GetManualQuality(MediaSnapshot snapshot)
+        => snapshot.PreferQuality is int quality and > 0 ? quality : SettingsToolkit.ReadLocalSetting(SettingNames.ManualVideoQuality, 0);
+
+    // The format list names every quality of the media, also those this response carries no stream for.
+    // Only a quality with a stream can play; a response without any stream list is left as it is.
+    internal static IEnumerable<PlayerFormatInformation> KeepFormatsWithStream(IEnumerable<PlayerFormatInformation> formats, IList<DashSegmentInformation>? streams)
+    {
+        if (streams is not { Count: > 0 })
         {
-            selectedFormat = availableFormats.Find(p => p.Data.Quality == _snapshot.PreferQuality);
+            return formats;
         }
 
-        if (selectedFormat == null)
-        {
-            if (preferFormatSetting == PreferQualityType.Auto)
-            {
-                var lastSelectedFormat = SettingsToolkit.ReadLocalSetting(SettingNames.LastSelectedVideoQuality, 0);
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == lastSelectedFormat);
-            }
-            else if (preferFormatSetting == PreferQualityType.UHD)
-            {
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == 120);
-            }
-            else if (preferFormatSetting == PreferQualityType.HD)
-            {
-                var hdFormats = availableFormats.Where(p => p.Data.Quality == 116 || p.Data.Quality == 80).ToList();
-                selectedFormat = hdFormats.OrderByDescending(p => p.Data.Quality).FirstOrDefault();
-            }
-        }
-
-        if (selectedFormat is null)
-        {
-            // Auto without a remembered choice stays at 1080p60 (qn 116) or below.
-            selectedFormat = availableFormats
-                .Where(p => preferFormatSetting != PreferQualityType.Auto || _snapshot.PreferQuality > 0 || p.Data.Quality <= 116)
-                .OrderByDescending(p => p.Data.Quality)
-                .FirstOrDefault();
-        }
-
-        return selectedFormat?.Data;
+        var ids = streams.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var withStream = formats.Where(p => ids.Contains(p.Quality.ToString(System.Globalization.CultureInfo.InvariantCulture))).ToList();
+        return withStream.Count > 0 ? withStream : formats;
     }
 
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
@@ -310,7 +311,6 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             }
         }
 
-        SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
     }
 

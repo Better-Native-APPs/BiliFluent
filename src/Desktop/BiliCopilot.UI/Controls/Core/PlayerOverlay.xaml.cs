@@ -501,7 +501,6 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
         // 取消两条传输条尚未触发的延迟调度/浮出；供关闭、失活、换媒体与模式切换复用.
         IslandTransport?.CancelPendingInput();
-        IslandAudioTrackButton?.CancelPendingInput();
         TransportControls?.CancelPendingInput();
     }
 
@@ -1403,6 +1402,17 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             || selectedSource?.IsEnabled != true
             || !ViewModel.Sources.Any(item => ReferenceEquals(item, selectedSource))) return;
         selectedSource?.ActiveCommand.Execute(default);
+        flyout.Hide();
+    }
+
+    private void OnAudioQualityItemClick(object sender, RoutedEventArgs e)
+    {
+        var quality = (sender as FrameworkElement)?.DataContext as AudioQualityItemViewModel;
+        if (!_loaded || ViewModel?.IsControlsVisible != true || ViewModel.IsWindowDeactivated
+            || GetCurrentSourceFlyout() is not { } flyout
+            || quality?.IsEnabled != true
+            || !ViewModel.AudioQualities.Any(item => ReferenceEquals(item, quality))) return;
+        quality.ActiveCommand.Execute(default);
         flyout.Hide();
     }
 

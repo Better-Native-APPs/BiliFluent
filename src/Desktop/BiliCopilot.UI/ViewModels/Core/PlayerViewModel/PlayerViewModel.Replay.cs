@@ -1,5 +1,8 @@
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Player;
@@ -18,27 +21,89 @@ public sealed partial class PlayerViewModel
 
     private Task SelectSourceAsync(SourceItemViewModel source)
     {
-        if (source is null || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
+        if (source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
             return Task.CompletedTask;
 
         var player = Player;
         var position = player.Position;
         var snapshot = _snapshot;
         var resolver = _sourceResolver;
-        return RunWithoutPlayerInputAsync(async () =>
+        if (resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
-            if (!Sources.Contains(source)) return;
             foreach (var item in Sources) item.IsSelected = item.Equals(source);
             SelectedSource = source;
-            if (resolver is VideoMediaSourceResolver videoResolver)
+            return Task.CompletedTask;
+        }
+
+        // A quality chosen by hand is remembered for the media that follow. Choosing "automatic" forgets it.
+        var playing = GetPlayingFormat(resolver);
+        if (source.IsAuto)
+        {
+            snapshot.PreferQuality = default;
+            SettingsToolkit.DeleteLocalSetting(SettingNames.ManualVideoQuality);
+        }
+        else
+        {
+            snapshot.PreferQuality = source.Data.Quality;
+            SettingsToolkit.WriteLocalSetting(SettingNames.ManualVideoQuality, source.Data.Quality);
+        }
+
+        if (resolver is VideoMediaSourceResolver videoResolver) videoResolver.ResetSnapshot(snapshot);
+        else if (resolver is PgcMediaSourceResolver pgcResolver) pgcResolver.ResetSnapshot(snapshot);
+
+        // "Automatic" may pick the quality that already plays, and the other way round. Nothing is replayed
+        // then: a replay retires the danmaku and skip-segment bindings, and only a load brings them back.
+        if (GetPlayingFormat(resolver) is not { } next || next.Quality == playing?.Quality)
+        {
+            MarkSelectedSource();
+            return Task.CompletedTask;
+        }
+
+        return RunWithoutPlayerInputAsync(async () =>
+        {
+            if (!Sources.Contains(source) || !ReferenceEquals(resolver, _sourceResolver)) return;
+            MarkSelectedSource();
+            // Replay itself consumes this captured position. Never save it in a VM field
+            // or wait for IsPlaybackInitialized (Replay need not toggle that property).
+            await ReplayWithSubtitleRestoreAsync(player, position);
+        }, nativeReplay: true);
+    }
+
+    private static PlayerFormatInformation? GetPlayingFormat(MediaSourceResolverBase? resolver)
+        => resolver switch
+        {
+            VideoMediaSourceResolver video => video.GetCurrentFormat(),
+            PgcMediaSourceResolver pgc => pgc.GetCurrentFormat(),
+            _ => default,
+        };
+
+    // Marks the entry of the quality list that is in effect: the automatic entry, named after the quality
+    // it picked, or the quality chosen by hand.
+    private void MarkSelectedSource()
+    {
+        var resolver = _sourceResolver;
+        var playing = GetPlayingFormat(resolver);
+        var isAuto = resolver switch
+        {
+            VideoMediaSourceResolver video => video.IsAutoQuality(),
+            PgcMediaSourceResolver pgc => pgc.IsAutoQuality(),
+            _ => false,
+        };
+
+        foreach (var item in Sources)
+        {
+            if (item.IsAuto)
             {
-                snapshot.PreferQuality = source.Data.Quality;
-                videoResolver.ResetSnapshot(snapshot);
-                // Replay itself consumes this captured position. Never save it in a VM field
-                // or wait for IsPlaybackInitialized (Replay need not toggle that property).
-                await ReplayWithSubtitleRestoreAsync(player, position);
+                item.ShowAutoQuality(isAuto ? playing : default);
+                item.IsSelected = isAuto && playing is not null;
             }
-        }, nativeReplay: resolver is VideoMediaSourceResolver);
+            else
+            {
+                item.IsSelected = !isAuto && item.Data.Quality == playing?.Quality;
+            }
+        }
+
+        SelectedSource = Sources.FirstOrDefault(item => item.IsSelected);
     }
 
     private async Task ReplayWithSubtitleRestoreAsync(MpvPlayer player, double? preferPosition)
