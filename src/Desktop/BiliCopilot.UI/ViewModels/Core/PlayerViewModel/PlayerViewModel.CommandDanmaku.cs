@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models.Appearance;
+using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.BiliKernel.Models.Media;
 using System.Collections.ObjectModel;
 
@@ -235,6 +236,59 @@ public sealed partial class PlayerViewModel
         {
             logger.LogWarning("Failed to submit a command danmaku rating.");
             return CommandDanmakuGradeFailure.RequestFailed;
+        }
+    }
+
+    internal Task<CommandDanmakuVoteFailure> SubmitCommandDanmakuVoteAsync(CommandDanmakuItemViewModel item,
+        CommandDanmakuVoteOptionViewModel option)
+    {
+        if (!IsCurrentCommandDanmakuItem(item) || !item.IsActive || item.IsDismissed
+            || item.Kind != CommandDanmakuKind.Vote || item.MyVote != 0 || string.IsNullOrEmpty(item.VoteId)
+            || option.Index is not { } optionId || optionId <= 0 || !item.VoteOptions.Contains(option)
+            || !TryGetCommandDanmakuMedia(out var aid, out var cid))
+            return Task.FromResult(CommandDanmakuVoteFailure.Canceled);
+        var progressMs = (int)Math.Clamp(Math.Round(Player.Position * 1000, MidpointRounding.AwayFromZero), 0, int.MaxValue);
+        var operation = SubmitCommandDanmakuVoteCoreAsync(item, aid, cid, progressMs, optionId,
+            option.HasSelfDefinition, _activeMediaToken);
+        _ = OwnWork(operation);
+        return operation;
+    }
+
+    private async Task<CommandDanmakuVoteFailure> SubmitCommandDanmakuVoteCoreAsync(CommandDanmakuItemViewModel item,
+        string aid, string cid, int progressMs, int optionId, bool hasSelfDefinition, CancellationToken token)
+    {
+        try
+        {
+            await this.Get<IDanmakuService>().VoteDanmakuAsync(aid, cid, progressMs, item.VoteId!, item.VoteType,
+                item.Id, optionId, hasSelfDefinition, token);
+            token.ThrowIfCancellationRequested();
+            return IsCurrentCommandDanmakuItem(item) ? CommandDanmakuVoteFailure.None : CommandDanmakuVoteFailure.Canceled;
+        }
+        catch (Exception) when (token.IsCancellationRequested) { return CommandDanmakuVoteFailure.Canceled; }
+        catch (UnauthorizedAccessException) { return CommandDanmakuVoteFailure.SignInRequired; }
+        catch (Exception)
+        {
+            logger.LogWarning("Failed to submit a command danmaku vote.");
+            return CommandDanmakuVoteFailure.RequestFailed;
+        }
+    }
+
+    internal Task RefreshCommandDanmakuVoteAsync(CommandDanmakuItemViewModel item)
+        => IsCurrentCommandDanmakuItem(item) && !string.IsNullOrEmpty(item.VoteId)
+            ? OwnWork(RefreshCommandDanmakuVoteCoreAsync(item, _activeMediaToken)) : Task.CompletedTask;
+
+    private async Task RefreshCommandDanmakuVoteCoreAsync(CommandDanmakuItemViewModel item, CancellationToken token)
+    {
+        try
+        {
+            var vote = await this.Get<IDanmakuService>().GetDanmakuVoteInfoAsync(item.VoteId!, token);
+            token.ThrowIfCancellationRequested();
+            if (IsCurrentCommandDanmakuItem(item)) item.RefreshVoteCounts(vote);
+        }
+        catch (Exception) when (token.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            logger.LogWarning("Failed to refresh command danmaku voting counts.");
         }
     }
 

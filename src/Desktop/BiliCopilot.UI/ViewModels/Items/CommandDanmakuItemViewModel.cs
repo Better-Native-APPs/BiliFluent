@@ -62,7 +62,9 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
         AverageScore = information.Grade?.AverageScore;
         GradeParticipantCount = information.Grade?.Count;
         VoteId = information.Vote?.VoteId;
+        VoteType = information.Vote?.VoteType ?? 0;
         MyVote = information.Vote?.MyVote;
+        VoteParticipantCount = information.Vote?.ParticipantCount;
         VoteOptions = information.Vote is { } vote
             ? Array.AsReadOnly(vote.Options.Select(option => new CommandDanmakuVoteOptionViewModel(option, vote.MyVote)).ToArray())
             : Array.Empty<CommandDanmakuVoteOptionViewModel>();
@@ -74,6 +76,8 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
             SubmittedStars = information.Grade.MyScore.Value / 2;
             GradeState = CommandDanmakuGradeState.Submitted;
         }
+
+        if (MyVote is > 0) VoteState = CommandDanmakuVoteState.Submitted;
     }
 
     internal int Index { get; }
@@ -126,11 +130,13 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSubmit))]
-    [NotifyCanExecuteChangedFor(nameof(DismissCommand), nameof(SubmitGradeCommand), nameof(FollowCommand),
+    [NotifyCanExecuteChangedFor(nameof(DismissCommand), nameof(SubmitGradeCommand), nameof(SubmitVoteCommand), nameof(FollowCommand),
         nameof(LikeCommand), nameof(CoinCommand), nameof(TripleCommand), nameof(OpenLinkedVideoCommand))]
     public partial bool IsActive { get; private set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSubmit))]
+    [NotifyCanExecuteChangedFor(nameof(SubmitGradeCommand), nameof(SubmitVoteCommand))]
     public partial bool IsDismissed { get; private set; }
 
     public string? GradeId { get; }
@@ -147,11 +153,14 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SubmitGradeCommand))]
     public partial CommandDanmakuGradeState GradeState { get; private set; }
 
-    public bool IsSubmitting => GradeState == CommandDanmakuGradeState.Submitting;
+    public bool IsSubmitting => Kind == CommandDanmakuKind.Vote
+        ? VoteState == CommandDanmakuVoteState.Submitting : GradeState == CommandDanmakuGradeState.Submitting;
 
-    public bool IsSubmitted => GradeState == CommandDanmakuGradeState.Submitted;
+    public bool IsSubmitted => Kind == CommandDanmakuKind.Vote
+        ? VoteState == CommandDanmakuVoteState.Submitted : GradeState == CommandDanmakuGradeState.Submitted;
 
-    public bool HasSubmissionFailed => GradeState == CommandDanmakuGradeState.Failed;
+    public bool HasSubmissionFailed => Kind == CommandDanmakuKind.Vote
+        ? VoteState == CommandDanmakuVoteState.Failed : GradeState == CommandDanmakuGradeState.Failed;
 
     [ObservableProperty]
     public partial CommandDanmakuGradeFailure SubmissionFailure { get; private set; }
@@ -162,13 +171,34 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
 
     public int? SubmittedScore => SubmittedStars * 2;
 
-    /// <summary>Only a valid, active, unsubmitted Grade is writable. Vote is always read-only.</summary>
-    public bool CanSubmit => Kind == CommandDanmakuKind.Grade && !string.IsNullOrEmpty(GradeId)
-        && IsActive && !IsDismissed && !IsSubmitting && !IsSubmitted && _parent.IsCurrentCommandDanmakuItem(this);
+    /// <summary>An active rating or unvoted voting card is writable; voting requests determine sign-in status.</summary>
+    public bool CanSubmit => IsActive && !IsDismissed && !IsSubmitting && !IsSubmitted
+        && _parent.IsCurrentCommandDanmakuItem(this) && (Kind switch
+        {
+            CommandDanmakuKind.Grade => !string.IsNullOrEmpty(GradeId),
+            CommandDanmakuKind.Vote => !string.IsNullOrEmpty(VoteId) && MyVote == 0,
+            _ => false,
+        });
 
     public string? VoteId { get; }
 
-    public int? MyVote { get; }
+    public int VoteType { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSubmit))]
+    [NotifyCanExecuteChangedFor(nameof(SubmitVoteCommand))]
+    public partial int? MyVote { get; private set; }
+
+    [ObservableProperty]
+    public partial long? VoteParticipantCount { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSubmitting), nameof(IsSubmitted), nameof(HasSubmissionFailed), nameof(CanSubmit))]
+    [NotifyCanExecuteChangedFor(nameof(SubmitVoteCommand))]
+    public partial CommandDanmakuVoteState VoteState { get; private set; }
+
+    [ObservableProperty]
+    public partial CommandDanmakuVoteFailure VoteSubmissionFailure { get; private set; }
 
     public IReadOnlyList<CommandDanmakuVoteOptionViewModel> VoteOptions { get; }
 
@@ -225,7 +255,44 @@ public sealed partial class CommandDanmakuItemViewModel : ObservableObject
         }
     }
 
-    private bool CanSubmitGrade(int stars) => stars is >= 1 and <= 5 && CanSubmit;
+    private bool CanSubmitGrade(int stars) => Kind == CommandDanmakuKind.Grade && stars is >= 1 and <= 5 && CanSubmit;
+
+    [RelayCommand(CanExecute = nameof(CanSubmitVote))]
+    private async Task SubmitVoteAsync(CommandDanmakuVoteOptionViewModel? option)
+    {
+        if (!CanSubmitVote(option)) return;
+        VoteSubmissionFailure = CommandDanmakuVoteFailure.None;
+        VoteState = CommandDanmakuVoteState.Submitting;
+        var failure = await _parent.SubmitCommandDanmakuVoteAsync(this, option!);
+        if (!_parent.IsCurrentCommandDanmakuItem(this)) return;
+        VoteSubmissionFailure = failure;
+        if (failure == CommandDanmakuVoteFailure.None)
+        {
+            MyVote = option!.Index;
+            foreach (var voteOption in VoteOptions) voteOption.MarkVoted(MyVote);
+            if (VoteParticipantCount.HasValue) VoteParticipantCount++;
+            VoteState = CommandDanmakuVoteState.Submitted;
+            await _parent.RefreshCommandDanmakuVoteAsync(this);
+        }
+        else
+        {
+            VoteState = failure == CommandDanmakuVoteFailure.Canceled
+                ? CommandDanmakuVoteState.NotSubmitted : CommandDanmakuVoteState.Failed;
+        }
+    }
+
+    private bool CanSubmitVote(CommandDanmakuVoteOptionViewModel? option)
+        => Kind == CommandDanmakuKind.Vote && CanSubmit && option is { Index: > 0 } && VoteOptions.Contains(option);
+
+    internal void RefreshVoteCounts(VoteCommandDanmakuPayload vote)
+    {
+        if (vote.ParticipantCount.HasValue) VoteParticipantCount = vote.ParticipantCount;
+        foreach (var option in vote.Options)
+        {
+            if (option.Index.HasValue && option.Count.HasValue)
+                VoteOptions.FirstOrDefault(item => item.Index == option.Index)?.SetCount(option.Count.Value);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanFollow))]
     private Task FollowAsync() => CanFollow()
@@ -320,22 +387,51 @@ public enum CommandDanmakuGradeFailure
     Canceled,
 }
 
-/// <summary>An immutable projection of one server-supplied voting option.</summary>
-public sealed class CommandDanmakuVoteOptionViewModel
+public enum CommandDanmakuVoteState
+{
+    NotSubmitted,
+    Submitting,
+    Submitted,
+    Failed,
+}
+
+public enum CommandDanmakuVoteFailure
+{
+    None,
+    SignInRequired,
+    RequestFailed,
+    Canceled,
+}
+
+/// <summary>A server-supplied voting option with observable count and selection state.</summary>
+public sealed partial class CommandDanmakuVoteOptionViewModel : ObservableObject
 {
     internal CommandDanmakuVoteOptionViewModel(VoteCommandDanmakuOption option, int? myVote)
     {
         Index = option.Index;
         Text = option.Text ?? string.Empty;
         Count = option.Count;
-        IsSelected = option.Index.HasValue && option.Index == myVote;
+        HasSelfDefinition = option.HasSelfDefinition;
+        IsSelected = myVote is > 0 && option.Index == myVote;
     }
 
     public int? Index { get; }
 
     public string Text { get; }
 
-    public long? Count { get; }
+    public bool HasSelfDefinition { get; }
 
-    public bool IsSelected { get; }
+    [ObservableProperty]
+    public partial long? Count { get; private set; }
+
+    [ObservableProperty]
+    public partial bool IsSelected { get; private set; }
+
+    internal void MarkVoted(int? myVote)
+    {
+        IsSelected = myVote is > 0 && Index == myVote;
+        if (IsSelected) Count = (Count ?? 0) + 1;
+    }
+
+    internal void SetCount(long count) => Count = count;
 }
