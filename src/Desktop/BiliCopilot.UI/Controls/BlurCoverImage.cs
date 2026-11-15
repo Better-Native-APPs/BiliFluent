@@ -39,7 +39,7 @@ public sealed partial class BlurCoverImage : ImageExBase
     }
 
     protected override HttpClient? GetCustomHttpClient()
-        => InternalHttpExtensions.ImageClient;
+        => InternalHttpExtensions.PublicImageClient;
 
     /// <inheritdoc/>
     protected override void DrawImage(CanvasBitmap canvasBitmap)
