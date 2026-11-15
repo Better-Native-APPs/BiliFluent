@@ -4,6 +4,7 @@ using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Hosting;
@@ -34,6 +35,10 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     private int _shownSeconds = -1;
     private bool _isRatingSynchronizing;
     private bool _isLoaded;
+    private Rect? _arrangedSlot;
+    private bool _glideRequested;
+    private bool _glidedInArrange;
+    private int _resizeVersion;
 
     /// <summary>Initializes a new instance of the <see cref="InteractiveDanmakuCard"/> class.</summary>
     public InteractiveDanmakuCard()
@@ -70,7 +75,19 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     internal Rect? Slot { get; set; }
 
     /// <summary>Gets or sets the rectangle used by the last arrange pass.</summary>
-    internal Rect? ArrangedSlot { get; set; }
+    internal Rect? ArrangedSlot
+    {
+        get => _arrangedSlot;
+        set
+        {
+            _arrangedSlot = value;
+
+            // The panel asks for a glide before it arranges a card it may animate. No request in this
+            // pass (first layout, window resize, reduced motion) means the card must not animate either.
+            _glidedInArrange = _glideRequested;
+            _glideRequested = false;
+        }
+    }
 
     /// <summary>Gets or sets the height last measured while the card was visible.</summary>
     internal double MeasuredHeight { get; set; }
@@ -131,6 +148,7 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     /// </summary>
     internal void GlideFrom(double offsetX, double offsetY)
     {
+        _glideRequested = true;
         if (Math.Abs(offsetX) < 1 && Math.Abs(offsetY) < 1) return;
         var compositor = ElementCompositionPreview.GetElementVisual(CardRoot).Compositor;
         var move = compositor.CreateVector3KeyFrameAnimation();
@@ -477,6 +495,59 @@ public sealed partial class InteractiveDanmakuCard : UserControl
     {
         var stars = GetSelectedStars();
         if (_viewModel is { } vm && stars > 0 && vm.SubmitGradeCommand.CanExecute(stars)) vm.SubmitGradeCommand.Execute(stars);
+    }
+
+    /// <summary>
+    /// The card became taller or shorter (a poll turning into results, a status line appearing).
+    /// Layout has already jumped to the final size and place; only the picture catches up: the surface
+    /// stretches from its old height while the content is uncovered with it. Together with the glide the
+    /// panel started in the same pass, the visible card moves straight from its old rectangle to the new
+    /// one and never reaches outside either of them.
+    /// </summary>
+    private void OnCardSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var from = e.PreviousSize.Height;
+        var to = e.NewSize.Height;
+        if (!_glidedInArrange || !(from > 0) || !(to > 0) || Math.Abs(to - from) < 1
+            || e.PreviousSize.Width != e.NewSize.Width) return;
+
+        var content = ElementCompositionPreview.GetElementVisual(CardContent);
+        var compositor = content.Compositor;
+        var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f));
+        var duration = TimeSpan.FromMilliseconds(MoveMilliseconds);
+        var version = ++_resizeVersion;
+        var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+
+        var stretch = compositor.CreateVector3KeyFrameAnimation();
+        stretch.Target = "Scale";
+        stretch.Duration = duration;
+        stretch.InsertKeyFrame(0f, new Vector3(1f, (float)(from / to), 1f));
+        stretch.InsertKeyFrame(1f, Vector3.One, easing);
+        CardSurface.Scale = Vector3.One;
+        CardSurface.StartAnimation(stretch);
+
+        if (to > from)
+        {
+            // Growing: keep what lies below the old height covered until the surface gets there.
+            var clip = compositor.CreateInsetClip();
+            var uncover = compositor.CreateScalarKeyFrameAnimation();
+            uncover.Duration = duration;
+            uncover.InsertKeyFrame(0f, (float)(to - from));
+            uncover.InsertKeyFrame(1f, 0f, easing);
+            content.Clip = clip;
+            clip.StartAnimation("BottomInset", uncover);
+        }
+        else
+        {
+            content.Clip = null;
+        }
+
+        batch.End();
+        batch.Completed += (_, _) =>
+        {
+            // Only the latest change may clean up; an older one must not uncover a newer animation.
+            if (version == _resizeVersion) content.Clip = null;
+        };
     }
 
     // A press, tap or double tap on the card belongs to the card: the player must not pause,

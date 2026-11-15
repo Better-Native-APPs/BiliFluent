@@ -62,21 +62,28 @@
         One card of the interactive danmaku layer. The surface matches the SponsorBlock notice that can sit
         beside it: in-app acrylic, flyout stroke, 12 radius. Only the section of the card's kind is loaded.
         Every press on the card stops here, so it never reaches the pause / full screen gestures of the player.
+        The surface is a separate layer behind the content, so a change of height can stretch it smoothly
+        while the content is revealed underneath (see OnCardSizeChanged).
     -->
-    <Border
+    <Grid
         x:Name="CardRoot"
-        Padding="12,8,8,12"
-        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
-        BorderThickness="1"
-        CornerRadius="12"
         DoubleTapped="OnCardDoubleTapped"
         Holding="OnCardHolding"
         PointerPressed="OnCardPointerHandled"
         PointerReleased="OnCardPointerHandled"
         RightTapped="OnCardRightTapped"
+        SizeChanged="OnCardSizeChanged"
         Tapped="OnCardTapped">
-        <Grid RowSpacing="6">
+        <Border
+            x:Name="CardSurface"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
+            BorderThickness="1"
+            CornerRadius="12" />
+        <Grid
+            x:Name="CardContent"
+            Padding="13,9,9,13"
+            RowSpacing="6">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -391,5 +398,5 @@
                 </StackPanel>
             </StackPanel>
         </Grid>
-    </Border>
+    </Grid>
 </UserControl>
