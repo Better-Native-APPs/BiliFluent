@@ -45,6 +45,9 @@
   <data name="AudioTrack" xml:space="preserve">
     <value>Audio track</value>
   </data>
+  <data name="AudioTrackAndSubtitle" xml:space="preserve">
+    <value>Audio track and subtitles</value>
+  </data>
   <data name="AudioTrackStandard" xml:space="preserve">
     <value>Standard</value>
   </data>

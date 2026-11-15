@@ -1743,6 +1743,9 @@
   <data name="AudioTrack" xml:space="preserve">
     <value>声轨</value>
   </data>
+  <data name="AudioTrackAndSubtitle" xml:space="preserve">
+    <value>声轨和字幕</value>
+  </data>
   <data name="AudioTrackStandard" xml:space="preserve">
     <value>标准音质</value>
   </data>

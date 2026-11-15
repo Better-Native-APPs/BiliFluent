@@ -562,6 +562,16 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private Visibility GetSubtitleListVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty)
         => isSubtitleEnabled && !isSubtitleEmpty ? Visibility.Visible : Visibility.Collapsed;
 
+    // Subtitles only: "Subtitle". Languages only: "Audio track", with the audio icon. Both: "Audio track and subtitles".
+    private string GetSubtitleMenuName(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => ResourceToolkit.GetLocalizedString(!hasMultipleAudioLanguages
+            ? Models.Constants.StringNames.Subtitle
+            : isSubtitleEnabled && !isSubtitleEmpty ? Models.Constants.StringNames.AudioTrackAndSubtitle : Models.Constants.StringNames.AudioTrack);
+
+    private FluentIcons.Common.Symbol GetSubtitleMenuSymbol(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => hasMultipleAudioLanguages && !(isSubtitleEnabled && !isSubtitleEmpty)
+            ? FluentIcons.Common.Symbol.HeadphonesSoundWave : FluentIcons.Common.Symbol.Subtitles;
+
     private string GetSubtitleMenuTitle(bool hasMultipleAudioLanguages)
         => ResourceToolkit.GetLocalizedString(hasMultipleAudioLanguages ? Models.Constants.StringNames.AudioTrack : Models.Constants.StringNames.Subtitle);
 
