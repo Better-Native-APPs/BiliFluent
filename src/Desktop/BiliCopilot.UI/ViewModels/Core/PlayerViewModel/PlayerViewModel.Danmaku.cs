@@ -175,7 +175,15 @@ public sealed partial class PlayerViewModel
             Danmaku.DanmakuCountText = danmakus.Count > 0
                 ? string.Format(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuCountTemplate), danmakus.Count.ToString("N0"))
                 : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuEmpty);
+            var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+            var initializeStarted = diagnostics ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             Danmaku.Initialize(danmakus);
+            if (diagnostics && PlaybackStutterDiagnostics.IsSlow(initializeStarted, out var initializeMs))
+            {
+                PlaybackStutterDiagnostics.ReportSlow("DanmakuInitialize", initializeMs,
+                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"items={danmakus.Count}"));
+            }
+
             return true;
         }
     }

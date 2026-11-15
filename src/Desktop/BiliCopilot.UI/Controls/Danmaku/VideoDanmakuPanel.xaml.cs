@@ -17,6 +17,8 @@ using Richasy.Danmaku.Models;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Player;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace BiliCopilot.UI.Controls.Danmaku;
 
@@ -385,7 +387,15 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         try
         {
             // Snapshot the UI-owned pool; parsing, duplicate merging and sorting create only data objects.
+            var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+            var snapshotStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
             var snapshot = viewModel.GetCachedDanmakus().ToArray();
+            if (diagnostics && PlaybackStutterDiagnostics.IsSlow(snapshotStarted, out var snapshotMs))
+            {
+                PlaybackStutterDiagnostics.ReportSlow("DanmakuRedrawSnapshot", snapshotMs,
+                    string.Create(CultureInfo.InvariantCulture, $"items={snapshot.Length} renderer={PlaybackStutterDiagnostics.RendererName(_rendererType)}"));
+            }
+
             var useMpv = _rendererType == DanmakuRendererType.Mpv;
             var parsed = await Task.Run(() =>
             {
@@ -399,6 +409,8 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             {
                 if (version != _redrawVersion || ViewModel != viewModel || !CanShowDanmaku()) return;
 
+                var commitDiagnostics = PlaybackStutterDiagnostics.IsEnabled;
+                var commitStarted = commitDiagnostics ? Stopwatch.GetTimestamp() : 0;
                 _danmakuMaster?.SetDanmakuList(danmakus);
                 if (parsed.AssItems is { } assItems) _mpvRenderer?.SetItems(assItems);
                 _hasDanmakuList = danmakus.Count > 0;
@@ -411,6 +423,11 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
 
                 ResetDanmakuStyle();
                 UpdateRendererPlaybackState(force: true);
+                if (commitDiagnostics && PlaybackStutterDiagnostics.IsSlow(commitStarted, out var commitMs))
+                {
+                    PlaybackStutterDiagnostics.ReportSlow("DanmakuRedrawCommit", commitMs,
+                        string.Create(CultureInfo.InvariantCulture, $"items={danmakus.Count} renderer={PlaybackStutterDiagnostics.RendererName(_rendererType)}"));
+                }
             });
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
