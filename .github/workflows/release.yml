@@ -114,6 +114,15 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Restore NuGet package cache
+        if: steps.mode.outputs.compile == 'true'
+        uses: actions/cache@v6
+        with:
+          path: .nuget-clean
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', 'nuget.config', 'src/**/Directory.Packages.props', 'src/**/Directory.Build.props', 'src/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
       - name: Restore native assets cache
         if: steps.mode.outputs.compile == 'true'
         uses: actions/cache@v6
