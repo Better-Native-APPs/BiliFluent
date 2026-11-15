@@ -172,7 +172,19 @@
     <value>{0}, {1} votes, {2}%, your choice</value>
   </data>
   <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
-    <value>{0} votes · Results only</value>
+    <value>{0} votes</value>
+  </data>
+  <data name="CommandDanmakuVoteHint" xml:space="preserve">
+    <value>Pick an option to vote. You can't change it later.</value>
+  </data>
+  <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
+    <value>Sending your vote…</value>
+  </data>
+  <data name="CommandDanmakuVoteSignInRequired" xml:space="preserve">
+    <value>Sign in to vote</value>
+  </data>
+  <data name="CommandDanmakuVoteFailed" xml:space="preserve">
+    <value>Couldn't send your vote. Try again.</value>
   </data>
   <data name="CommandDanmakuGradeAverageTemplate" xml:space="preserve">
     <value>Average {0} of 5</value>

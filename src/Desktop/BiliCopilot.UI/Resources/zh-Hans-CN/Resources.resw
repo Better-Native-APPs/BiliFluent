@@ -1855,7 +1855,19 @@
     <value>{0}，{1} 票，占 {2}%，你的选择</value>
   </data>
   <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
-    <value>共 {0} 票 · 这里只展示结果</value>
+    <value>共 {0} 票</value>
+  </data>
+  <data name="CommandDanmakuVoteHint" xml:space="preserve">
+    <value>点选项即可投票，投后不能更改</value>
+  </data>
+  <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
+    <value>正在提交…</value>
+  </data>
+  <data name="CommandDanmakuVoteSignInRequired" xml:space="preserve">
+    <value>登录后才能投票</value>
+  </data>
+  <data name="CommandDanmakuVoteFailed" xml:space="preserve">
+    <value>投票没有成功，请再试一次</value>
   </data>
   <data name="CommandDanmakuGradeAverageTemplate" xml:space="preserve">
     <value>平均 {0} 星</value>
