@@ -37,6 +37,7 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
             {
                 _rootCard.Command = ViewModel.ActivateCommand;
                 AutomationProperties.SetName(_rootCard, GetCardName(ViewModel));
+                AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(ViewModel));
             }
         }
     }
@@ -56,11 +57,16 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
         {
             _rootCard.Command = newValue?.ActivateCommand;
             AutomationProperties.SetName(_rootCard, GetCardName(newValue));
+            AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(newValue));
         }
     }
 
     private static string GetCardName(MomentItemViewModel? item)
         => string.IsNullOrEmpty(item?.VideoTitle) ? item?.Author ?? string.Empty : item.VideoTitle;
+
+    // The watched mark on the cover is not hit-testable, so the card reports it as its status.
+    private static string GetCardStatus(MomentItemViewModel? item)
+        => item?.WatchMark?.Text ?? string.Empty;
 
     private static MenuFlyoutItem CreatePrivatePlayItem()
     {

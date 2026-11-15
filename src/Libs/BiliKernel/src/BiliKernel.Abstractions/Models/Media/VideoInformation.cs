@@ -140,6 +140,11 @@ public static class VideoExtensionDataId
     public const string Progress = "Progress";
 
     /// <summary>
+    /// Watch progress reported with a dynamic card. <see cref="VideoWatchProgress"/>.
+    /// </summary>
+    public const string WatchProgress = "WatchProgress";
+
+    /// <summary>
     /// 视频收藏/添加进稍后再看的时间. <see cref="DateTimeOffset"/>.
     /// </summary>
     public const string CollectTime = "CollectTime";

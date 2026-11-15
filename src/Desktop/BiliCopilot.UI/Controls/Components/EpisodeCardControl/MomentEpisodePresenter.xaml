@@ -39,6 +39,7 @@
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind ViewModel.Duration, Mode=OneWay}" />
         </Border>
+        <local:WatchMarkOverlay Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
         <Grid
             Grid.Column="1"
             Padding="0,8,12,8"

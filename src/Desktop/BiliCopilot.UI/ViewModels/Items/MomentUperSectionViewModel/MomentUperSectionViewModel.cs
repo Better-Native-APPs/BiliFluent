@@ -49,7 +49,7 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         {
             if (_isRetired || _accountGeneration != _account.AccountGeneration) return;
             if (!ids.Add(item.Id)) continue;
-            Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment));
+            Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
         }
         IsEmpty = Items.Count == 0;
         ListUpdated?.Invoke(this, EventArgs.Empty);
@@ -180,7 +180,7 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
             {
                 if (!IsCurrentRequest(generation, token)) return;
                 if (!ids.Add(item.Id)) continue;
-                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment));
+                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
             }
 
             if (IsCurrentRequest(generation, token)) ListUpdated?.Invoke(this, EventArgs.Empty);
@@ -201,7 +201,7 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
             {
                 if (!IsCurrentRequest(generation, token)) return;
                 if (!ids.Add(item.Id)) continue;
-                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment));
+                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment, showWatchMark: true));
             }
 
             if (IsCurrentRequest(generation, token)) ListUpdated?.Invoke(this, EventArgs.Empty);

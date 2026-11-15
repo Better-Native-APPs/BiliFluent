@@ -29,7 +29,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentItemViewModel"/> class.
     /// </summary>
-    public MomentItemViewModel(MomentInformation data, MomentCardStyle style, Action<MomentItemViewModel> showCommentAction)
+    /// <param name="data">Moment data.</param>
+    /// <param name="style">Card style.</param>
+    /// <param name="showCommentAction">Opens the comments of this moment.</param>
+    /// <param name="showWatchMark">Whether video covers carry the watched mark. Only the dynamic page turns it on.</param>
+    public MomentItemViewModel(MomentInformation data, MomentCardStyle style, Action<MomentItemViewModel> showCommentAction, bool showWatchMark = false)
         : base(data)
     {
         _showMomentAction = showCommentAction;
@@ -49,15 +53,15 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         {
             if (data.Data is MomentInformation forward)
             {
-                InnerContent = new MomentItemViewModel(forward, Style, showCommentAction);
+                InnerContent = new MomentItemViewModel(forward, Style, showCommentAction, showWatchMark);
             }
             else if (data.Data is VideoInformation video)
             {
-                InnerContent = new VideoItemViewModel(video, VideoCardStyle.Moment);
+                InnerContent = new VideoItemViewModel(video, VideoCardStyle.Moment) { WatchMark = showWatchMark ? WatchMark.Create(video) : null };
             }
             else if (data.Data is EpisodeInformation episode)
             {
-                InnerContent = new EpisodeItemViewModel(episode, EpisodeCardStyle.Moment);
+                InnerContent = new EpisodeItemViewModel(episode, EpisodeCardStyle.Moment) { WatchMark = showWatchMark ? WatchMark.Create(episode) : null };
             }
             else if (data.Data is IEnumerable<BiliImage> images)
             {
@@ -69,6 +73,7 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoTitle = vinfo.Identifier.Title ?? ResourceToolkit.GetLocalizedString(StringNames.NoTitleVideo);
                 VideoCover = vinfo.Identifier.Cover.Uri;
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(vinfo.Duration!.Value));
+                WatchMark = showWatchMark ? WatchMark.Create(vinfo) : null;
             }
             else if (FindInnerContent<EpisodeInformation>() is EpisodeInformation einfo)
             {
@@ -76,6 +81,7 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoTitle = einfo.Identifier.Title;
                 VideoCover = einfo.Identifier.Cover.Uri;
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(einfo.Duration!.Value));
+                WatchMark = showWatchMark ? WatchMark.Create(einfo) : null;
             }
         }
     }

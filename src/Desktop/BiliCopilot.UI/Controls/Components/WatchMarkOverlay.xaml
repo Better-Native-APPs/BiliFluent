@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Components.WatchMarkOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsHitTestVisible="False"
+    Visibility="Collapsed"
+    mc:Ignorable="d">
+
+    <!--
+        Laid over the video cover. The label follows the duration badge (60% black, white caption text) and the bar hugs the bottom edge.
+        Nothing is created until a card actually has a mark, so unwatched cards pay nothing for it.
+    -->
+    <Grid
+        x:Name="Root"
+        x:Load="False"
+        CornerRadius="{StaticResource ControlCornerRadius}">
+        <Border
+            x:Name="Badge"
+            Padding="6,4"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            CornerRadius="{StaticResource ControlCornerRadius}">
+            <Border.Background>
+                <SolidColorBrush Opacity="0.6" Color="Black" />
+            </Border.Background>
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <ic:SymbolIcon
+                    x:Name="FinishedIcon"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="White"
+                    IconVariant="Filled"
+                    Symbol="CheckmarkCircle" />
+                <TextBlock
+                    x:Name="Label"
+                    VerticalAlignment="Center"
+                    Foreground="White"
+                    Style="{StaticResource CaptionTextBlockStyle}" />
+            </StackPanel>
+        </Border>
+        <Grid
+            x:Name="BarTrack"
+            Height="3"
+            VerticalAlignment="Bottom">
+            <Grid.Background>
+                <SolidColorBrush Opacity="0.45" Color="Black" />
+            </Grid.Background>
+            <!--
+                The card already reports the progress as its ItemStatus, so the bar stays out of the accessibility tree.
+                The light accent tone stays readable on any cover in both themes.
+            -->
+            <ProgressBar
+                x:Name="Bar"
+                MinHeight="3"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="Transparent"
+                Maximum="1">
+                <ProgressBar.Foreground>
+                    <SolidColorBrush Color="{ThemeResource SystemAccentColorLight2}" />
+                </ProgressBar.Foreground>
+            </ProgressBar>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -66,6 +66,11 @@ public sealed partial class EpisodeItemViewModel
     public string? HighlightText { get; init; }
 
     /// <summary>
+    /// Watched mark shown on the cover of a dynamic card. Null when the episode has not been watched.
+    /// </summary>
+    public WatchMark? WatchMark { get; init; }
+
+    /// <summary>
     /// 卡片样式.
     /// </summary>
     public EpisodeCardStyle Style { get; init; }

@@ -237,4 +237,10 @@
   <data name="CommandDanmakuGradeFailed" xml:space="preserve">
     <value>Couldn't submit. Try again.</value>
   </data>
+  <data name="WatchFinished" xml:space="preserve">
+    <value>Watched</value>
+  </data>
+  <data name="WatchedToTemplate" xml:space="preserve">
+    <value>Watched to {0}</value>
+  </data>
 </root>
