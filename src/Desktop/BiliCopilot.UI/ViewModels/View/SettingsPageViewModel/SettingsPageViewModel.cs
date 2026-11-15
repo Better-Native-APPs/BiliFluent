@@ -29,6 +29,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [RelayCommand]
     private async Task InitializeAsync()
     {
+        IsCommandDanmakuEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsCommandDanmakuEnabled, true);
         if (_isInitialized)
         {
             await LoadCacheSizeAsync();
@@ -340,6 +341,14 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnDisableMpvCurlForDiagnosticsChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, value);
+
+    partial void OnIsCommandDanmakuEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.IsCommandDanmakuEnabled, value);
+        var app = this.Get<AppViewModel>();
+        foreach (var player in app.Players) player.IsCommandDanmakuEnabled = value;
+        if (app.EmbeddedPlayer is { } embedded) embedded.IsCommandDanmakuEnabled = value;
+    }
 
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);

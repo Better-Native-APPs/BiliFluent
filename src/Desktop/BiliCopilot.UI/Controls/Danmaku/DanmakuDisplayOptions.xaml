@@ -132,6 +132,11 @@
                     TextWrapping="Wrap"
                     Visibility="{x:Bind ViewModel.IsHoverActionsAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
             </StackPanel>
+            <!--  互动弹幕开关：与设置页共用同一个设置视图模型，对所有播放器即时生效  -->
+            <ToggleSwitch
+                Header="{ext:Locale Name=CommandDanmakuEnabled}"
+                IsOn="{x:Bind Settings.IsCommandDanmakuEnabled, Mode=TwoWay}"
+                ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuEnabledDescription}" />
             <StackPanel
                 Padding="12,8"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"

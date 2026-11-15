@@ -1782,4 +1782,103 @@
   <data name="DanmakuCopyFailed" xml:space="preserve">
     <value>复制失败，请重试</value>
   </data>
+  <data name="CommandDanmakuEnabled" xml:space="preserve">
+    <value>显示互动弹幕</value>
+  </data>
+  <data name="CommandDanmakuEnabledDescription" xml:space="preserve">
+    <value>播放时在画面上显示评分、投票、关注提醒和 UP 主弹幕</value>
+  </data>
+  <data name="CommandDanmakuKindUp" xml:space="preserve">
+    <value>UP 主弹幕</value>
+  </data>
+  <data name="CommandDanmakuKindLink" xml:space="preserve">
+    <value>关联视频</value>
+  </data>
+  <data name="CommandDanmakuKindAttention" xml:space="preserve">
+    <value>支持 UP 主</value>
+  </data>
+  <data name="CommandDanmakuKindVote" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommandDanmakuKindGrade" xml:space="preserve">
+    <value>评分</value>
+  </data>
+  <data name="CommandDanmakuCardNameTemplate" xml:space="preserve">
+    <value>{0}：{1}</value>
+  </data>
+  <data name="CommandDanmakuRemainingTemplate" xml:space="preserve">
+    <value>{0} 秒</value>
+  </data>
+  <data name="CommandDanmakuClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="CommandDanmakuOpenVideo" xml:space="preserve">
+    <value>去看看</value>
+  </data>
+  <data name="CommandDanmakuFollow" xml:space="preserve">
+    <value>关注</value>
+  </data>
+  <data name="CommandDanmakuFollowed" xml:space="preserve">
+    <value>已关注</value>
+  </data>
+  <data name="CommandDanmakuTriple" xml:space="preserve">
+    <value>一键三连</value>
+  </data>
+  <data name="CommandDanmakuTripleTip" xml:space="preserve">
+    <value>同时点赞、投币并收藏</value>
+  </data>
+  <data name="CommandDanmakuLike" xml:space="preserve">
+    <value>点赞</value>
+  </data>
+  <data name="CommandDanmakuLiked" xml:space="preserve">
+    <value>已点赞</value>
+  </data>
+  <data name="CommandDanmakuCoinOne" xml:space="preserve">
+    <value>投 1 币</value>
+  </data>
+  <data name="CommandDanmakuCoinTwo" xml:space="preserve">
+    <value>投 2 币</value>
+  </data>
+  <data name="CommandDanmakuCoined" xml:space="preserve">
+    <value>已投币</value>
+  </data>
+  <data name="CommandDanmakuVoteSelected" xml:space="preserve">
+    <value>你的选择</value>
+  </data>
+  <data name="CommandDanmakuVoteStatsTemplate" xml:space="preserve">
+    <value>{0} 票 · {1}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionNameTemplate" xml:space="preserve">
+    <value>{0}，{1} 票，占 {2}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionSelectedNameTemplate" xml:space="preserve">
+    <value>{0}，{1} 票，占 {2}%，你的选择</value>
+  </data>
+  <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
+    <value>共 {0} 票 · 这里只展示结果</value>
+  </data>
+  <data name="CommandDanmakuGradeAverageTemplate" xml:space="preserve">
+    <value>平均 {0} 星</value>
+  </data>
+  <data name="CommandDanmakuGradeCountTemplate" xml:space="preserve">
+    <value>{0} 人参与</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmit" xml:space="preserve">
+    <value>提交</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmitting" xml:space="preserve">
+    <value>提交中…</value>
+  </data>
+  <data name="CommandDanmakuGradeRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmittedTemplate" xml:space="preserve">
+    <value>你评了 {0} 星</value>
+  </data>
+  <data name="CommandDanmakuGradeSignInRequired" xml:space="preserve">
+    <value>登录后才能评分</value>
+  </data>
+  <data name="CommandDanmakuGradeFailed" xml:space="preserve">
+    <value>提交失败，请重试</value>
+  </data>
 </root>

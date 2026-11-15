@@ -47,6 +47,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         Window?.SetActiveAction(null);
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
         Danmaku.ClearAll();
+        ClearCommandDanmakuMedia();
         _nativeMp?.Dispose();
         _nativeMp = null;
 
@@ -159,6 +160,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         await SuspendPlaybackDiagnosticsAsync();
         CheckMediaAdmission();
         _snapshot = snapshot;
+        ResetCommandDanmakuMedia();
         ErrorMessage = default;
         CacheSpeedText = default;
         ShowPlayerWindow();
@@ -199,6 +201,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             System.Diagnostics.Debug.WriteLine($"Player initialized with connector: {Connector.GetType().Name}");
             await Connector.InitializeAsync(_snapshot, default, _activeMediaToken);
             CheckMediaAdmission();
+            InitializeCommandDanmaku();
         }
 
         Title = Connector switch

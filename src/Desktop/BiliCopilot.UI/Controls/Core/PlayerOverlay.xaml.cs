@@ -254,6 +254,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         QueueHeaderWidthUpdate();
         // Re-associate SponsorBlock views registered through BindSponsorViews (view state only).
         ApplySponsorViews();
+        HookCommandDanmakuChrome(true);
+        AttachCommandDanmaku(ViewModel);
         RequestHostChromeRegionUpdate();
     }
 
@@ -273,6 +275,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         CancelPendingInput();
         // Drop SponsorBlock view subscriptions; the registration is kept for a later reload.
         DetachSponsorViews();
+        AttachCommandDanmaku(null);
+        HookCommandDanmakuChrome(false);
         if (IslandTransport is not null)
         {
             IslandTransport.InteractionStateChanged -= OnTransportInteractionChanged;
@@ -312,6 +316,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         {
             bar.SizeChanged -= OnSponsorLayoutSizeChanged;
             if (_sponsorLayoutHooked) bar.SizeChanged += OnSponsorLayoutSizeChanged;
+            HookCommandDanmakuTransport(bar, true);
         }
         ApplySponsorViews();
         OnTransportInteractionChanged(sender, false);
@@ -333,7 +338,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
                 break;
         }
         // Use the sender: x:Load can already have cleared the generated named field.
-        if (sender is FrameworkElement bar) bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+        if (sender is FrameworkElement bar)
+        {
+            bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+            HookCommandDanmakuTransport(bar, false);
+        }
         OnTransportInteractionChanged(sender, false);
         if (_loaded) QueueSponsorChrome();
     }
@@ -350,6 +359,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         CancelPendingInput();
         if (!ReferenceEquals(ViewModel, newValue)) return;
         SubscribeViewModel(_loaded ? newValue : null);
+        AttachCommandDanmaku(_loaded ? newValue : null);
         RefreshEmbeddedInteractionNotice();
         // Retire a width callback captured for the old VM; requeue only the latest width for the new one.
         if (_headerWidthTicket is not null) QueueHeaderWidthUpdate();
@@ -656,6 +666,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             RequestHostChromeRegionUpdate();
         }
         OnSponsorHostPropertyChanged(e.PropertyName);
+        OnCommandDanmakuHostPropertyChanged(e.PropertyName);
         if (e.PropertyName is null or "" or nameof(PlayerViewModel.Connector) or nameof(PlayerViewModel.MediaGeneration)
             or nameof(PlayerViewModel.Presentation) or nameof(PlayerViewModel.IsEmbedded) or nameof(PlayerViewModel.Player)
             or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.IsPlaybackClosing) or nameof(PlayerViewModel.ErrorMessage)
@@ -855,7 +866,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
 
         if (_isTransportInteracting || ViewModel.IsPopupVisible || ViewModel.IsExtraPanelVisible || ViewModel.IsSubtitleSettingsVisible
-            || ViewModel.IsPreviewProgressChanging || ViewModel.IsHoldingSpeedChanging)
+            || ViewModel.IsPreviewProgressChanging || ViewModel.IsHoldingSpeedChanging || IsCommandDanmakuPointerOver)
         {
             return;
         }

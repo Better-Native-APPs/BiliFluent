@@ -77,6 +77,9 @@
             <community:SettingsCard Description="{ext:Locale Name=BottomProgressVisibleDescription}" Header="{ext:Locale Name=BottomProgressVisible}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.BottomProgressVisible, Mode=TwoWay}" />
             </community:SettingsCard>
+            <community:SettingsCard Description="{ext:Locale Name=CommandDanmakuEnabledDescription}" Header="{ext:Locale Name=CommandDanmakuEnabled}">
+                <ToggleSwitch AutomationProperties.Name="{ext:Locale Name=CommandDanmakuEnabled}" IsOn="{x:Bind ViewModel.IsCommandDanmakuEnabled, Mode=TwoWay}" />
+            </community:SettingsCard>
         </community:SettingsExpander.Items>
     </community:SettingsExpander>
 </local:SettingsPageControlBase>
