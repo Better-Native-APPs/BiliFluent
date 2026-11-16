@@ -99,9 +99,18 @@ internal static class PlaybackNetworkPolicy
     public const double PredictionRateRatio = 0.8;
 
     /// <summary>
-    /// After any automatic switch, nothing is predicted for this long: the reload has emptied the cache.
+    /// After an automatic switch that loaded the media again, nothing is predicted for this long:
+    /// the reload has emptied the cache. A switch inside the relay keeps the cache, so it is judged
+    /// again as soon as <see cref="PredictionWindow"/> has passed.
     /// </summary>
     public static readonly TimeSpan PredictionSettle = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// After a switch inside the relay, the separate audio stream is not checked for this long.
+    /// It covers the time the relay itself takes to leave an address that does not answer
+    /// (its connect and read timeouts), so one dead address is not answered with two switches.
+    /// </summary>
+    public static readonly TimeSpan InPlaceSwitchSettle = TimeSpan.FromSeconds(6);
 
     /// <summary>
     /// The separate audio stream has stalled once, with no audio buffered ahead, the audio position

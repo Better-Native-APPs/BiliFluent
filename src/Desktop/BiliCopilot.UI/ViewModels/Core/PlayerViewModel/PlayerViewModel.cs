@@ -82,6 +82,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         if (Player is not null)
         {
             Player.PropertyChanged -= OnPlayerPropertyChanged;
+            Player.RelayUpstreamFailed -= OnRelayUpstreamFailed;
             if (_historyResolver is not null && Player.Duration > 0)
             {
                 // Shutdown resets these properties before MpvPlayer can save the final progress.
@@ -279,8 +280,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         if (Player is null)
         {
-            Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger);
+            // Video and PGC sources carry the addresses of their streams and are read through the
+            // loopback relay of the player; a source without them plays directly.
+            Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger)
+            {
+                RelayOptions = CreateRelayOptions(),
+            };
             Player.PropertyChanged += OnPlayerPropertyChanged;
+            Player.RelayUpstreamFailed += OnRelayUpstreamFailed;
             Client!.ReachFileLoaded += OnChapterFileLoaded;
         }
         else

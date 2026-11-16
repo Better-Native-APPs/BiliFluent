@@ -181,8 +181,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 fileUrl = audioUrl;
             }
 
+            var streamUrl = fileUrl;
             InjectDebugReplayFailure(ref fileUrl, options);
-            return new MpvMediaSource(fileUrl, _snapshot.Video.Identifier.Id, _snapshot.Video.Identifier.Title, options);
+            return new MpvMediaSource(fileUrl, _snapshot.Video.Identifier.Id, _snapshot.Video.Identifier.Title, options)
+            {
+                // The player reads the streams through its relay, so a node can change while the media plays.
+                Relay = fileUrl.Length > 0 && string.Equals(fileUrl, streamUrl, StringComparison.Ordinal) ? CreateRelaySource(userAgent, headers, logger) : null,
+            };
         }
     }
 

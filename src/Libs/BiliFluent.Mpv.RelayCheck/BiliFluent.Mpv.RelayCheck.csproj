@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    A console self-check for the loopback media relay of BiliFluent.Mpv. It is not part of the
+    solution and ships with nothing; see README.md for the commands.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>BiliFluent.Mpv.RelayCheck</AssemblyName>
+    <RootNamespace>BiliFluent.Mpv.RelayCheck</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- A test tool: console output is not localized, native calls are declared by hand, waits are deliberate. -->
+    <NoWarn>$(NoWarn);CS1591;CA1303;CA1515;CA5392;CA2101;SYSLIB1054;CA1806;CA1707;CA1711;CA1720;CA5399;CA5400;VSTHRD003;VSTHRD103;VSTHRD110;CA1416;CA1852;CA1034;CA1308;CA2216</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BiliFluent.Mpv\BiliFluent.Mpv.csproj" />
+  </ItemGroup>
+</Project>

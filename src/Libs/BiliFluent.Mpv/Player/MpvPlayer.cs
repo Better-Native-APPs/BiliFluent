@@ -39,6 +39,7 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         Client.ReachFileLoaded += OnFileLoaded;
         Client.ReachFileEnd += OnFileEnd;
         Client.Shutdown += OnClientShutdown;
+        Client.FileFailed += OnRelayFileFailed;
     }
 
     /// <summary>
@@ -56,6 +57,9 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         {
             IsInternalLoading = true;
             ResetProperties();
+
+            // Another media: nothing of the previous one is served by the relay any longer.
+            ReleaseRelayStreams();
             _cachedSource = await _sourceResolver.GetSourceAsync();
             if (_historyResolver != null)
             {
@@ -94,7 +98,8 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             CheckStateProperties();
             try
             {
-                await Client.PlayAsync(_cachedSource.Url, _cachedSource.Options);
+                var (url, options) = PrepareLoad(_cachedSource);
+                await Client.PlayAsync(url, options);
                 if (PlaybackState == MpvPlayerState.Paused)
                 {
                     await Client.ResumeAsync();
@@ -212,7 +217,8 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             }
 
             Title = _cachedSource.Title;
-            await Client.PlayAsync(_cachedSource.Url, _cachedSource.Options);
+            var (url, options) = PrepareLoad(_cachedSource);
+            await Client.PlayAsync(url, options);
             if (resume)
             {
                 await Client.ResumeAsync();
@@ -251,7 +257,15 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         _historyTimer.Elapsed -= OnHistoryTimerElapsedAsync;
         _historyTimer.Stop();
         _historyTimer.Dispose();
-        await Client.DisposeAsync();
+        try
+        {
+            await Client.DisposeAsync();
+        }
+        finally
+        {
+            // After mpv: nothing reads from the relay any more.
+            await DisposeRelayAsync();
+        }
     }
 
     /// <summary>
