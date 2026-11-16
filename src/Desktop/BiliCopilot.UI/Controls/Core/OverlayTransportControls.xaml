@@ -197,6 +197,14 @@
                     EntryStyle="{StaticResource ChapterEntryStyle}"
                     IsActive="{x:Bind IsActive, Mode=OneWay}"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                <!--  The quality of a live room: it appears with the tiers of the room and takes no room otherwise.  -->
+                <local:LiveQualityButton
+                    x:Name="LiveQualityEntry"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    EntryStyle="{StaticResource BasicPlayerIconButtonStyle}"
+                    IsActive="{x:Bind IsActive, Mode=OneWay}"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                 <StackPanel
                     x:Name="FullVolumeContainer"
                     Margin="0,0,8,0"

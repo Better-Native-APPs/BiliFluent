@@ -2172,4 +2172,16 @@
   <data name="LiveSendRejectedTemplate" xml:space="preserve">
     <value>弹幕被拒绝（代码 {0}），内容已保留。</value>
   </data>
+  <data name="LiveQualitySwitching" xml:space="preserve">
+    <value>正在切换…</value>
+  </data>
+  <data name="LiveQualityTemplate" xml:space="preserve">
+    <value>清晰度：{0}</value>
+  </data>
+  <data name="LiveQualityItemCurrentTemplate" xml:space="preserve">
+    <value>{0}，当前清晰度</value>
+  </data>
+  <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
+    <value>{0}，正在切换</value>
+  </data>
 </root>

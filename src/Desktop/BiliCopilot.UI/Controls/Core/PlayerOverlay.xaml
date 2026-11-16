@@ -393,6 +393,8 @@
                         <StackPanel Orientation="Horizontal">
                             <store:IslandFormatButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                             <store:IslandSubtitleButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                            <!--  The quality of a live room: it appears with the tiers of the room and takes no room otherwise.  -->
+                            <local:LiveQualityButton EntryStyle="{StaticResource CircleIconButtonStyle}" ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                         </StackPanel>
                     </local:IslandTransportControls.RightContent>
                 </local:IslandTransportControls>

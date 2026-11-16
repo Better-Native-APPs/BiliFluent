@@ -504,4 +504,16 @@
   <data name="LiveSendRejectedTemplate" xml:space="preserve">
     <value>The danmaku was rejected (code {0}). Your text is kept.</value>
   </data>
+  <data name="LiveQualitySwitching" xml:space="preserve">
+    <value>Switching…</value>
+  </data>
+  <data name="LiveQualityTemplate" xml:space="preserve">
+    <value>Quality: {0}</value>
+  </data>
+  <data name="LiveQualityItemCurrentTemplate" xml:space="preserve">
+    <value>{0}, current quality</value>
+  </data>
+  <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
+    <value>{0}, switching</value>
+  </data>
 </root>

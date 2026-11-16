@@ -284,6 +284,10 @@ public sealed partial class IslandTransportControls : PlayerControlBase
                     next.IsActive = active;
                     if (cancel) next.CancelPendingInput();
                     break;
+                case LiveQualityButton quality:
+                    quality.IsActive = active;
+                    if (cancel) quality.CancelPendingInput();
+                    break;
                 case Panel panel:
                     foreach (var child in panel.Children) Update(child);
                     break;

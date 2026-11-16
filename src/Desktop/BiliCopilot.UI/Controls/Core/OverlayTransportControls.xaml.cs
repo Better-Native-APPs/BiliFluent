@@ -296,6 +296,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             ResetProgressPreview();
             _chapterPreview?.Reset();
             ChapterEntry?.CancelPendingInput();
+            LiveQualityEntry?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
