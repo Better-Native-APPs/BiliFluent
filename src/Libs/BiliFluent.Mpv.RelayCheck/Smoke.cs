@@ -45,7 +45,8 @@ internal static class Smoke
         var videoNodes = video.Urls.Select((url, i) => new RelayUpstream(url, "v" + i)).Append(deadVideo).ToList();
         var audioNodes = audio.Urls.Select((url, i) => new RelayUpstream(url, "a" + i)).Append(deadAudio).ToList();
 
-        await using var relay = LoopbackMediaRelay.Start(new() { VerifyTls = verifyTls });
+        var trace = options.ContainsKey("trace");
+        await using var relay = LoopbackMediaRelay.Start(new() { VerifyTls = verifyTls }, trace ? new ConsoleLogger() : null);
         var failures = new ConcurrentQueue<RelayUpstreamFailedEventArgs>();
         relay.UpstreamFailed += (_, e) =>
         {
@@ -63,13 +64,37 @@ internal static class Smoke
             ("demuxer-readahead-secs", "15"), ("cache-pause-wait", "3"), ("keep-open", "yes"),
 
             // Twenty seconds ahead at most, so that both streams are still being read when their node changes.
-            ("cache-secs", "20"),
+            ("cache-secs", options.GetValueOrDefault("cachesecs", "20")),
         })
         {
             mpv.SetOption(name, value);
         }
 
+        if (options.TryGetValue("log", out var log))
+        {
+            // The log of mpv names the loopback URLs with their token: keep it out of anything shared.
+            mpv.SetOption("log-file", log);
+        }
+
         mpv.Initialize();
+        if (options.ContainsKey("direct"))
+        {
+            // Diagnostic only: the same seeks without the relay, to tell the player from the relay.
+            mpv.SetProperty("user-agent", UserAgent);
+            mpv.SetProperty("referrer", Referer);
+            mpv.Command("loadfile", video.Urls[0], "replace", "0", "audio-file=\"" + audio.Urls[0] + "\"");
+            foreach (var target in new[] { 200, 500, 300 })
+            {
+                await WaitAsync(() => mpv.GetDouble("time-pos") > 2, 40_000);
+                mpv.Command("seek", target.ToString(CultureInfo.InvariantCulture), "absolute");
+                var reached = await WaitAsync(() => mpv.GetDouble("time-pos") > target + 1 && mpv.GetDouble("time-pos") < target + 15, 30_000);
+                report.Check($"direct: seek {target}", reached, $"time-pos={mpv.GetDouble("time-pos"):0.00}");
+                await Task.Delay(4000);
+            }
+
+            return;
+        }
+
         mpv.Command("loadfile", videoUrl, "replace", "0", "audio-file=\"" + audioUrl + "\"");
 
         var started = Stopwatch.StartNew();
@@ -88,16 +113,27 @@ internal static class Smoke
         report.Note("steady state: " + baseline);
 
         // The node behind the video changes, then the one behind the audio.
-        await SwitchAsync(report, mpv, relay, "v1", videoNodes, baseline, "video");
-        await SwitchAsync(report, mpv, relay, "a1", audioNodes, baseline, "audio");
+        await SwitchAsync(report, mpv, relay, "v1", videoNodes, baseline, "video", mustHandOver: true);
+
+        // The audio stream is small: the player has usually read minutes ahead and is not asking
+        // for more, so the change only shows once it reads again.
+        await SwitchAsync(report, mpv, relay, "a1", audioNodes, baseline, "audio", mustHandOver: false);
 
         // A node that cannot be connected to: the relay leaves it by itself.
-        var before = failures.Count;
         relay.SwitchNode("v1", deadVideo.Url);
-        relay.SwitchNode("a1", deadAudio.Url);
         var dead = await WatchAsync(mpv, 8000);
-        report.Check("smoke: a dead node is left without the player noticing", dead.IsSmooth(baseline) && failures.Count >= before + 2
-            && relay.GetStatistics("v1")?.Current.Label != "dead" && relay.GetStatistics("a1")?.Current.Label != "dead", dead.ToString());
+        report.Check("smoke: a dead video node is left without the player noticing", dead.IsSmooth(baseline)
+            && failures.Any(e => e.Key == "v1" && e.Failed.Label == "dead") && relay.GetStatistics("v1")?.Current.Label != "dead", dead.ToString());
+
+        // A seek far ahead makes the audio stream ask again, of the dead node first.
+        relay.SwitchNode("a1", deadAudio.Url);
+        mpv.Command("seek", "500", "absolute");
+        started.Restart();
+        var arrived = await WaitAsync(() => mpv.GetDouble("time-pos") is > 501 and < 515, 30_000);
+        report.Check("smoke: a seek gets past a dead audio node", arrived && failures.Any(e => e.Key == "a1" && e.Failed.Label == "dead")
+            && relay.GetStatistics("a1")?.Current.Label != "dead", $"time-pos={mpv.GetDouble("time-pos"):0.00} after {started.ElapsedMilliseconds} ms");
+        var afterDead = await WatchAsync(mpv, 3000);
+        report.Check("smoke: playback is steady after the dead nodes", afterDead.IsSmooth(baseline), afterDead.ToString());
 
         // Play URLs that were issued again replace the table; another quality is not the same file.
         var again = await FetchAsync(bvid, cid);
@@ -110,8 +146,10 @@ internal static class Smoke
         var updated = await WatchAsync(mpv, 4000);
         report.Check("smoke: fresh play urls replace the table", updateVideo == RelayUpdateResult.Updated && updateAudio == RelayUpdateResult.Updated
             && updated.IsSmooth(baseline) && relay.GetStatistics("v1")?.Current.Label.StartsWith("nv", StringComparison.Ordinal) == true, $"{updateVideo}/{updateAudio} {updated}");
-        mpv.Command("seek", "420", "absolute");
-        report.Check("smoke: seek after the update", await WaitAsync(() => mpv.GetDouble("time-pos") is > 421 and < 435, 30_000), $"time-pos={mpv.GetDouble("time-pos"):0.00}");
+        // Forward on purpose: a seek back into a part that was never read makes this player walk the
+        // fragments one by one for tens of seconds, with or without the relay (see direct=1).
+        mpv.Command("seek", "600", "absolute");
+        report.Check("smoke: seek after the update", await WaitAsync(() => mpv.GetDouble("time-pos") is > 601 and < 615, 30_000), $"time-pos={mpv.GetDouble("time-pos"):0.00}");
         Describe(report, relay);
 
         mpv.Command("stop");
@@ -121,7 +159,7 @@ internal static class Smoke
         report.Check("smoke: shutdown", started.ElapsedMilliseconds < 8000, started.ElapsedMilliseconds + " ms");
     }
 
-    private static async Task SwitchAsync(Report report, Mpv mpv, LoopbackMediaRelay relay, string key, List<RelayUpstream> nodes, Watch baseline, string name)
+    private static async Task SwitchAsync(Report report, Mpv mpv, LoopbackMediaRelay relay, string key, List<RelayUpstream> nodes, Watch baseline, string name, bool mustHandOver)
     {
         var stats = relay.GetStatistics(key)!.Value;
         var current = nodes.FindIndex(node => node.Url == stats.Current.Url);
@@ -131,7 +169,7 @@ internal static class Smoke
         var after = relay.GetStatistics(key)!.Value;
         report.Check($"smoke: {name} node switch is not noticed by the player", accepted && watch.IsSmooth(baseline), watch.ToString());
         var handedOver = after.Handovers > stats.Handovers;
-        report.Check($"smoke: {name} stream goes on from the other node", after.Current.Label != stats.Current.Label && (handedOver || after.ActiveRequests == 0),
+        report.Check($"smoke: {name} stream is read from the other node", after.Current.Label != stats.Current.Label && (handedOver || !mustHandOver),
             string.Create(CultureInfo.InvariantCulture, $"{stats.Current.Label} -> {after.Current.Label} handover={handedOver} active={after.ActiveRequests} ttfb={after.FirstByteTime?.TotalMilliseconds:0}ms bytes+={(after.UpstreamBytes - stats.UpstreamBytes) / 1024}KiB"));
     }
 
@@ -221,6 +259,18 @@ internal static class Smoke
             })];
     }
 
+    private sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Console.WriteLine("     " + formatter(state, exception));
+    }
+
     private sealed record DashStream(int Id, int Codec, long Bandwidth, List<string> Urls);
 
     /// <summary>
@@ -264,6 +314,8 @@ internal static class Smoke
         public void SetOption(string name, string value) => Check(mpv_set_option_string(_handle, name, value), name);
 
         public void Initialize() => Check(mpv_initialize(_handle), "initialize");
+
+        public void SetProperty(string name, string value) => Check(mpv_set_property_string(_handle, name, value), name);
 
         public void Command(params string[] args)
         {
@@ -333,6 +385,9 @@ internal static class Smoke
 
         [DllImport(Library)]
         private static extern int mpv_set_option_string(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+        [DllImport(Library)]
+        private static extern int mpv_set_property_string(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
 
         [DllImport(Library)]
         private static extern nint mpv_get_property_string(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);

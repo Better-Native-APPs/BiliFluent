@@ -34,5 +34,11 @@ dotnet "$out\BiliFluent.Mpv.RelayCheck\bin\BiliFluent.Mpv.RelayCheck.dll" smoke 
 - `dll=`（必填）：libmpv 的路径。
 - `bvid=`、`cid=`：换一个视频。
 - `tls=off`：不校验上游证书。
+- `trace=1`：把中转的调试日志打到控制台（每个请求的字节范围、轮换）。
+- `log=<文件>`：让 mpv 写详细日志。日志里有带令牌的回环地址，不要外传。
+- `cachesecs=<秒>`：mpv 的预读上限，默认 20，保证换节点时两条流都还在读。
+- `direct=1`：只做对照，不经中转直连 CDN，依次 seek 到 200、500、300 秒。
+
+已知现象：先 seek 到后面再 seek 回一段从未读过的位置（上面的 500 → 300），这个 libmpv 会逐个分片往后找，几十秒才恢复；`direct=1` 下同样出现，与中转无关，所以 `smoke` 最后一次 seek 是往后的。
 
 `smoke` 不使用任何账号，播放地址是未登录访客拿到的那一份。它依赖真实的 CDN 节点，个别节点临时不可用时会看到中转自行轮换的输出，这不算失败。
