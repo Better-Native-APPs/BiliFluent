@@ -259,12 +259,19 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
         _historyTimer.Dispose();
         try
         {
-            await Client.DisposeAsync();
+            await DisposeSeamlessAsync();
         }
         finally
         {
-            // After mpv: nothing reads from the relay any more.
-            await DisposeRelayAsync();
+            try
+            {
+                await Client.DisposeAsync();
+            }
+            finally
+            {
+                // After mpv: nothing reads from the relay any more.
+                await DisposeRelayAsync();
+            }
         }
     }
 
