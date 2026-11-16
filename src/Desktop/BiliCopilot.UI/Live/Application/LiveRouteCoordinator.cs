@@ -289,3 +289,112 @@ internal sealed class LiveRouteCoordinator
         public void Dispose() => Interlocked.Exchange(ref _gate, null)?.Release();
     }
 }
+
+/// <summary>Retains a composite player/room owner and its permit until its real close succeeds.</summary>
+internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action reportFailure)
+{
+    private readonly Dictionary<object, Owner> _owners = new(ReferenceEqualityComparer.Instance);
+    private readonly Action _reportFailure = reportFailure;
+    private bool _releaseFailed;
+
+    internal bool HasWork => _owners.Count != 0 || _releaseFailed;
+    internal bool IsBlocked => _releaseFailed;
+    internal IEnumerable<object> LiveOwners => _owners.Values.Where(owner => owner.IsLive).Select(owner => owner.Key);
+    internal bool IsLiveOwner(object key) => _owners.TryGetValue(key, out var owner) && owner.IsLive;
+
+    internal void Retain(object key, bool isLive, IDisposable permit, Func<Task> close, Action released)
+    {
+        checkAccess();
+        if (IsBlocked || _owners.ContainsKey(key)) throw Failure();
+        _owners.Add(key, new Owner(this, key, isLive, permit, close, released));
+    }
+
+    internal Task CloseAsync(object key)
+    {
+        checkAccess();
+        return _owners.TryGetValue(key, out var owner) ? owner.CloseAsync() : Task.CompletedTask;
+    }
+
+    internal bool RequestRelease(object key)
+    {
+        checkAccess();
+        if (!_owners.TryGetValue(key, out var owner)) return false;
+        // Player.ReleasePlayer is called inside the real close. This observer never joins it
+        // from the player's owned-work set, so final registry release cannot await itself.
+        _ = ObserveReleaseAsync(owner.CloseAsync());
+        return true;
+    }
+
+    internal Task CloseAllAsync()
+    {
+        checkAccess();
+        var owners = _owners.Values.ToArray();
+        var closes = owners.Select(owner => owner.CloseAsync()).ToArray();
+        return DrainAsync(owners, closes);
+    }
+
+    private static async Task ObserveReleaseAsync(Task close)
+    {
+#pragma warning disable VSTHRD003 // Observes an independently published owner close without owning player work or a route permit.
+        try { await close; }
+#pragma warning restore VSTHRD003
+        catch { /* The registry retains the failed owner and reports through its close worker. */ }
+    }
+
+    private static async Task DrainAsync(Owner[] owners, Task[] closes)
+    {
+        Exception? failure = null;
+        try { await Task.WhenAll(closes); }
+        catch (Exception ex) { failure = ex; }
+        foreach (var owner in owners)
+        {
+#pragma warning disable VSTHRD003 // Every worker was started before this independent shutdown/replacement join.
+            if (owner.Worker is not null) await owner.Worker;
+#pragma warning restore VSTHRD003
+        }
+        if (failure is not null) throw Failure();
+    }
+
+    private static InvalidOperationException Failure()
+        => new("Player close is incomplete. Shared ownership is retained.");
+
+    private sealed class Owner(SharedPlaybackOwnerRegistry registry, object key, bool isLive,
+        IDisposable permit, Func<Task> close, Action released)
+    {
+        private Task? _close;
+        internal object Key => key;
+        internal bool IsLive => isLive;
+        internal Task? Worker { get; private set; }
+
+        internal Task CloseAsync()
+        {
+            if (_close is not null) return _close;
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _close = done.Task; // Publish before the player close or a release callback can reenter.
+            var actual = LiveRouteCoordinator.Invoke(close);
+            Worker = CompleteCloseAsync(done, actual);
+            return done.Task;
+        }
+
+        private async Task CompleteCloseAsync(TaskCompletionSource done, Task actual)
+        {
+            await Task.Yield();
+            try
+            {
+#pragma warning disable VSTHRD003 // Real native/room/player close owns its own drain; it never waits for this registry continuation.
+                await actual;
+#pragma warning restore VSTHRD003
+                released();
+                registry._owners.Remove(key);
+                permit.Dispose(); // Only confirmed close and completed app bookkeeping release admission.
+                done.TrySetResult();
+            }
+            catch
+            {
+                registry._releaseFailed = true;
+                try { registry._reportFailure(); } catch { /* Feedback cannot release an owner. */ }
+                done.TrySetException(Failure()); // Cached failure: a later close no-op cannot clear ownership.
+            }
+        }
+    }
+}
