@@ -1917,4 +1917,16 @@
   <data name="WatchedToTemplate" xml:space="preserve">
     <value>看到 {0}</value>
   </data>
+  <data name="Chapters" xml:space="preserve">
+    <value>视频章节</value>
+  </data>
+  <data name="ChapterCurrentTemplate" xml:space="preserve">
+    <value>视频章节，当前：{0}</value>
+  </data>
+  <data name="ChapterItemTemplate" xml:space="preserve">
+    <value>第 {0} 章，{1}，{2} 开始</value>
+  </data>
+  <data name="ChapterItemPlayingTemplate" xml:space="preserve">
+    <value>第 {0} 章，{1}，{2} 开始，正在播放</value>
+  </data>
 </root>

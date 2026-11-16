@@ -243,4 +243,19 @@
   <data name="WatchedToTemplate" xml:space="preserve">
     <value>Watched to {0}</value>
   </data>
+  <data name="ChapterIndexTemplate" xml:space="preserve">
+    <value>Chapter {0}</value>
+  </data>
+  <data name="Chapters" xml:space="preserve">
+    <value>Chapters</value>
+  </data>
+  <data name="ChapterCurrentTemplate" xml:space="preserve">
+    <value>Chapters, current: {0}</value>
+  </data>
+  <data name="ChapterItemTemplate" xml:space="preserve">
+    <value>Chapter {0}, {1}, starts at {2}</value>
+  </data>
+  <data name="ChapterItemPlayingTemplate" xml:space="preserve">
+    <value>Chapter {0}, {1}, starts at {2}, now playing</value>
+  </data>
 </root>
