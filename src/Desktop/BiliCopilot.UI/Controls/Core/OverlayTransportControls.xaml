@@ -20,6 +20,26 @@
     LostFocus="OnControlLostFocus"
     IsEnabled="{x:Bind IsActive, Mode=OneWay}">
 
+    <local:PlayerControlBase.Resources>
+        <ResourceDictionary>
+            <!--  Chapter segments of the progress bar. This bar always sits on the dark gradient, so the gaps are dark in every theme.  -->
+            <Style x:Key="ChapterGapStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="#D9000000" />
+            </Style>
+            <Style x:Key="ChapterHighlightStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="#52FFFFFF" />
+            </Style>
+            <!--  The chapter entry: a button of this bar that grows with the chapter title.  -->
+            <Style
+                x:Key="ChapterEntryStyle"
+                BasedOn="{StaticResource BasicPlayerIconButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinWidth" Value="40" />
+                <Setter Property="Padding" Value="13,0" />
+            </Style>
+        </ResourceDictionary>
+    </local:PlayerControlBase.Resources>
+
     <Grid
         x:Name="RootGrid"
         Height="160"
@@ -138,6 +158,16 @@
                 </StackPanel>
             </UserControl>
 
+            <!--  右侧一列的可用宽度（只量宽度，不画任何东西）：章节入口据此决定显示章节名、只显示图标还是收起.  -->
+            <Border
+                x:Name="RightRoom"
+                Grid.Column="2"
+                Height="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False"
+                SizeChanged="OnChapterRoomChanged" />
+
             <!--  右侧附加控制  -->
             <StackPanel
                 x:Name="RightPanel"
@@ -146,6 +176,14 @@
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 SizeChanged="OnRightPanelSizeChanged">
+                <!--  当前章节入口：有章节时才出现，点开是章节列表；没有章节时整体折叠、不留间距，右侧面板与原来一致.  -->
+                <local:ChapterButton
+                    x:Name="ChapterEntry"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    EntryStyle="{StaticResource ChapterEntryStyle}"
+                    IsActive="{x:Bind IsActive, Mode=OneWay}"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                 <StackPanel
                     x:Name="FullVolumeContainer"
                     Margin="0,0,8,0"
@@ -642,13 +680,6 @@
                 ThumbToolTipValueConverter="{StaticResource PlayerPositionConverter}"
                 ValueChanged="OnProgressValueChanged"
                 Visibility="{x:Bind ViewModel.IsPreviewProgressChanging, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
-            <local:ChapterPanel
-                x:Name="ChapterPanel"
-                Grid.Column="1"
-                Margin="0,0,4,0"
-                IsEnabled="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.IsChapterVisible, Mode=OneWay}" />
             <Slider
                 x:Name="ProgressSliderFake"
                 Grid.Column="1"
@@ -660,6 +691,19 @@
                 ThumbToolTipValueConverter="{StaticResource PlayerPositionConverter}"
                 Visibility="{x:Bind ViewModel.IsPreviewProgressChanging, Mode=OneWay}"
                 Value="{x:Bind ViewModel.PreviewPosition, Mode=OneWay}" />
+            <!--
+                章节分段画在两个 Slider 各自的轨道里（轨道与已播放填充之上、Thumb 之下），由代码挂入，不在这里占位。
+                章节预览气泡：悬停、拖动进度条或手势预览进度时，在位置上方显示所在章节名与时间；
+                气泡不接收指针、不取焦点，进度条的输入与被动跟随不受影响。没有章节的视频不会打开.
+            -->
+            <Popup
+                x:Name="ChapterTipPopup"
+                Grid.Column="1"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False">
+                <local:ChapterPreviewTip x:Name="ChapterTip" />
+            </Popup>
             <TextBlock
                 Grid.Column="2"
                 HorizontalAlignment="Left"
@@ -698,7 +742,6 @@
                 <VisualState x:Name="NarrowState">
                     <VisualState.Setters>
                         <Setter Target="FullVolumeContainer.Visibility" Value="Collapsed" />
-                        <Setter Target="ChapterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="SlimVolumeButton.Visibility" Value="Visible" />
                         <Setter Target="BackwardButton.Visibility" Value="Collapsed" />
                         <Setter Target="ForwardButton.Visibility" Value="Visible" />

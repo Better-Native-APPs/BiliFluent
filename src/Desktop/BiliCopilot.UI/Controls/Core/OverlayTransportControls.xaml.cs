@@ -70,6 +70,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
         DanmakuOptionsTip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, OnDanmakuOptionsOpenChanged);
+        InitializeChapters();
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnContactStarted), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler(OnContactEnded), true);
         AddHandler(PointerCanceledEvent, new PointerEventHandler(OnContactEnded), true);
@@ -154,6 +155,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         _subscribedViewModel = viewModel;
         SubscribePlayer(viewModel?.Player);
+        SubscribeChapters(viewModel);
         if (viewModel is not null)
         {
             viewModel.ProgressChanged += OnViewModelProgressChanged;
@@ -278,6 +280,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             _contacts.Clear();
             _progressContacts.Clear();
             ResetProgressPreview();
+            _chapterPreview?.Reset();
+            ChapterEntry?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
@@ -594,6 +598,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnRightPanelSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        UpdateChapterLayout();
         if (_loaded && IsActive) BalanceLeftRightWidth();
     }
 

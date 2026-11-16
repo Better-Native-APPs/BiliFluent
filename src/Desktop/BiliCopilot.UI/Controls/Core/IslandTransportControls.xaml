@@ -20,15 +20,37 @@
                         x:Key="TransportBackground"
                         Opacity="0.78"
                         Color="White" />
+                    <!--  A chapter gap is drawn in the colour of the card, over the track.  -->
+                    <SolidColorBrush
+                        x:Key="ChapterGapBrush"
+                        Opacity="0.92"
+                        Color="White" />
+                    <SolidColorBrush
+                        x:Key="ChapterHighlightBrush"
+                        Opacity="0.18"
+                        Color="Black" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Default">
                     <SolidColorBrush
                         x:Key="TransportBackground"
                         Opacity="0.67"
                         Color="Black" />
+                    <SolidColorBrush
+                        x:Key="ChapterGapBrush"
+                        Opacity="0.85"
+                        Color="Black" />
+                    <SolidColorBrush
+                        x:Key="ChapterHighlightBrush"
+                        Opacity="0.28"
+                        Color="White" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="TransportBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="ChapterGapBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush
+                        x:Key="ChapterHighlightBrush"
+                        Opacity="0.5"
+                        Color="{ThemeResource SystemColorHighlightColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -40,6 +62,22 @@
                 BasedOn="{StaticResource DefaultFlyoutPresenterStyle}"
                 TargetType="FlyoutPresenter">
                 <Setter Property="Padding" Value="12,10" />
+            </Style>
+
+            <!--  Chapter segments of the progress bar: the gaps between chapters, and the segment under the pointer.  -->
+            <Style x:Key="ChapterGapStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="{ThemeResource ChapterGapBrush}" />
+            </Style>
+            <Style x:Key="ChapterHighlightStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="{ThemeResource ChapterHighlightBrush}" />
+            </Style>
+            <!--  The chapter entry: a button of this bar that grows with the chapter title.  -->
+            <Style
+                x:Key="ChapterEntryStyle"
+                BasedOn="{StaticResource CircleIconButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinWidth" Value="36" />
+                <Setter Property="Padding" Value="11,0" />
             </Style>
         </ResourceDictionary>
     </local:PlayerControlBase.Resources>
@@ -96,6 +134,18 @@
                     IsThumbToolTipEnabled="False"
                     Maximum="{x:Bind ViewModel.Player.Duration, Mode=OneWay}"
                     ValueChanged="OnProgressSliderValueChanged" />
+                <!--
+                    章节预览气泡：悬停或拖动进度条时，在指针上方显示所在章节名与时间。Popup 不受卡片圆角裁剪；
+                    气泡不接收指针、不取焦点，进度条的输入与被动跟随不受影响。没有章节的视频不会打开.
+                -->
+                <Popup
+                    x:Name="ChapterTipPopup"
+                    Grid.Column="1"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    IsHitTestVisible="False">
+                    <local:ChapterPreviewTip x:Name="ChapterTip" />
+                </Popup>
                 <TextBlock
                     x:Name="DurationText"
                     Grid.Column="2"
@@ -145,10 +195,30 @@
                     Grid.Column="1"
                     Content="{x:Bind LeftContent, Mode=OneWay}"
                     Style="{StaticResource AppContentControlStyle}" />
-                <ContentControl
+                <!--
+                    中部：当前章节入口（有章节时才出现，点开是章节列表）在前，原中部内容占剩余宽度。
+                    没有章节时入口整体折叠、不留间距，这一格与原来一致.
+                    这一格的宽度只由卡片宽度决定；宽度不够时入口先收起章节名、再整体收起，把位置还给原中部内容.
+                -->
+                <Grid
+                    x:Name="MiddleSlot"
                     Grid.Column="2"
-                    Content="{x:Bind MiddleContent, Mode=OneWay}"
-                    Style="{StaticResource AppContentControlStyle}" />
+                    SizeChanged="OnMiddleSlotSizeChanged">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <local:ChapterButton
+                        x:Name="ChapterEntry"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        EntryStyle="{StaticResource ChapterEntryStyle}"
+                        ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                    <ContentControl
+                        Grid.Column="1"
+                        Content="{x:Bind MiddleContent, Mode=OneWay}"
+                        Style="{StaticResource AppContentControlStyle}" />
+                </Grid>
                 <ContentControl
                     x:Name="RightPanel"
                     Grid.Column="3"
