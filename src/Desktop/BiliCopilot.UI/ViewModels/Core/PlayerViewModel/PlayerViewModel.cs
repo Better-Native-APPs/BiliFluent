@@ -164,6 +164,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         await SuspendNetworkMonitorAsync();
         CheckMediaAdmission();
         _snapshot = snapshot;
+        NotifyMediaCapabilitiesChanged();
         ResetCommandDanmakuMedia();
         ErrorMessage = default;
         CacheSpeedText = default;
