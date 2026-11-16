@@ -89,7 +89,6 @@
         MaxWidth="800"
         GotFocus="OnControlGotFocus"
         LostFocus="OnControlLostFocus"
-        SizeChanged="OnTransportCardSizeChanged"
         Background="{ThemeResource TransportBackground}"
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1"
@@ -199,8 +198,12 @@
                 <!--
                     中部：当前章节入口（有章节时才出现，点开是章节列表）在前，原中部内容占剩余宽度。
                     没有章节时入口整体折叠、不留间距，这一格与原来一致.
+                    这一格的宽度只由卡片宽度决定；宽度不够时入口先收起章节名、再整体收起，把位置还给原中部内容.
                 -->
-                <Grid Grid.Column="2">
+                <Grid
+                    x:Name="MiddleSlot"
+                    Grid.Column="2"
+                    SizeChanged="OnMiddleSlotSizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition />
@@ -210,7 +213,6 @@
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
                         EntryStyle="{StaticResource ChapterEntryStyle}"
-                        TitleMaxWidth="96"
                         ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                     <ContentControl
                         Grid.Column="1"

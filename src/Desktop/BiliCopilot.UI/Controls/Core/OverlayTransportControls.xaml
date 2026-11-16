@@ -158,6 +158,16 @@
                 </StackPanel>
             </UserControl>
 
+            <!--  右侧一列的可用宽度（只量宽度，不画任何东西）：章节入口据此决定显示章节名、只显示图标还是收起.  -->
+            <Border
+                x:Name="RightRoom"
+                Grid.Column="2"
+                Height="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False"
+                SizeChanged="OnChapterRoomChanged" />
+
             <!--  右侧附加控制  -->
             <StackPanel
                 x:Name="RightPanel"

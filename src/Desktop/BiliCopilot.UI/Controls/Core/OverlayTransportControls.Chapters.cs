@@ -12,10 +12,12 @@ namespace BiliCopilot.UI.Controls.Core;
 /// </summary>
 public sealed partial class OverlayTransportControls
 {
-    // Below this bar width even the icon of the chapter entry gives its room back.
-    private const double ChapterEntryMinWidth = 520;
-    private const double ChapterTitleWideWidth = 180;
-    private const double ChapterTitleWidth = 120;
+    // The entry outside its title: margin, padding, icon and spacing. The bare icon takes the button width and the margin.
+    private const double ChapterTitleChrome = 58;
+    private const double ChapterIconWidth = 48;
+    private const double ChapterEntryMargin = 8;
+    private const double ChapterTitleMinWidth = 56;
+    private const double ChapterTitleMaxWidth = 160;
 
     private ChapterTrackLayer? _chapterTrack;
     private ChapterTrackLayer? _chapterPreviewTrack;
@@ -101,12 +103,20 @@ public sealed partial class OverlayTransportControls
         }
     }
 
+    private void OnChapterRoomChanged(object sender, SizeChangedEventArgs e)
+        => UpdateChapterLayout();
+
     // Narrow first drops the chapter title, then the entry; the segments on the track always stay.
-    private void UpdateChapterLayout(double width, double narrowWidth)
+    // The room is what the right column has left beside the other buttons. Neither number depends on the
+    // entry itself, so the result is stable; both come from the layout pass that has just finished.
+    private void UpdateChapterLayout()
     {
-        if (ChapterEntry is null) return;
-        ChapterEntry.TitleMaxWidth = width >= 1280 ? ChapterTitleWideWidth : ChapterTitleWidth;
-        ChapterEntry.IsTitleVisible = width >= narrowWidth;
-        ChapterEntry.IsEntryVisible = width >= ChapterEntryMinWidth;
+        if (ChapterEntry is null || RightRoom is null || RightPanel is null) return;
+        var entry = ChapterEntry.Visibility == Visibility.Visible ? ChapterEntry.ActualWidth + ChapterEntryMargin : 0;
+        var room = RightRoom.ActualWidth - (RightPanel.ActualWidth - entry);
+        var title = Math.Floor(room - ChapterTitleChrome);
+        ChapterEntry.IsEntryVisible = room >= ChapterIconWidth;
+        ChapterEntry.IsTitleVisible = title >= ChapterTitleMinWidth;
+        if (title >= ChapterTitleMinWidth) ChapterEntry.TitleMaxWidth = Math.Min(ChapterTitleMaxWidth, title);
     }
 }

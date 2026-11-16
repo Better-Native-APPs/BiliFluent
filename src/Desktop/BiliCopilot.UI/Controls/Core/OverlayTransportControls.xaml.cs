@@ -521,7 +521,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             VisualStateManager.GoToState(this, nameof(WideState), false);
         }
 
-        UpdateChapterLayout(width, miniWidth);
         BalanceLeftRightWidth();
     }
 
@@ -599,6 +598,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnRightPanelSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        UpdateChapterLayout();
         if (_loaded && IsActive) BalanceLeftRightWidth();
     }
 

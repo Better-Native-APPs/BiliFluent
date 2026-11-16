@@ -12,9 +12,15 @@ namespace BiliCopilot.UI.Controls.Core;
 /// </summary>
 public sealed partial class IslandTransportControls
 {
-    // Below these card widths the chapter title, then the whole chapter entry, give their room back.
-    private const double ChapterTitleMinWidth = 740;
-    private const double ChapterEntryMinWidth = 560;
+    // The width the middle content (the danmaku box) keeps next to a chapter title, and next to the bare icon.
+    private const double MiddleContentWidth = 220;
+    private const double MiddleContentMinWidth = 170;
+
+    // The entry outside its title: margin, padding, icon and spacing. The bare icon takes the button width and the margin.
+    private const double ChapterTitleChrome = 50;
+    private const double ChapterIconWidth = 44;
+    private const double ChapterTitleMinWidth = 56;
+    private const double ChapterTitleMaxWidth = 140;
 
     private ChapterTrackLayer? _chapterTrack;
     private ChapterPreview? _chapterPreview;
@@ -72,12 +78,15 @@ public sealed partial class IslandTransportControls
         if (!visible) _chapterPreview?.Reset();
     }
 
-    private void OnTransportCardSizeChanged(object sender, SizeChangedEventArgs e)
+    // The slot is a star column: its width follows the card, never the entry, so this cannot feed back.
+    private void OnMiddleSlotSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (ChapterEntry is null) return;
 
         // Narrow first drops the chapter title, then the entry; the segments on the track always stay.
-        ChapterEntry.IsTitleVisible = e.NewSize.Width >= ChapterTitleMinWidth;
-        ChapterEntry.IsEntryVisible = e.NewSize.Width >= ChapterEntryMinWidth;
+        var title = Math.Floor(e.NewSize.Width - MiddleContentWidth - ChapterTitleChrome);
+        ChapterEntry.IsEntryVisible = e.NewSize.Width - MiddleContentMinWidth >= ChapterIconWidth;
+        ChapterEntry.IsTitleVisible = title >= ChapterTitleMinWidth;
+        if (title >= ChapterTitleMinWidth) ChapterEntry.TitleMaxWidth = Math.Min(ChapterTitleMaxWidth, title);
     }
 }
