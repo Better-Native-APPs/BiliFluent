@@ -112,3 +112,13 @@ internal readonly struct PlayerMediaCapabilities(BiliMediaType? mediaType)
     public bool CanAutoReplay => IsOnDemand;
     public bool CanSendDanmaku => IsOnDemand || mediaType == BiliMediaType.Live;
 }
+
+public sealed partial class PlayerViewModel
+{
+    /// <summary>
+    /// Whether a media has been admitted, so the capabilities above describe it. Before the first media they are
+    /// all false and describe nothing: a view that drops what the media cannot do keeps its ordinary layout until then.
+    /// It changes only together with the capabilities and has no notification of its own; read it alongside one of them.
+    /// </summary>
+    public bool HasAdmittedMedia => _snapshot is not null;
+}
