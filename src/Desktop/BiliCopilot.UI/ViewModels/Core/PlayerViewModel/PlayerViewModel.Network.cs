@@ -8,6 +8,8 @@ using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Core.Models;
 using Richasy.MpvKernel.Player;
+using Richasy.MpvKernel.Player.Models;
+using Richasy.MpvKernel.Relay;
 using System.Globalization;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -34,6 +36,9 @@ public sealed partial class PlayerViewModel
 
     private volatile NetworkDiagnostics _networkDiagnostics = NetworkDiagnostics.Empty;
     private int _networkSwitches;
+
+    // Addresses the relay left by itself for this media; they need no decision of the policy.
+    private int _relayFailovers;
     private bool _userPausedSample;
     private MpvError? _deferredLoadError;
 
@@ -83,6 +88,7 @@ public sealed partial class PlayerViewModel
         _userPausedSample = false;
         _lastResumeRefresh = 0;
         Volatile.Write(ref _networkSwitches, 0);
+        Volatile.Write(ref _relayFailovers, 0);
         Volatile.Write(ref _forwardCacheBytes, 0);
         Volatile.Write(ref _rawInputRate, 0);
         Volatile.Write(ref _cacheState, null);
@@ -208,6 +214,10 @@ public sealed partial class PlayerViewModel
         var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
 
         var mainBandwidth = GetMainBandwidth(streams);
+
+        // The relay counts the bytes of the main file as they arrive from the node, which is the
+        // rate mpv can only estimate from what reaches its cache.
+        var relayed = streams is null ? null : Player?.GetRelayStatistics(streams.Video is not null ? MpvRelayStreamKind.Video : MpvRelayStreamKind.Audio);
         var sample = new PlaybackCacheSample(
             raw.UserPaused,
             raw.PausedForCache,
@@ -215,7 +225,7 @@ public sealed partial class PlayerViewModel
             raw.CacheIdle,
             raw.CacheSeconds,
             forwardBytes,
-            raw.DownloadRate,
+            relayed?.BytesPerSecond ?? raw.DownloadRate,
             mainBandwidth / 8d * speed,
             raw.Position,
             raw.AudioPosition,
@@ -236,7 +246,7 @@ public sealed partial class PlayerViewModel
             _failover.DownloadRate,
             cache?.VideoCacheSeconds,
             cache?.AudioCacheSeconds,
-            Volatile.Read(ref _networkSwitches));
+            Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers));
         ApplyFailoverDecision(decision, sample);
     }
 
@@ -352,7 +362,137 @@ public sealed partial class PlayerViewModel
 
         Volatile.Write(ref _networkSwitches, decision.Attempt);
         var version = _mediaVersion;
+        var rejected = false;
 
+        // What is observed while a file plays can be answered inside the relay: mpv keeps its file,
+        // its position and its cache. Any other reason has no loaded file to keep.
+        if (_hasLoadedFile && IsObservedWhilePlaying(decision.Reason))
+        {
+            if (decision.Action == CdnFailoverAction.RefreshPlayUrl)
+            {
+                if (IsRelayingEvery(player, from))
+                {
+                    _ = ObserveNetworkReloadAsync(OwnWork(RefreshForFailoverAsync(player, resolver, from, decision, reason, version, _activeMediaToken)));
+                    return;
+                }
+            }
+            else if (player.IsRelaying(ToRelayKind(decision.Stream)))
+            {
+                if (TrySwitchNodeInPlace(player, resolver, from, decision, reason))
+                {
+                    return;
+                }
+
+                // The address was given up by the attempt; the reload moves on to the next one.
+                rejected = true;
+            }
+        }
+
+        ReloadForFailover(player, resolver, from, decision, reason, version, rejected, refreshed: false);
+    }
+
+    // Moves the stream to its next address inside the relay. The response mpv is reading goes on
+    // from that address at the byte it has reached, so nothing is loaded and nothing is dropped.
+    // False when no untried address is left or the relay does not know it; the caller reloads.
+    private bool TrySwitchNodeInPlace(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, CdnFailoverDecision decision, string reason)
+    {
+        var kind = ToRelayKind(decision.Stream);
+        var left = player.GetRelayStatistics(kind);
+        if (resolver.MoveToNextStream(decision.Stream) is not { } next || !player.TrySwitchRelayNode(kind, next.Url))
+        {
+            return false;
+        }
+
+        _deferredLoadError = null;
+        _failover.OnSwitchedInPlace(NetworkNow);
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var stream = decision.Stream == PlaybackStreamKind.Video ? "video" : "audio";
+            var fromCategory = DescribeStreams(from, decision.Stream);
+            var rate = ((left?.BytesPerSecond ?? 0) * 8 / 1000).ToString("0", CultureInfo.InvariantCulture);
+            var firstByte = (left?.FirstByteTime?.TotalMilliseconds ?? 0).ToString("0", CultureInfo.InvariantCulture);
+            logger.LogInformation("Playback | cdn-switch reason={Reason} from={From} to={To} attempt={Attempt} stream={Stream} mode=relay left-kbps={LeftKbps} left-ttfb-ms={LeftFirstByteMs}",
+                reason, fromCategory, next.Category, decision.Attempt, stream, rate, firstByte);
+        }
+
+        return true;
+    }
+
+    // Requests the play URLs again and hands them to the relay; the media is loaded again only
+    // when the relay cannot take them.
+    private async Task RefreshForFailoverAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
+        CdnFailoverDecision decision, string reason, long version, CancellationToken token)
+    {
+        var (updated, refreshed) = await TryRefreshRelayInPlaceAsync(player, resolver, version, token);
+        if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver))
+        {
+            _failover.Abandon();
+            return;
+        }
+
+        if (!updated)
+        {
+            ReloadForFailover(player, resolver, from, decision, reason, version, rejected: false, refreshed);
+            return;
+        }
+
+        _deferredLoadError = null;
+        _failover.OnSwitchedInPlace(NetworkNow);
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var fromCategory = DescribeStreams(from, null);
+            var toCategory = DescribeStreams(resolver.CurrentStreams, null);
+            logger.LogInformation("Playback | cdn-switch reason={Reason} from={From} to={To} attempt={Attempt} stream={Stream} mode=relay",
+                reason, fromCategory, toCategory, decision.Attempt, "all");
+        }
+    }
+
+    // Requests the play URLs again and hands the new addresses to the relay, under the gate of
+    // the media so that no replay changes the source meanwhile. mpv keeps its file and its cache.
+    // Updated is false when the streams are not relayed, the request failed, or the new addresses
+    // do not serve the same files; Refreshed tells whether the play URLs were requested again.
+    private async Task<(bool Updated, bool Refreshed)> TryRefreshRelayInPlaceAsync(MpvPlayer player, MediaSourceResolverBase resolver, long version, CancellationToken token)
+    {
+        var entered = false;
+        var refreshed = false;
+        try
+        {
+            await _initializationGate.WaitAsync(token);
+            entered = true;
+            if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver)
+                || resolver.CurrentStreams is not { } streams || !IsRelayingEvery(player, streams))
+            {
+                return (false, false);
+            }
+
+            resolver.RefreshPlayUrl();
+            var source = await resolver.GetSourceAsync();
+            refreshed = true;
+            return (IsCurrentPlayback(version) && await player.TryUpdateRelayAsync(source, token), true);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return (false, refreshed);
+        }
+        catch (Exception ex)
+        {
+            // The message of a failed request may name an address; its type has to do.
+            logger.LogWarning("Playback | relay address update failed error={Error}", ex.GetType().Name);
+            return (false, refreshed);
+        }
+        finally
+        {
+            if (entered)
+            {
+                _initializationGate.Release();
+            }
+        }
+    }
+
+    // Loads the media again from the next address, or from play URLs that are requested again.
+    private void ReloadForFailover(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
+        CdnFailoverDecision decision, string reason, long version, bool rejected, bool refreshed)
+    {
         // A reload that did not get as far as a loaded file continues from where the first one started.
         // A media that never loaded has no position, pause or speed of its own to keep.
         (double? Position, bool Paused, double? Speed) state = _reloadState
@@ -391,9 +531,12 @@ public sealed partial class PlayerViewModel
 
                 if (refresh)
                 {
-                    resolver.RefreshPlayUrl();
+                    if (!refreshed)
+                    {
+                        resolver.RefreshPlayUrl();
+                    }
                 }
-                else
+                else if (!rejected)
                 {
                     resolver.RejectCurrentStream(decision.Stream);
                 }
@@ -425,6 +568,69 @@ public sealed partial class PlayerViewModel
             nativeReplay: true));
     }
 
+    // The relay left an address by itself: the record of the addresses follows, so that the next
+    // decision and the logs speak of the node that is really in use.
+    private void OnRelayUpstreamFailed(object? sender, MpvRelayUpstreamFailedEventArgs e)
+        => PostNetworkEvent(() =>
+        {
+            if (!ReferenceEquals(sender, Player) || Player is not { } player || _sourceResolver is not { } resolver
+                || resolver.CurrentStreams is not { } from)
+            {
+                return;
+            }
+
+            // Every address of an answer that has expired fails alike; that is no failure of a node.
+            var expiring = from.Deadline - DateTimeOffset.UtcNow < PlaybackNetworkPolicy.MinimumUrlLifetime;
+            var kind = e.Kind == MpvRelayStreamKind.Video ? PlaybackStreamKind.Video : PlaybackStreamKind.Audio;
+            if (!resolver.NoteRelayFailover(kind, e.Failure.Failed.Url, e.Failure.Current.Url, blame: !expiring))
+            {
+                return;
+            }
+
+            var attempt = Interlocked.Increment(ref _relayFailovers) + Volatile.Read(ref _networkSwitches);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                // The labels of the relay are the kinds of node, as everywhere in this log.
+                logger.LogInformation("Playback | cdn-switch reason={Reason} from={From} to={To} attempt={Attempt} stream={Stream} mode=relay",
+                    DescribeRelayFailure(e.Failure.Reason), e.Failure.Failed.Label, e.Failure.Current.Label, attempt,
+                    kind == PlaybackStreamKind.Video ? "video" : "audio");
+            }
+
+            var now = Environment.TickCount64;
+            if (expiring && _hasLoadedFile && !IsConnecting && IsRelayingEvery(player, from)
+                && (_lastResumeRefresh == 0 || now - _lastResumeRefresh >= PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
+            {
+                // The addresses are requested again right away, instead of waiting for playback to stall.
+                _lastResumeRefresh = now;
+                _ = ObserveNetworkReloadAsync(OwnWork(RefreshRelayAsync(player, resolver, from, _mediaVersion, _activeMediaToken, "relay-expired", reloadOnFailure: false)));
+            }
+        });
+
+    // Hands the relay play URLs that were requested again because the old ones expire.
+    private async Task RefreshRelayAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, long version,
+        CancellationToken token, string reason, bool reloadOnFailure)
+    {
+        var (updated, refreshed) = await TryRefreshRelayInPlaceAsync(player, resolver, version, token);
+        if (updated)
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                var fromCategory = DescribeStreams(from, null);
+                var toCategory = DescribeStreams(resolver.CurrentStreams, null);
+                logger.LogInformation("Playback | playurl-refresh reason={Reason} from={From} to={To} mode=relay", reason, fromCategory, toCategory);
+            }
+
+            return;
+        }
+
+        if (reloadOnFailure && IsCurrentPlayback(version) && ReferenceEquals(player, Player))
+        {
+            // The relay could not take the new addresses: the media is loaded at the position it has reached.
+            var speed = player.PlaybackRate > 0 ? player.PlaybackRate : (double?)null;
+            await ReloadExpiredSourceAsync(player, resolver, from, version, player.Position, speed, refreshed);
+        }
+    }
+
     // Loads the media again at the position. The subtitle comes back with the loaded file, so a
     // node that hangs does not keep the media gate while the subtitle waits for it.
     // Returns false when no source could be served, so nothing was loaded.
@@ -452,7 +658,9 @@ public sealed partial class PlayerViewModel
     }
 
     // A resume with signed URLs that have expired, or are about to, would only run into errors:
-    // the play URLs are requested again and the media is loaded at the position instead.
+    // the play URLs are requested again. A media that plays through the relay keeps its file and
+    // resumes at once while the relay takes the new addresses; otherwise the media is loaded at
+    // the position instead, and that load is what resumes.
     private bool TryReloadExpiredSourceOnResume(out Task reload)
     {
         reload = Task.CompletedTask;
@@ -469,9 +677,22 @@ public sealed partial class PlayerViewModel
 
         _lastResumeRefresh = now;
         var version = _mediaVersion;
+        if (IsRelayingEvery(player, from))
+        {
+            _ = ObserveNetworkReloadAsync(OwnWork(RefreshRelayAsync(player, resolver, from, version, _activeMediaToken, "resume-expired", reloadOnFailure: true)));
+            return false;
+        }
+
         var position = player.Position;
         var speed = player.PlaybackRate > 0 ? player.PlaybackRate : (double?)null;
-        reload = ObserveNetworkReloadAsync(RunWithoutPlayerInputAsync(
+        reload = ObserveNetworkReloadAsync(ReloadExpiredSourceAsync(player, resolver, from, version, position, speed, refreshed: false));
+        return true;
+    }
+
+    // Loads the media again at the position from play URLs that are requested again, unless they already were.
+    private Task ReloadExpiredSourceAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, long version,
+        double position, double? speed, bool refreshed)
+        => RunWithoutPlayerInputAsync(
             async () =>
             {
                 if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver))
@@ -479,7 +700,11 @@ public sealed partial class PlayerViewModel
                     return;
                 }
 
-                resolver.RefreshPlayUrl();
+                if (!refreshed)
+                {
+                    resolver.RefreshPlayUrl();
+                }
+
                 if (!await ReloadForNetworkAsync(player, position, resume: true, speed))
                 {
                     // The request failed and nothing was loaded: resume what is there.
@@ -498,9 +723,7 @@ public sealed partial class PlayerViewModel
                     logger.LogInformation("Playback | playurl-refresh reason=resume-expired from={From} to={To}", fromCategory, toCategory);
                 }
             },
-            nativeReplay: true));
-        return true;
-    }
+            nativeReplay: true);
 
     private async Task ObserveNetworkReloadAsync(Task reload)
     {
@@ -566,6 +789,41 @@ public sealed partial class PlayerViewModel
             CdnFailoverReason.Predicted => "predicted",
             CdnFailoverReason.AudioStall => "audio-stall",
             _ => "unknown",
+        };
+
+    // The reasons that are only observed while a loaded file plays.
+    private static bool IsObservedWhilePlaying(CdnFailoverReason reason)
+        => reason is CdnFailoverReason.Stall or CdnFailoverReason.Rebuffer or CdnFailoverReason.Predicted or CdnFailoverReason.AudioStall;
+
+    private static MpvRelayStreamKind ToRelayKind(PlaybackStreamKind kind)
+        => kind == PlaybackStreamKind.Video ? MpvRelayStreamKind.Video : MpvRelayStreamKind.Audio;
+
+    // Whether every stream of the loaded source is read through the relay.
+    private static bool IsRelayingEvery(MpvPlayer player, PlaybackStreamSelection streams)
+        => (streams.Video is not null || streams.Audio is not null)
+            && (streams.Video is null || player.IsRelaying(MpvRelayStreamKind.Video))
+            && (streams.Audio is null || player.IsRelaying(MpvRelayStreamKind.Audio));
+
+    // The relay validates the certificate of a node exactly as mpv is told to: not in Debug, always in Release.
+    private static LoopbackMediaRelayOptions CreateRelayOptions()
+    {
+#if DEBUG
+        return new() { VerifyTls = false };
+#else
+        return new() { VerifyTls = true };
+#endif
+    }
+
+    private static string DescribeRelayFailure(RelayFailureReason reason)
+        => reason switch
+        {
+            RelayFailureReason.Connect => "relay-connect",
+            RelayFailureReason.Status => "relay-status",
+            RelayFailureReason.Unsupported => "relay-unsupported",
+            RelayFailureReason.Length => "relay-length",
+            RelayFailureReason.Read => "relay-read",
+            RelayFailureReason.Timeout => "relay-timeout",
+            _ => "relay-unknown",
         };
 
     /// <summary>
