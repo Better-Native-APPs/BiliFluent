@@ -15,6 +15,7 @@ public sealed partial class PlayerViewModel
     public Task ReplayAsync(double? preferPosition = null)
     {
         if (!CanSeek && preferPosition.HasValue) return Task.CompletedTask;
+        if (IsLiveMedia) return RefreshLiveAsync();
         var player = Player;
         return player is null ? Task.CompletedTask
             : RunWithoutPlayerInputAsync(() => ReplayWithSubtitleRestoreAsync(player, preferPosition), nativeReplay: true);

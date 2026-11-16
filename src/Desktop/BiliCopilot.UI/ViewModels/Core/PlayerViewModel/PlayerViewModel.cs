@@ -27,6 +27,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task DisposeCoreAsync()
     {
+        if (HasOwnedLiveResources || IsLiveMedia)
+        {
+            await DisposeLiveCoreAsync();
+            return;
+        }
         if (Window is MainPlayerHost host) await host.PrepareForCloseAsync();
         await DrainPlayerWorkAsync();
         // Decide cancellation failure before any native/host teardown, registry release or CTS disposal.
@@ -166,6 +171,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var previousHistoryResolver = CanUsePlaybackHistory ? _historyResolver : null;
         _snapshot = snapshot;
         NotifyMediaCapabilitiesChanged();
+        NotifyLivePropertiesChanged();
         ResetCommandDanmakuMedia();
         ErrorMessage = default;
         CacheSpeedText = default;
@@ -212,6 +218,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         BackwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.BackwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepBackwardSecond, 10d));
         ForwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.ForwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepForwardSecond, 30d));
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
+        if (IsLiveMedia)
+        {
+            await InitializeLiveMediaAsync(previousHistoryResolver);
+            return;
+        }
+        if (HasOwnedLiveResources)
+        {
+            await LeaveLiveMediaAsync();
+            CheckMediaAdmission();
+        }
         if (Client != null)
         {
             await Client.PauseAsync();

@@ -35,9 +35,10 @@ internal sealed class LivePlaybackAttempt : IDisposable
     {
         lock (_sync)
         {
-            if (_invalid || _state is LiveMediaLoadState.Failed or LiveMediaLoadState.Ended) return;
+            if (_invalid) return;
             _submitted = true;
-            if (!_loaded && !_frame) _state = LiveMediaLoadState.CommandSubmitted;
+            if (!_loaded && !_frame && _state is not (LiveMediaLoadState.Failed or LiveMediaLoadState.Ended))
+                _state = LiveMediaLoadState.CommandSubmitted;
         }
     }
 
