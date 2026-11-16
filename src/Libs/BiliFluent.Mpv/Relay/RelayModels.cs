@@ -81,6 +81,8 @@ public sealed class RelayStreamRegistration
     /// Parts of the stream held in memory, for a switch that must not wait for the network.
     /// </summary>
     public IReadOnlyList<RelayPreload>? Preloaded { get; init; }
+
+    internal RelayVirtualOffsetMap? VirtualMap { get; init; }
 }
 
 /// <summary>
@@ -178,4 +180,20 @@ public readonly record struct RelayStreamStatistics(
     int ActiveRequests,
     long? Length,
     int Failovers,
-    int Handovers);
+    int Handovers)
+{
+    /// <summary>The greatest exclusive byte offset delivered to the player, in player-file coordinates.</summary>
+    public long ForwardBytes { get; init; }
+
+    /// <summary>The corresponding original-file offset; null before virtual media bytes were delivered.</summary>
+    public long? ForwardUpstreamOffset { get; init; }
+
+    /// <summary>UTC time upstream data was last received; null before any upstream body byte arrived.</summary>
+    public DateTimeOffset? LastByteReceivedAt { get; init; }
+
+    /// <summary>UTC time data, including memory data, was last delivered to the player.</summary>
+    public DateTimeOffset? LastDeliveredAt { get; init; }
+
+    /// <summary>The delivery rate including memory, over the same window as BytesPerSecond.</summary>
+    public double DeliveredBytesPerSecond { get; init; }
+}
