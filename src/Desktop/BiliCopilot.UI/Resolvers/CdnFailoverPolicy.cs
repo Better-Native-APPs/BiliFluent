@@ -7,10 +7,15 @@ internal enum CdnFailoverAction
     /// <summary>Nothing to do.</summary>
     None,
 
-    /// <summary>Reload at the current position from the next address of <see cref="CdnFailoverDecision.Stream"/>.</summary>
+    /// <summary>
+    /// Read <see cref="CdnFailoverDecision.Stream"/> from its next address: inside the relay while
+    /// the media plays through it, otherwise by reloading at the current position.
+    /// </summary>
     SwitchNode,
 
-    /// <summary>Request the play URLs again, then reload at the current position.</summary>
+    /// <summary>
+    /// Request the play URLs again, then hand them to the relay, or reload at the current position.
+    /// </summary>
     RefreshPlayUrl,
 
     /// <summary>Automatic handling is over for this media; the regular error display takes over.</summary>
@@ -157,7 +162,7 @@ internal sealed class CdnFailoverPolicy
         // The file is loaded.
         Loaded,
 
-        // A decision is being carried out; the next load starts a new observation.
+        // A decision is being carried out; the next load, or OnSwitchedInPlace, starts a new observation.
         Switching,
 
         // Automatic handling is over for this media.
@@ -282,6 +287,27 @@ internal sealed class CdnFailoverPolicy
         _waitStarted = null;
         _cacheTrend.Clear();
         SettleAudio(now);
+    }
+
+    /// <summary>
+    /// The decision was carried out without loading the file again: the relay reads the stream
+    /// from another address, or from URLs that were issued again, and mpv kept its file, its
+    /// position and its cache. Observation goes on with the loaded file.
+    /// </summary>
+    public void OnSwitchedInPlace(TimeSpan now)
+    {
+        if (_phase != Phase.Switching)
+        {
+            return;
+        }
+
+        _phase = Phase.Loaded;
+        ResetClocks();
+
+        // Nothing was emptied, so there is nothing to wait for beyond the window of the prediction.
+        _noPredictionBefore = null;
+        _audioMark = null;
+        _noAudioCheckBefore = now + PlaybackNetworkPolicy.InPlaceSwitchSettle;
     }
 
     /// <summary>
@@ -572,7 +598,8 @@ internal sealed class CdnFailoverPolicy
         _phase = Phase.Switching;
         ResetClocks();
 
-        // The reload empties the cache; the new node is judged only once it has had time to fill it.
+        // A reload empties the cache; the new node is judged only once it has had time to fill it.
+        // OnSwitchedInPlace lifts this again when the switch needed no reload.
         _noPredictionBefore = now + PlaybackNetworkPolicy.PredictionSettle;
         return new(action, stream, reason, Attempts);
     }
