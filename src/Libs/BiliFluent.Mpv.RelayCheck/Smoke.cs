@@ -61,6 +61,9 @@ internal static class Smoke
             ("vo", "null"), ("ao", "null"), ("idle", "yes"), ("ytdl", "no"), ("terminal", "no"), ("config", "no"),
             ("hwdec", "no"), ("cache", "yes"), ("demuxer-max-bytes", "24MiB"), ("demuxer-max-back-bytes", "0"),
             ("demuxer-readahead-secs", "15"), ("cache-pause-wait", "3"), ("keep-open", "yes"),
+
+            // Twenty seconds ahead at most, so that both streams are still being read when their node changes.
+            ("cache-secs", "20"),
         })
         {
             mpv.SetOption(name, value);
