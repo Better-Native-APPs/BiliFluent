@@ -16,7 +16,7 @@ namespace Richasy.MpvKernel.Core;
 /// <remarks>
 /// Calls return the native status instead of throwing, the way <see cref="MpvClient"/> expects them.
 /// </remarks>
-internal sealed unsafe class MpvCoreHandle
+internal sealed unsafe partial class MpvCoreHandle
 {
     private readonly MpvHandle* _ctx;
 
