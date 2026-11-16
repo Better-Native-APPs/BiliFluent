@@ -23,7 +23,6 @@
     <Grid
         x:Name="RootGrid"
         Padding="16,0"
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
         ColumnSpacing="12">
         <VisualStateManager.VisualStateGroups>
             <!--  Playback dot colour. Idle is the Ellipse's own Fill.  -->
@@ -53,6 +52,13 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
+
+        <!--  The card fill, edge to edge under the padding. A host that paints the header row itself hides it.  -->
+        <Border
+            x:Name="Backdrop"
+            Grid.ColumnSpan="5"
+            Margin="-16,0"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
 
         <!--  Anchor avatar asks the host to open the user space (app AvatarButtonStyle: scale feedback on hover/press).  -->
         <Button

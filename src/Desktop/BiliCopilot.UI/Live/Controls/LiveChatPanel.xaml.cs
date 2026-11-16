@@ -111,6 +111,16 @@ public sealed partial class LiveChatPanel : UserControl
         }
     }
 
+    /// <summary>
+    /// Whether the panel draws the line under its header. A host whose own header divider already runs across the
+    /// panel turns it off; the row keeps its height, so the list starts where it always does. Plain property.
+    /// </summary>
+    public bool IsHeaderDividerVisible
+    {
+        get => HeaderDivider.Opacity > 0;
+        set => HeaderDivider.Opacity = value ? 1 : 0;
+    }
+
     // ---------------------------------------------------------------- lifecycle
 
     private void OnLoaded(object sender, RoutedEventArgs e)
