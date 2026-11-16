@@ -16,13 +16,20 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
     private readonly Func<SourceItemViewModel, Task> _activeFunc;
 
     public SourceItemViewModel(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc)
+        : this(info, activeFunc, 0)
+    {
+        var userIsVip = this.Get<AccountViewModel>().MyProfile.IsVip ?? false;
+        IsEnabled = !info.NeedVip || (info.NeedVip && userIsVip);
+    }
+
+    private SourceItemViewModel(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc, int eotf)
         : base(info)
     {
         Name = info.Description;
         Id = info.Quality.ToString();
+        Eotf = eotf;
         _activeFunc = activeFunc;
-        var userIsVip = this.Get<AccountViewModel>().MyProfile.IsVip ?? false;
-        IsEnabled = !info.NeedVip || (info.NeedVip && userIsVip);
+        IsEnabled = true;
     }
 
     private SourceItemViewModel(Func<SourceItemViewModel, Task> activeFunc)
@@ -47,6 +54,12 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
     public string Id { get; set; }
 
     /// <summary>
+    /// The live transfer function, part of the entry's identity. On-demand entries always use 0,
+    /// preserving their quality-only equality even when their format metadata describes HDR.
+    /// </summary>
+    public int Eotf { get; }
+
+    /// <summary>
     /// Whether this is the "automatic" entry at the top of the list. It stands for no quality of its own
     /// (its quality number is 0); its name tells which quality plays.
     /// </summary>
@@ -63,6 +76,13 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
     /// </summary>
     public static SourceItemViewModel CreateAuto(Func<SourceItemViewModel, Task> activeFunc)
         => new(activeFunc);
+
+    /// <summary>
+    /// Creates an eligible live quality entry without an automatic tier or on-demand preferences.
+    /// The live source service has already checked login and VIP eligibility.
+    /// </summary>
+    public static SourceItemViewModel CreateLive(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc)
+        => new(info, activeFunc, info.Eotf);
 
     /// <summary>
     /// Names the automatic entry after what plays, such as "Auto (1080P)", or "Auto (1080P · Hi-Res lossless)"
@@ -89,8 +109,8 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
         }
     }
 
-    public override bool Equals(object? obj) => obj is SourceItemViewModel model && Id == model.Id;
-    public override int GetHashCode() => HashCode.Combine(Id);
+    public override bool Equals(object? obj) => obj is SourceItemViewModel model && Id == model.Id && Eotf == model.Eotf;
+    public override int GetHashCode() => HashCode.Combine(Id, Eotf);
 
     [RelayCommand]
     private Task ActiveAsync()

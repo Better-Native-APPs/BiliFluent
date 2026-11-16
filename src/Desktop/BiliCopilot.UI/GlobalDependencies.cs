@@ -102,6 +102,7 @@ internal static class GlobalDependencies
             .AddTransient<VideoMediaHistoryResolver>()
             .AddTransient<PgcMediaSourceResolver>()
             .AddTransient<PgcMediaHistoryResolver>()
+            .AddTransient<LiveMediaSourceResolver>()
             .AddTransient<PlayerViewModel>()
             .AddTransient<DanmakuSendViewModel>()
             .AddNotificationViewModel()

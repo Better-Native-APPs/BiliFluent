@@ -9,6 +9,7 @@ using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using Humanizer;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -70,7 +71,8 @@ public sealed partial class PlayerViewModel
         _lastCacheSpeedTextUpdate = 0;
         Volatile.Write(ref _forceSponsorPositionObservation, 1);
         if (Connector is not null && !(_snapshot.Type == BiliMediaType.Video && Connector is VideoConnectorViewModel)
-            && !(_snapshot.Type == BiliMediaType.Pgc && Connector is PgcConnectorViewModel))
+            && !(_snapshot.Type == BiliMediaType.Pgc && Connector is PgcConnectorViewModel)
+            && !(_snapshot.Type == BiliMediaType.Live && Connector is LiveConnectorViewModel live && ReferenceEquals(live.Room, _liveRoom)))
         {
             Connector.InvalidateRequests();
             Connector.PlaylistInitialized -= OnConnectorPlaylistInitialized;
@@ -85,6 +87,7 @@ public sealed partial class PlayerViewModel
             {
                 BiliMediaType.Video => new VideoConnectorViewModel(this),
                 BiliMediaType.Pgc => new PgcConnectorViewModel(this),
+                BiliMediaType.Live => new LiveConnectorViewModel(_liveRoom!, () => IsLiveMedia && !IsConnecting && !_liveMediaPending && !IsPlaybackClosing && !IsLiveReleaseBlocked),
                 _ => default,
             };
 
@@ -135,7 +138,8 @@ public sealed partial class PlayerViewModel
             }
 
             var configPath = string.Empty;
-            var decodeType = DecodeOverride ?? SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
+            var decodeType = IsLiveMedia ? PreferDecodeType.Auto
+                : DecodeOverride ?? SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
             if (decodeType == PreferDecodeType.Custom)
             {
                 configPath = await AppToolkit.EnsureMpvConfigExistAsync();
@@ -146,14 +150,14 @@ public sealed partial class PlayerViewModel
             {
                 UseConfig = false,
                 LoadScripts = true,
-                DisableCurl = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                DisableCurl = !IsLiveMedia && SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
                     && SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false),
-                UseDisplayResample = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                UseDisplayResample = !IsLiveMedia && SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
                     && SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false),
             };
             _curlDisableRequested = options.DisableCurl;
             _displaySyncRequested = options.UseDisplayResample;
-            var client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
+            var client = await MpvClient.CreateAsync(mpvPath, options, logger: IsLiveMedia ? NullLogger.Instance : logger);
             Client = client;
             CheckMediaAdmission();
             if (options.UseConfig != true && string.IsNullOrEmpty(configPath))
@@ -255,7 +259,7 @@ public sealed partial class PlayerViewModel
 
                 await AwaitInitializationStepAsync(() => Client.SetConfigFileAsync(configPath));
             }
-            else
+            else if (!IsLiveMedia)
             {
                 // 未使用自定义配置文件时，使用附加设置.
                 var preferAudioChannelLayout = SettingsToolkit.ReadLocalSetting(SettingNames.PreferAudioChannelLayout, Richasy.MpvKernel.Core.Enums.AudioChannelLayoutType.Auto);
@@ -318,7 +322,8 @@ public sealed partial class PlayerViewModel
                 await AwaitInitializationStepAsync(() => Client.SetAudioExclusiveAsync(audioExclusive));
             }
 
-            var logLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+            // Native messages can contain signed live URLs and credentials, including in DEBUG output.
+            var logLevel = IsLiveMedia ? MpvLogLevel.None : SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
             await AwaitInitializationStepAsync(() => Client.SetLogLevelAsync(logLevel));
             await AwaitInitializationStepAsync(() => Client.UseIdleAsync(true));
             await AwaitInitializationStepAsync(() => Client.UseKeepOpenAsync(true));
@@ -366,6 +371,11 @@ public sealed partial class PlayerViewModel
 
     private void OnConnectorPropertiesUpdated(object? sender, PlayerInformationUpdatedEventArgs e)
     {
+        if (IsLiveMedia && IsCurrentPlayback(_mediaVersion) && ReferenceEquals(sender, Connector))
+        {
+            Title = e.Title;
+            NotifyLivePropertiesChanged();
+        }
         if (!IsCurrentPlayback(_mediaVersion) || _smtc is null || !ReferenceEquals(sender, Connector))
         {
             return;
@@ -398,7 +408,10 @@ public sealed partial class PlayerViewModel
         {
             if (args.Button is SystemMediaTransportControlsButton.Play or SystemMediaTransportControlsButton.Pause)
             {
-                PlayPauseCommand.Execute(default);
+                if (IsLiveMedia)
+                    _ = ObserveLiveTransportAsync(args.Button == SystemMediaTransportControlsButton.Pause ? PauseLiveAsync() : PlayLiveAsync());
+                else
+                    PlayPauseCommand.Execute(default);
             }
             else if (args.Button == SystemMediaTransportControlsButton.Next && CanNavigatePlaylist && IsNextButtonEnabled)
             {
@@ -456,7 +469,7 @@ public sealed partial class PlayerViewModel
             queue.TryEnqueue(() => { if (IsCurrentPlayback(version)) OnClientErrorOccurred(sender, e); });
             return;
         }
-        if (!IsCurrentPlayback(_mediaVersion) || Player is null) return;
+        if (!IsCurrentPlayback(_mediaVersion) || Player is null || !ReferenceEquals(sender, Client) || IsLiveMedia) return;
         var mediaVersion = _mediaVersion;
         if (e == MpvError.TlsError)
         {
@@ -553,7 +566,7 @@ public sealed partial class PlayerViewModel
     }
 
     private void CheckBlackBackgroundVisible()
-        => IsBlackBackgroundVisible = Player?.IsPlaybackInitialized != true || !string.IsNullOrEmpty(ErrorMessage);
+        => IsBlackBackgroundVisible = (IsLiveMedia ? !IsLiveReady : Player?.IsPlaybackInitialized != true) || !string.IsNullOrEmpty(ErrorMessage);
 
     private void OnWindowSizeChanged(object? sender, Size e)
     {
@@ -920,7 +933,7 @@ public sealed partial class PlayerViewModel
             _positionTextSecond = -1;
             _chapterFlagsCount = -1;
             CheckHardwareDecode();
-            ErrorMessage = default;
+            if (!IsLiveMedia || IsLiveReady) ErrorMessage = default;
             _prevPosition = 0;
             CheckBlackBackgroundVisible();
             CheckBottomProgressBarVisible();
@@ -939,7 +952,7 @@ public sealed partial class PlayerViewModel
             IsStatsOverlayShown = false;
 
             // Make sure playing.
-            if (Player.PlaybackState != MpvPlayerState.Playing)
+            if (!IsLiveMedia && Player.PlaybackState != MpvPlayerState.Playing)
             {
                 if (_sponsor?.CanUseBinding == true) await SetUserPausedAsync(false);
                 else if (_sponsor?.HasBinding != true) await Client!.ResumeAsync();
@@ -993,7 +1006,7 @@ public sealed partial class PlayerViewModel
                 }
             }
 
-            if (Player.PlaybackState is MpvPlayerState.Buffering or MpvPlayerState.Seeking && !string.IsNullOrEmpty(ErrorMessage))
+            if (!IsLiveMedia && Player.PlaybackState is MpvPlayerState.Buffering or MpvPlayerState.Seeking && !string.IsNullOrEmpty(ErrorMessage))
             {
                 ErrorMessage = default;
                 CheckBlackBackgroundVisible();

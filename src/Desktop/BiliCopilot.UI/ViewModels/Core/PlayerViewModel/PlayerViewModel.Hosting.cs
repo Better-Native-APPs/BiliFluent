@@ -82,6 +82,7 @@ public sealed partial class PlayerViewModel
 
     public Task SendInlineDanmakuAsync(string text)
     {
+        if (IsLiveMedia) return OwnWork(SendInlineLiveDanmakuAsync(text));
         if (!CanSendOnDemandDanmaku)
             return Task.FromException(new InvalidOperationException("This media requires a different danmaku send pipeline."));
         if (IsPlaybackClosing || IsConnecting || Player?.IsPlaybackInitialized != true || string.IsNullOrWhiteSpace(text))
@@ -114,12 +115,16 @@ public sealed partial class PlayerViewModel
             InitializeDanmakuCommand, ReloadDanmakuCommand,
         ];
         var tasks = commands.Select(command => command.ExecutionTask).Where(task => task is not null).Cast<Task>().ToArray();
+        if (LiveConnector is { } live)
+            tasks = tasks.Append(live.PendingSend).Append(SelectLiveSourceCommand.ExecutionTask ?? Task.CompletedTask)
+                .Append(live.SendDanmakuCommand.ExecutionTask ?? Task.CompletedTask).ToArray();
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { logger.LogWarning(ex, "Player transport work ended while closing."); }
     }
 
     private void RetainConnectorWork()
     {
+        if (LiveConnector is { } live) _ = OwnWork(live.PendingSend);
         List<IAsyncRelayCommand> commands = [];
         IEnumerable<IPlayerSectionDetailViewModel> sections = [];
         if (Connector is VideoConnectorViewModel video)

@@ -186,6 +186,12 @@ public sealed partial class PlayerViewModel
     private async Task PlayPauseAsync()
     {
         if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (IsLiveMedia)
+        {
+            if (LiveLoadState == LiveMediaLoadState.Ready) await PauseLiveAsync();
+            else await PlayLiveAsync();
+            return;
+        }
         if (Player is null || Player.PlaybackState == MpvPlayerState.Idle)
         {
             return;

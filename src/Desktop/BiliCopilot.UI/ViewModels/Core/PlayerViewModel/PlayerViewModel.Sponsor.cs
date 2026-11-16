@@ -163,6 +163,7 @@ public sealed partial class PlayerViewModel
 
     private Task SetUserPausedAsync(bool paused)
     {
+        if (IsLiveMedia) return paused ? PauseLiveAsync() : PlayLiveAsync();
         if (_sponsor?.CanUseBinding != true) return Task.CompletedTask;
         if (!paused && TryReloadExpiredSourceOnResume(out var reload)) return reload;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Pause);
