@@ -144,6 +144,22 @@ public sealed partial class EmbeddedPlayerView
         UpdateSidePanel();
     }
 
+    // The button of the failed state: ask for the picture of the room once more. The player clears the error
+    // when it starts, and shows it again if the picture still cannot be loaded.
+    private async void OnRoomRetryClick(object sender, RoutedEventArgs e)
+    {
+        var owner = ViewModel;
+        if (!IsCurrentAttachment(owner, _attachmentEpoch) || owner is not { IsPlaybackClosing: false, IsLiveReleaseBlocked: false }) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Live retry failed: {ex.Message}");
+        }
+    }
+
     // The same way to the user space as the uploader of a video.
     private void OnRoomAnchorInvoked(object? sender, UserProfile anchor)
     {

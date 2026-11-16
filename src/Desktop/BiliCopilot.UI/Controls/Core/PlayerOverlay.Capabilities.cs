@@ -1,5 +1,7 @@
 // Copyright (c) BiliFluent. All rights reserved.
 
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using Richasy.MpvKernel.Core.Enums;
 
@@ -55,6 +57,24 @@ public sealed partial class PlayerOverlay
     /// <summary>The danmaku of a room is drawn while its picture plays, not while it loads, pauses or has ended.</summary>
     internal static bool IsRoomPlaying(LiveMediaLoadState state)
         => state == LiveMediaLoadState.Ready;
+
+    /// <summary>
+    /// The stream of a room ended, or its connection dropped, after it had played. While the player is already
+    /// asking for the picture again, the connecting hint stands alone.
+    /// </summary>
+    internal static Visibility GetRoomEndedVisibility(LiveMediaLoadState state, bool isConnecting)
+        => state == LiveMediaLoadState.Ended && !isConnecting ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The title over a playback error. A room whose picture cannot be shown says so in plain words.</summary>
+    internal static string GetErrorTitle(bool isLiveMedia)
+        => ResourceToolkit.GetLocalizedString(isLiveMedia ? StringNames.LiveFailedTitle : StringNames.MpvError);
+
+    /// <summary>
+    /// The text under <see cref="GetErrorTitle(bool)"/>. The player words the failure of a room for its log, so a
+    /// room shows the same plain advice whatever the failure was; other media show what the player reports.
+    /// </summary>
+    internal static string GetErrorDescription(string? errorMessage, bool isLiveMedia)
+        => isLiveMedia ? ResourceToolkit.GetLocalizedString(StringNames.LiveFailedDescription) : errorMessage ?? string.Empty;
 
     /// <summary>The dot of the live status is full while the media plays and dimmed otherwise.</summary>
     internal static double GetLiveStatusDotOpacity(MpvPlayerState state)

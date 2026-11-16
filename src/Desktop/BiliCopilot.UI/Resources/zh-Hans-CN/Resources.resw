@@ -2187,4 +2187,16 @@
   <data name="LiveRefresh" xml:space="preserve">
     <value>刷新到最新画面</value>
   </data>
+  <data name="LiveEndedTitle" xml:space="preserve">
+    <value>直播已结束或连接中断</value>
+  </data>
+  <data name="LiveEndedDescription" xml:space="preserve">
+    <value>可以刷新一下，看看直播是否还在继续。</value>
+  </data>
+  <data name="LiveFailedTitle" xml:space="preserve">
+    <value>直播画面没有加载出来</value>
+  </data>
+  <data name="LiveFailedDescription" xml:space="preserve">
+    <value>可能是网络不稳定，或者直播刚刚结束。可以再试一次。</value>
+  </data>
 </root>

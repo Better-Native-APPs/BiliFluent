@@ -519,4 +519,16 @@
   <data name="LiveRefresh" xml:space="preserve">
     <value>Refresh and catch up to live</value>
   </data>
+  <data name="LiveEndedTitle" xml:space="preserve">
+    <value>The stream ended or the connection dropped</value>
+  </data>
+  <data name="LiveEndedDescription" xml:space="preserve">
+    <value>Refresh to check whether the stream is still on.</value>
+  </data>
+  <data name="LiveFailedTitle" xml:space="preserve">
+    <value>Couldn't load the stream</value>
+  </data>
+  <data name="LiveFailedDescription" xml:space="preserve">
+    <value>The network may be unstable, or the stream may have just ended. You can try again.</value>
+  </data>
 </root>

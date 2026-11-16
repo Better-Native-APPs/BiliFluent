@@ -320,20 +320,31 @@
                     VerticalAlignment="Center"
                     Spacing="12"
                     Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
+                    <!--  A room whose picture cannot be shown says so in plain words and offers to try again.  -->
                     <TextBlock
                         HorizontalAlignment="Center"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{ext:Locale Name=MpvError}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveMedia), Mode=OneWay}"
                         TextAlignment="Center" />
                     <TextBlock
-                        Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveMedia), Mode=OneWay}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
-                    <Button
-                        x:Name="ErrorBackButton"
+                    <StackPanel
                         HorizontalAlignment="Center"
-                        Command="{x:Bind ViewModel.BackCommand, Mode=OneWay}"
-                        Content="{ext:Locale Name=Back}" />
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button
+                            Click="OnRoomRetryClick"
+                            Content="{ext:Locale Name=Retry}"
+                            IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Visibility="{x:Bind ViewModel.IsLiveMedia, Mode=OneWay}" />
+                        <Button
+                            x:Name="ErrorBackButton"
+                            Command="{x:Bind ViewModel.BackCommand, Mode=OneWay}"
+                            Content="{ext:Locale Name=Back}" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Grid>

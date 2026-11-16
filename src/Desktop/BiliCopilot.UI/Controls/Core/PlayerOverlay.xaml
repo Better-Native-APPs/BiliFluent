@@ -318,6 +318,41 @@
                 Text="{ext:Locale Name=Loading}"
                 Visibility="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay}" />
         </Grid>
+        <!--
+            The stream of a room has ended, or its connection dropped after it played. The picture behind is black,
+            so the words are light whatever the app theme is. One button asks for the newest picture again; the
+            words take no pointer input, so the player gestures work through them.
+        -->
+        <StackPanel
+            MaxWidth="360"
+            Margin="24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            RequestedTheme="Dark"
+            Spacing="8"
+            Visibility="{x:Bind local:PlayerOverlay.GetRoomEndedVisibility(ViewModel.LiveLoadState, ViewModel.IsConnecting), Mode=OneWay}">
+            <TextBlock
+                HorizontalAlignment="Center"
+                IsHitTestVisible="False"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{ext:Locale Name=LiveEndedTitle}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsHitTestVisible="False"
+                Text="{ext:Locale Name=LiveEndedDescription}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+            <Button
+                Margin="0,8,0,0"
+                HorizontalAlignment="Center"
+                Click="OnRoomRefreshClick"
+                Content="{ext:Locale Name=Refresh}"
+                IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                Style="{StaticResource AccentButtonStyle}" />
+        </StackPanel>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="60" />
@@ -446,11 +481,11 @@
                 </animations:Implicit.HideAnimations>
             </Grid>
             <base:EmptyHolder
-                Title="{ext:Locale Name=MpvError}"
+                Title="{x:Bind local:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveMedia), Mode=OneWay}"
                 Grid.RowSpan="2"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Description="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                Description="{x:Bind local:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveMedia), Mode=OneWay}"
                 Emoji="&#x1F494;"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
                 <!--<base:EmptyHolder.ActionElement>
