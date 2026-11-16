@@ -119,6 +119,9 @@ public sealed partial class MpvClient
             case NativeEventId.PlaybackRestart:
                 SendNotify(MpvClientEventId.PlaybackRestart, default);
                 break;
+            case NativeEventId.CommandReply:
+                CompleteTrackCommand(@event->ReplyUserData, error);
+                return;
             default:
                 _logger.LogInformation($"[MPV] Event received: {@event->EventId}");
                 break;

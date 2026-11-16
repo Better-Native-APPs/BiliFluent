@@ -25,7 +25,7 @@ namespace Richasy.MpvKernel.Relay;
 /// the relay from reading upstream. Every request must carry the random token of the relay in
 /// its path. Neither that token nor an upstream URL or host is ever logged or put in an exception.
 /// </remarks>
-public sealed class LoopbackMediaRelay : IAsyncDisposable
+public sealed partial class LoopbackMediaRelay : IAsyncDisposable
 {
     private const string DefaultContentType = "video/mp4";
     private readonly LoopbackMediaRelayOptions _options;
@@ -158,7 +158,7 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         }
 
         headers ??= entry.Headers;
-        var known = entry.Length;
+        var known = entry.UpstreamLength;
         var start = current;
         RelayFailureReason? skipped = null;
         if (known >= 0)
@@ -425,9 +425,9 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(lifetime, entry.Removed);
         var token = linked.Token;
-        Interlocked.Increment(ref entry.Requests);
+        var requestId = Interlocked.Increment(ref entry.Requests);
         Interlocked.Increment(ref entry.ActiveRequests);
-        using var transfer = new Transfer(this, entry, client, buffer, token);
+        using var transfer = new Transfer(this, entry, client, buffer, token, requestId);
         try
         {
             var range = RelayByteRange.Parse(request.Range);
@@ -457,9 +457,10 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
             }
 
             var partial = resolved.Kind == RelayRangeKind.Partial;
-            if (_logger.IsEnabled(LogLevel.Debug))
+            if (_logger.IsEnabled(LogLevel.Debug) || _logger.IsEnabled(LogLevel.Trace))
             {
-                _logger.LogDebug("Relay | request stream={Key} method={Method} from={From} to={To} total={Total}", entry.Key, request.Method, resolved.From, resolved.To, total);
+                _logger.Log(_logger.IsEnabled(LogLevel.Debug) ? LogLevel.Debug : LogLevel.Trace,
+                    "Relay | request stream={Key} request={Request} method={Method} from={From} to={To} total={Total}", entry.Key, requestId, request.Method, resolved.From, resolved.To, total);
             }
 
             await WriteHeadAsync(
@@ -600,7 +601,9 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         private readonly Lock _sync = new();
         private readonly RelayUpstreamTable _table;
         private readonly RelayPreload[] _preloaded;
+        private readonly RelayVirtualOffsetMap? _virtualMap;
         private readonly RelayRateMeter _rate = new(RelayDefaults.RateWindow);
+        private readonly RelayRateMeter _deliveryRate = new(RelayDefaults.RateWindow);
 #pragma warning disable CA2213 // Both are cancelled and disposed on the pool, see Dispose and Signal.
         private readonly CancellationTokenSource _removed = new();
         private CancellationTokenSource _changed = new();
@@ -610,6 +613,9 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         private string? _contentType;
         private long _length;
         private long _firstByteTicks = -1;
+        private long _forwardBytes;
+        private long _lastReceivedTicks;
+        private long _lastDeliveredTicks;
         private int _disposed;
 
         public StreamEntry(string key, RelayStreamRegistration registration)
@@ -618,6 +624,7 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
             _table = new(registration.Upstreams, registration.Current);
             _headers = registration.Headers;
             _preloaded = registration.Preloaded is { } preloaded ? [.. preloaded] : [];
+            _virtualMap = registration.VirtualMap;
             _length = registration.Length is >= 0 and var length ? length : -1;
             _changedToken = _changed.Token;
             Removed = _removed.Token;
@@ -633,6 +640,11 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         public string? ContentType => Volatile.Read(ref _contentType);
 
         public long Length => Interlocked.Read(ref _length);
+
+        public long UpstreamLength => _virtualMap?.UpstreamLength ?? Length;
+
+        public long ToUpstreamOffset(long offset)
+            => _virtualMap is null ? offset : _virtualMap.TryMapToUpstream(offset, out var real) ? real : throw new InvalidOperationException("The rewritten head has no upstream offset.");
 
         public int Count
         {
@@ -712,7 +724,8 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
 
         // False when the stream is already known to have another length.
         public bool TrySetLength(long length)
-            => Interlocked.CompareExchange(ref _length, length, -1) is var known && (known < 0 || known == length);
+            => _virtualMap is { } map ? length == map.UpstreamLength
+                : Interlocked.CompareExchange(ref _length, length, -1) is var known && (known < 0 || known == length);
 
         public void NoteAnswer(TimeSpan firstByte, string? contentType)
         {
@@ -727,6 +740,22 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         {
             Interlocked.Add(ref UpstreamBytes, count);
             _rate.Add(Environment.TickCount64, count);
+        }
+
+        public void NoteUpstreamRead() => Interlocked.Exchange(ref _lastReceivedTicks, DateTimeOffset.UtcNow.Ticks);
+
+        public void NoteDelivery(long endOffset, int count)
+        {
+            var previous = Interlocked.Read(ref _forwardBytes);
+            while (endOffset > previous)
+            {
+                var observed = Interlocked.CompareExchange(ref _forwardBytes, endOffset, previous);
+                if (observed == previous) break;
+                previous = observed;
+            }
+
+            Interlocked.Exchange(ref _lastDeliveredTicks, DateTimeOffset.UtcNow.Ticks);
+            _deliveryRate.Add(Environment.TickCount64, count);
         }
 
         public RelayPreload? FindPreload(long offset)
@@ -767,6 +796,9 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
 
             var firstByte = Interlocked.Read(ref _firstByteTicks);
             var length = Length;
+            var forward = Interlocked.Read(ref _forwardBytes);
+            var received = Interlocked.Read(ref _lastReceivedTicks);
+            var delivered = Interlocked.Read(ref _lastDeliveredTicks);
             return new(
                 Interlocked.Read(ref UpstreamBytes),
                 Interlocked.Read(ref PreloadedBytes),
@@ -777,7 +809,14 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
                 Volatile.Read(ref ActiveRequests),
                 length < 0 ? null : length,
                 Volatile.Read(ref Failovers),
-                Volatile.Read(ref Handovers));
+                Volatile.Read(ref Handovers))
+            {
+                ForwardBytes = forward,
+                ForwardUpstreamOffset = _virtualMap is null ? forward : _virtualMap.TryMapToUpstream(forward, out var original) ? original : null,
+                LastByteReceivedAt = received == 0 ? null : new DateTimeOffset(received, TimeSpan.Zero),
+                LastDeliveredAt = delivered == 0 ? null : new DateTimeOffset(delivered, TimeSpan.Zero),
+                DeliveredBytesPerSecond = _deliveryRate.GetRate(Environment.TickCount64),
+            };
         }
 
         public void Dispose()
@@ -833,9 +872,10 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
     /// The body of one response: copies bytes to the player and keeps an upstream connection
     /// positioned where the next byte comes from.
     /// </summary>
-    private sealed class Transfer(LoopbackMediaRelay relay, StreamEntry entry, NetworkStream client, byte[] buffer, CancellationToken token) : IDisposable
+    private sealed class Transfer(LoopbackMediaRelay relay, StreamEntry entry, NetworkStream client, byte[] buffer, CancellationToken token, long requestId) : IDisposable
     {
         private UpstreamConnection? _upstream;
+        private readonly bool _trace = relay._logger.IsEnabled(LogLevel.Trace);
 
         // Upstream requests that failed since the last byte arrived.
         private int _failures;
@@ -854,9 +894,12 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
                 {
                     var skip = (int)(offset - preload.Offset);
                     var count = (int)Math.Min(preload.Data.Length - skip, to - offset + 1);
+                    var memoryStarted = _trace ? Stopwatch.GetTimestamp() : 0;
                     await client.WriteAsync(preload.Data.Slice(skip, count), token).ConfigureAwait(false);
+                    if (_trace) TraceRead("memory", offset, count, 0, Stopwatch.GetElapsedTime(memoryStarted).TotalMilliseconds, null, null);
                     offset += count;
                     Interlocked.Add(ref entry.PreloadedBytes, count);
+                    entry.NoteDelivery(offset, count);
                     continue;
                 }
 
@@ -908,6 +951,7 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
 
                 if (failure is { } reason)
                 {
+                    if (_trace) TraceRead("upstream", offset, 0, Stopwatch.GetElapsedTime(started).TotalMilliseconds, 0, upstream.Selection.Upstream.Label, reason);
                     var selection = upstream.Selection;
                     var delivered = upstream.Delivered;
                     CloseUpstream();
@@ -926,12 +970,17 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
                     continue;
                 }
 
+                entry.NoteUpstreamRead();
+                var readWait = _trace ? Stopwatch.GetElapsedTime(started).TotalMilliseconds : 0;
+                var deliveredAt = _trace ? Stopwatch.GetTimestamp() : 0;
                 await client.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
+                if (_trace) TraceRead("upstream", offset, read, readWait, Stopwatch.GetElapsedTime(deliveredAt).TotalMilliseconds, upstream.Selection.Upstream.Label, null);
                 offset += read;
                 upstream.Position = offset;
                 upstream.Delivered += read;
                 _failures = 0;
                 entry.AddUpstreamBytes(read);
+                entry.NoteDelivery(offset, read);
             }
         }
 
@@ -974,11 +1023,13 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         {
             var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token, changed);
             HttpResponseMessage? response = null;
+            long started = 0;
             try
             {
                 cancellation.CancelAfter(relay._options.ResponseTimeout);
-                var started = Stopwatch.GetTimestamp();
-                var answer = await relay.RequestAsync(selection.Upstream, entry.Headers, offset, last, cancellation.Token).ConfigureAwait(false);
+                started = Stopwatch.GetTimestamp();
+                var answer = await relay.RequestAsync(selection.Upstream, entry.Headers, entry.ToUpstreamOffset(offset), last is { } end ? entry.ToUpstreamOffset(end) : null, cancellation.Token).ConfigureAwait(false);
+                if (_trace) TraceRead("upstream-open", offset, 0, Stopwatch.GetElapsedTime(started).TotalMilliseconds, 0, selection.Upstream.Label, answer.Response is null ? answer.Reason : null);
                 response = answer.Response;
                 if (response is null)
                 {
@@ -1001,6 +1052,7 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
             }
             catch (OperationCanceledException) when (!token.IsCancellationRequested)
             {
+                if (_trace) TraceRead("upstream-open", offset, 0, Stopwatch.GetElapsedTime(started).TotalMilliseconds, 0, selection.Upstream.Label, RelayFailureReason.Timeout);
                 response?.Dispose();
                 cancellation.Dispose();
                 return entry.Version != selection.Version ? (null, default, true) : (null, RelayFailureReason.Timeout, false);
@@ -1039,6 +1091,13 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
         {
             _upstream?.Dispose();
             _upstream = null;
+        }
+
+        private void TraceRead(string source, long offset, int count, double wait, double delivery, string? node, RelayFailureReason? reason)
+        {
+            relay._logger.LogTrace("Relay | read stream={Key} request={Request} source={Source} from={From} to={To} count={Count} originalFrom={OriginalFrom} waitMs={WaitMs} deliveryMs={DeliveryMs} node={Node} reason={Reason}",
+                entry.Key, requestId, source, offset, count > 0 ? offset + count - 1 : offset, count,
+                source == "memory" ? null : (long?)entry.ToUpstreamOffset(offset), wait, delivery, node, reason);
         }
     }
 }

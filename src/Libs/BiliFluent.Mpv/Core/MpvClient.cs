@@ -181,9 +181,13 @@ public sealed partial class MpvClient : IAsyncDisposable
 
         await Task.Run(() => _handle.CommandString("stop"));
         await StopEventLoopAsync();
+        CompletePendingTrackCommands();
         _eventCts?.Dispose();
         _eventCts = null;
-        await Task.Run(_handle.Destroy);
+        await Task.Run(() =>
+        {
+            lock (_trackCommandSync) _handle.Destroy();
+        });
     }
 
     internal void ThrowError(MpvError errorCode)

@@ -27,13 +27,18 @@ internal static class Program
                 break;
             case "all":
                 UnitChecks.Run(report);
+                DashChecks.Run(report);
                 await RelayChecks.RunAsync(report);
+                await MemoryRelayChecks.RunAsync(report);
                 break;
             case "smoke":
                 await Smoke.RunAsync(report, options);
                 break;
+            case "seamless-smoke":
+                await SeamlessSmoke.RunAsync(report, options);
+                break;
             default:
-                Console.WriteLine("usage: unit | relay | all | smoke [dll=<libmpv-2.dll>] [bvid=..] [cid=..] [tls=on|off]");
+                Console.WriteLine("usage: unit | relay | all | smoke [dll=<libmpv-2.dll>] [bvid=..] [cid=..] [tls=on|off] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..]");
                 return 2;
         }
 
