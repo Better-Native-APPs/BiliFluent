@@ -1,8 +1,12 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using System.ComponentModel;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Input;
+using Richasy.BiliKernel.Models.Authorization;
 using Richasy.WinUIKernel.Share.Base;
 using Windows.System;
 
@@ -13,6 +17,8 @@ namespace BiliCopilot.UI.Pages;
 /// </summary>
 public sealed partial class StartupPage : StartupPageBase
 {
+    private const string NoticeActivity = "SignInNotice";
+
     /// <summary>
     /// Initializes a new instance of the <see cref="StartupPage"/> class.
     /// </summary>
@@ -24,10 +30,58 @@ public sealed partial class StartupPage : StartupPageBase
     /// <inheritdoc/>
     protected override void OnPageLoaded()
     {
+        DetachViewModel();
+        ViewModel.CaptchaPresenter = ShowCaptchaAsync;
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ViewModel.WebSignInRequested += OnWebSignInRequested;
+        ViewModel.SignInFocusRequested += OnSignInFocusRequested;
         ViewModel.InitializeCommand.Execute(QRCodeImage);
+        AccountBox.Focus(FocusState.Programmatic);
     }
 
-    private void OnWebSignInButtonClick(object sender, RoutedEventArgs e)
+    /// <inheritdoc/>
+    protected override void OnPageUnloaded()
+    {
+        DetachViewModel();
+
+        // Nothing typed here outlives the page.
+        ViewModel.ResetSignInForm();
+    }
+
+    private static bool IsEnter(KeyRoutedEventArgs e)
+        => e.Key == VirtualKey.Enter && !e.KeyStatus.WasKeyDown;
+
+    // Tell a screen reader about text that changes without the focus moving to it. The source only has to be
+    // an element that is always on screen; the text that changed may not be visible yet.
+    private static void Announce(UIElement source, string text, bool isImportant)
+    {
+        if (string.IsNullOrEmpty(text) || FrameworkElementAutomationPeer.FromElement(source) is not { } peer)
+        {
+            return;
+        }
+
+        peer.RaiseNotificationEvent(
+            isImportant ? AutomationNotificationKind.ActionAborted : AutomationNotificationKind.Other,
+            isImportant ? AutomationNotificationProcessing.ImportantMostRecent : AutomationNotificationProcessing.MostRecent,
+            text,
+            NoticeActivity);
+    }
+
+    private void DetachViewModel()
+    {
+        ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        ViewModel.WebSignInRequested -= OnWebSignInRequested;
+        ViewModel.SignInFocusRequested -= OnSignInFocusRequested;
+        ViewModel.CaptchaPresenter = null;
+    }
+
+    private Task<BiliLoginCaptchaResult?> ShowCaptchaAsync(BiliLoginCaptchaParameters parameters, CancellationToken cancellationToken)
+        => CaptchaWindow.RequestAsync(
+            this.Get<AppViewModel>().Windows.FirstOrDefault(p => p is StartupWindow),
+            parameters,
+            cancellationToken);
+
+    private void ShowWebSignIn()
     {
         var window = this.Get<AppViewModel>().Windows.FirstOrDefault(p => p is WebSignInWindow);
         if (window is not null)
@@ -39,6 +93,151 @@ public sealed partial class StartupPage : StartupPageBase
             new WebSignInWindow().Activate();
         }
     }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // The message bar announces itself when it opens; these two have no such behavior.
+        if (e.PropertyName == nameof(ViewModel.SignInStatus))
+        {
+            Announce(AppNameBlock, ViewModel.SignInStatus, isImportant: false);
+        }
+        else if (e.PropertyName == nameof(ViewModel.ErrorTip) && !string.IsNullOrEmpty(ViewModel.ErrorTip))
+        {
+            Announce(AppNameBlock, QRTipBlock.Text, isImportant: true);
+        }
+    }
+
+    private void OnWebSignInRequested(object? sender, EventArgs e)
+        => ShowWebSignIn();
+
+    private void OnSignInFocusRequested(object? sender, StartupSignInField field)
+    {
+        Control target = field switch
+        {
+            StartupSignInField.Account => AccountBox,
+            StartupSignInField.Password => PasswordInput,
+            StartupSignInField.PhoneNumber => PhoneBox,
+            StartupSignInField.SmsCode => SmsCodeBox,
+            StartupSignInField.VerificationSend => SendVerificationCodeButton,
+            _ => VerificationCodeBox,
+        };
+
+        // The request often arrives while the form is still disabled or switching steps; wait for that to settle.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => target.Focus(FocusState.Programmatic));
+    }
+
+    private void OnModeSelectorSelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+        => ViewModel.IsSmsMode = sender.SelectedItem is not null && ReferenceEquals(sender.SelectedItem, SmsModeItem);
+
+    private void OnCountryBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // The list is filled after the box exists, which briefly reports "nothing selected"; ignore that.
+        if (CountryBox.SelectedItem is StartupCountryItem country)
+        {
+            ViewModel.SelectedCountry = country;
+        }
+    }
+
+    private void OnCountryBoxDropDownOpened(object sender, object e)
+        => ViewModel.LoadCountriesCommand.Execute(default);
+
+    private void OnAccountBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!IsEnter(e))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (string.IsNullOrEmpty(PasswordInput.Password))
+        {
+            PasswordInput.Focus(FocusState.Keyboard);
+        }
+        else
+        {
+            ViewModel.SignInWithPasswordCommand.Execute(default);
+        }
+    }
+
+    private void OnPasswordInputKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (IsEnter(e))
+        {
+            e.Handled = true;
+            ViewModel.SignInWithPasswordCommand.Execute(default);
+        }
+    }
+
+    private void OnPhoneBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!IsEnter(e))
+        {
+            return;
+        }
+
+        // Without a code yet, the step at hand is asking for one (the challenge window comes first).
+        e.Handled = true;
+        if (string.IsNullOrWhiteSpace(SmsCodeBox.Text))
+        {
+            if (ViewModel.CanSendSmsCode)
+            {
+                ViewModel.SendSmsCodeCommand.Execute(default);
+            }
+            else
+            {
+                SmsCodeBox.Focus(FocusState.Keyboard);
+            }
+        }
+        else
+        {
+            ViewModel.SignInWithSmsCommand.Execute(default);
+        }
+    }
+
+    private void OnSmsCodeBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (IsEnter(e))
+        {
+            e.Handled = true;
+            ViewModel.SignInWithSmsCommand.Execute(default);
+        }
+    }
+
+    private void OnVerificationCodeBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (IsEnter(e))
+        {
+            e.Handled = true;
+            ViewModel.CompleteVerificationCommand.Execute(default);
+        }
+    }
+
+    private void OnPasswordSignInButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.SignInWithPasswordCommand.Execute(default);
+
+    private void OnSmsSignInButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.SignInWithSmsCommand.Execute(default);
+
+    private void OnSendSmsCodeButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.SendSmsCodeCommand.Execute(default);
+
+    private void OnSendVerificationCodeButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.SendVerificationCodeCommand.Execute(default);
+
+    private void OnVerificationSubmitButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.CompleteVerificationCommand.Execute(default);
+
+    private void OnCancelSignInButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.CancelSignInCommand.Execute(default);
+
+    private void OnLeaveVerificationButtonClick(object sender, RoutedEventArgs e)
+        => ViewModel.LeaveVerificationCommand.Execute(default);
+
+    private void OnSignInMessageActionClick(object sender, RoutedEventArgs e)
+        => ViewModel.RunSignInMessageActionCommand.Execute(default);
+
+    private void OnWebSignInButtonClick(object sender, RoutedEventArgs e)
+        => ShowWebSignIn();
 
     private async void OnRepoButtonClickAsync(object sender, RoutedEventArgs e)
         => await Launcher.LaunchUriAsync(new Uri("https://github.com/Better-Native-APPs/BiliFluent"));
