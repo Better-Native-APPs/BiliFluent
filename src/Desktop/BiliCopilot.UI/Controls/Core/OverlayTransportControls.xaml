@@ -576,7 +576,7 @@
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
-                    Visibility="{x:Bind ViewModel.IsDanmakuControlVisible, Mode=OneWay}">
+                    Visibility="{x:Bind local:PlayerOverlay.GetDanmakuSwitchVisibility(ViewModel.IsDanmakuControlVisible, ViewModel.Connector), Mode=OneWay}">
                     <ToggleButton
                         x:Name="DanmakuToggleButton"
                         Margin="0,0,8,0"
@@ -595,7 +595,8 @@
                         Click="OnDanmakuOptionsButtonClick"
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
+                        Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                         <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                     </Button>
                 </StackPanel>

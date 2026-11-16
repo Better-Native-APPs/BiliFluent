@@ -12,6 +12,7 @@
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:live="using:BiliCopilot.UI.Live.Controls"
     xmlns:local="using:BiliCopilot.UI.Controls.Core"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:player="using:BiliCopilot.UI.Controls.Player"
@@ -67,12 +68,26 @@
         <DataTemplate x:Key="PgcPanelTemplate" x:DataType="core:PgcConnectorViewModel">
             <player:PgcPlayerPanel ViewModel="{x:Bind}" />
         </DataTemplate>
+        <!--  A room puts its danmaku box where other media show what plays. It has no extra panel.  -->
+        <DataTemplate x:Key="LiveWidgetTemplate" x:DataType="core:LiveConnectorViewModel">
+            <live:LiveComposer
+                VerticalAlignment="Center"
+                Connector="{x:Bind}"
+                Noticed="OnRoomComposerNoticed"
+                RequestedTheme="Dark"
+                SendButtonStyle="{StaticResource BasicPlayerIconButtonStyle}" />
+        </DataTemplate>
+        <DataTemplate x:Key="LivePanelTemplate" x:DataType="core:LiveConnectorViewModel">
+            <Grid />
+        </DataTemplate>
         <ext:PlayerComponentTemplateSelector
             x:Key="WidgetSelector"
+            LiveTemplate="{StaticResource LiveWidgetTemplate}"
             PgcTemplate="{StaticResource PgcWidgetTemplate}"
             VideoTemplate="{StaticResource VideoWidgetTemplate}" />
         <ext:PlayerComponentTemplateSelector
             x:Key="PanelSelector"
+            LiveTemplate="{StaticResource LivePanelTemplate}"
             PgcTemplate="{StaticResource PgcPanelTemplate}"
             VideoTemplate="{StaticResource VideoPanelTemplate}" />
         <Style
@@ -261,6 +276,19 @@
             VerticalAlignment="Stretch"
             x:Load="{x:Bind ViewModel.IsDanmakuControlVisible, Mode=OneWay}"
             ViewModel="{x:Bind ViewModel.Danmaku, Mode=OneWay}" />
+        <!--
+            The danmaku of a room: above the picture, under every control and hint. It is created only for a room,
+            follows the same danmaku switch, and starts empty for another room.
+        -->
+        <live:LiveDanmakuOverlay
+            x:Name="RoomDanmaku"
+            Margin="4"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            x:Load="{x:Bind local:PlayerOverlay.HasRoomDanmaku(ViewModel.Connector), Mode=OneWay}"
+            Connector="{x:Bind local:PlayerOverlay.GetRoomConnector(ViewModel.Connector), Mode=OneWay}"
+            IsDanmakuVisible="{x:Bind ViewModel.Danmaku.IsShowDanmaku, Mode=OneWay}"
+            IsPlaying="{x:Bind local:PlayerOverlay.IsRoomPlaying(ViewModel.LiveLoadState), Mode=OneWay}" />
         <Rectangle
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"

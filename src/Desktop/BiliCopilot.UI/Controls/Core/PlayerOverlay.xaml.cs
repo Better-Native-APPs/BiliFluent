@@ -133,6 +133,10 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         BottomProgressBar.RegisterPropertyChangedCallback(ProgressBar.MaximumProperty, OnBottomProgressMaximumChanged);
     }
 
+    // A send of the room that did not go through: the draft stays in the box and the tip tells why.
+    private void OnRoomComposerNoticed(object? sender, BiliCopilot.UI.Live.Controls.LiveComposerNotice notice)
+        => ShowTip(notice.Message, notice.Type);
+
     public void ShowTip(string text, InfoType type = InfoType.Error)
     {
         // Capture the requesting owner/media on the UI thread; an off-thread caller is bound when dispatched.

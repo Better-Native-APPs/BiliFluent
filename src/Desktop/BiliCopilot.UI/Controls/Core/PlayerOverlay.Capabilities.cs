@@ -1,5 +1,6 @@
 // Copyright (c) BiliFluent. All rights reserved.
 
+using BiliCopilot.UI.ViewModels.Core;
 using Richasy.MpvKernel.Core.Enums;
 
 namespace BiliCopilot.UI.Controls.Core;
@@ -35,6 +36,25 @@ public sealed partial class PlayerOverlay
     /// </summary>
     internal static Visibility GetLiveStatusVisibility(bool canSeek, bool hasAdmittedMedia)
         => hasAdmittedMedia && !canSeek ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// A room brings its own danmaku: the room delivers the messages and takes what the user sends. The views
+    /// learn it from the connector, the same way the template selectors pick the parts of a room.
+    /// </summary>
+    internal static bool HasRoomDanmaku(IPlayerConnectorViewModel? connector)
+        => connector is LiveConnectorViewModel;
+
+    /// <summary>The connector of the room that plays, or null for a media without a room.</summary>
+    internal static LiveConnectorViewModel? GetRoomConnector(IPlayerConnectorViewModel? connector)
+        => connector as LiveConnectorViewModel;
+
+    /// <summary>The danmaku switch of a bar shows for loaded on-demand danmaku and for a room.</summary>
+    internal static Visibility GetDanmakuSwitchVisibility(bool isDanmakuControlVisible, IPlayerConnectorViewModel? connector)
+        => isDanmakuControlVisible || HasRoomDanmaku(connector) ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The danmaku of a room is drawn while its picture plays, not while it loads, pauses or has ended.</summary>
+    internal static bool IsRoomPlaying(LiveMediaLoadState state)
+        => state == LiveMediaLoadState.Ready;
 
     /// <summary>The dot of the live status is full while the media plays and dimmed otherwise.</summary>
     internal static double GetLiveStatusDotOpacity(MpvPlayerState state)
