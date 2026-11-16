@@ -17,6 +17,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition />
         </Grid.RowDefinitions>
         <TitleBar x:Name="TitleBar" Title="{ext:Locale Name=AppName}">
@@ -24,9 +25,38 @@
                 <ImageIconSource ImageSource="ms-appx:///Assets/StoreLogo.png" />
             </TitleBar.IconSource>
         </TitleBar>
+
+        <!--  Turning the web session into an app authorization takes a moment and can fail.  -->
+        <InfoBar
+            x:Name="ImportProgressBar"
+            Grid.Row="1"
+            IsClosable="False"
+            Message="{ext:Locale Name=WebSignInFinishing}"
+            Severity="Informational">
+            <InfoBar.Content>
+                <ProgressBar
+                    Margin="0,0,0,12"
+                    AutomationProperties.Name="{ext:Locale Name=WebSignInFinishing}"
+                    IsIndeterminate="True" />
+            </InfoBar.Content>
+        </InfoBar>
+        <InfoBar
+            x:Name="ImportErrorBar"
+            Title="{ext:Locale Name=WebSignInFailedTitle}"
+            Grid.Row="1"
+            IsClosable="False"
+            Message="{ext:Locale Name=WebSignInFailedDescription}"
+            Severity="Error">
+            <InfoBar.ActionButton>
+                <Button
+                    x:Name="ImportRetryButton"
+                    Click="OnImportRetryButtonClickAsync"
+                    Content="{ext:Locale Name=SignInRetry}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
         <WebView2
             x:Name="MainView"
-            Grid.Row="1"
+            Grid.Row="2"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             Loaded="OnLoadedAsync"
