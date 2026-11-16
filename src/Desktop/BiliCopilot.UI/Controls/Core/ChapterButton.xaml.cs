@@ -97,7 +97,8 @@ public sealed partial class ChapterButton : PlayerControlBase
         set => SetValue(EntryStyleProperty, value);
     }
 
-    private bool IsAvailable => _loaded && ViewModel is { HasChapters: true, IsChapterVisible: true };
+    // A media that cannot use chapters has no entry, whatever list an earlier media left behind.
+    private bool IsAvailable => _loaded && ViewModel is { CanUseChapters: true, HasChapters: true, IsChapterVisible: true };
 
     private bool CanInteract => IsAvailable && IsActive && ViewModel is { IsWindowDeactivated: false,
         IsPlaybackClosing: false, IsConnecting: false } && ViewModel.Player?.IsPlaybackInitialized == true;
@@ -184,6 +185,7 @@ public sealed partial class ChapterButton : PlayerControlBase
     {
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
         if (args.PropertyName is not (null or "" or nameof(PlayerViewModel.HasChapters) or nameof(PlayerViewModel.IsChapterVisible)
+            or nameof(PlayerViewModel.CanUseChapters)
             or nameof(PlayerViewModel.CurrentChapter) or nameof(PlayerViewModel.MediaGeneration)
             or nameof(PlayerViewModel.Player) or nameof(PlayerViewModel.IsWindowDeactivated)
             or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.IsPlaybackClosing)))

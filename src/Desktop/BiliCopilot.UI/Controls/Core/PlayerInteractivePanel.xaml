@@ -58,7 +58,8 @@
             <MenuFlyoutItem
                 Command="{x:Bind ViewModel.SendDanmakuCommand, Mode=OneWay}"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
-                Text="{ext:Locale Name=SendDanmaku}">
+                Text="{ext:Locale Name=SendDanmaku}"
+                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSendDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <MenuFlyoutItem.Icon>
                     <ic:SymbolIcon Symbol="TextBulletList" />
                 </MenuFlyoutItem.Icon>

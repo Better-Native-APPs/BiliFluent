@@ -2148,4 +2148,7 @@
   <data name="WebSignInFailedDescription" xml:space="preserve">
     <value>网页已登录，但应用授权没有完成。请检查网络后重试。</value>
   </data>
+  <data name="PlayerLiveStatus" xml:space="preserve">
+    <value>正在直播</value>
+  </data>
 </root>

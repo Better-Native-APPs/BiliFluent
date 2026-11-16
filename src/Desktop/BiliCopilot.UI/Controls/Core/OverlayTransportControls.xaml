@@ -84,32 +84,41 @@
                 Grid.Column="1"
                 VerticalAlignment="Center"
                 IsEnabled="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}">
+                <!--
+                    Each seek and playlist button sits in a holder that follows its media capability. The narrow state
+                    sets the visibility of the buttons themselves, so the capability cannot live on the same property:
+                    a media that cannot seek or has no playlist drops the holder, button and margin together.
+                -->
                 <StackPanel Orientation="Horizontal">
-                    <Button
-                        x:Name="PrevButton"
-                        Margin="0,0,8,0"
-                        Command="{x:Bind ViewModel.PlayPreviousCommand, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.IsPrevButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.PrevButtonToolTip, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="Previous" />
-                    </Button>
-                    <Button
-                        x:Name="BackwardButton"
-                        Margin="0,0,8,0"
-                        Command="{x:Bind ViewModel.SkipBackwardCommand, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.BackwardTip, Mode=OneWay}"
-                        Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="ArrowStepBack" />
-                    </Button>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanNavigatePlaylist, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="PrevButton"
+                            Margin="0,0,8,0"
+                            Command="{x:Bind ViewModel.PlayPreviousCommand, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.IsPrevButtonEnabled, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PrevButtonToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="Previous" />
+                        </Button>
+                    </Border>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="BackwardButton"
+                            Margin="0,0,8,0"
+                            Command="{x:Bind ViewModel.SkipBackwardCommand, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.BackwardTip, Mode=OneWay}"
+                            Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="ArrowStepBack" />
+                        </Button>
+                    </Border>
                     <Grid>
                         <Button
                             x:Name="PlayPauseButton"
@@ -130,31 +139,35 @@
                             BorderThickness="4"
                             IsActive="{x:Bind IsLoading(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}" />
                     </Grid>
-                    <Button
-                        x:Name="ForwardButton"
-                        Margin="8,0,0,0"
-                        Command="{x:Bind ViewModel.SkipForwardCommand, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.ForwardTip, Mode=OneWay}"
-                        Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="ArrowStepOver" />
-                    </Button>
-                    <Button
-                        x:Name="NextButton"
-                        Margin="8,0,0,0"
-                        Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="Next" />
-                    </Button>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="ForwardButton"
+                            Margin="8,0,0,0"
+                            Command="{x:Bind ViewModel.SkipForwardCommand, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.ForwardTip, Mode=OneWay}"
+                            Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="ArrowStepOver" />
+                        </Button>
+                    </Border>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanNavigatePlaylist, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="NextButton"
+                            Margin="8,0,0,0"
+                            Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="Next" />
+                        </Button>
+                    </Border>
                 </StackPanel>
             </UserControl>
 
@@ -298,7 +311,8 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     Style="{StaticResource BasicPlayerIconButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}">
+                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}"
+                    Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanChangePlaybackRate, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
                     <Button.Flyout>
                         <Flyout
@@ -405,7 +419,7 @@
                     without them the menu is the subtitle list alone. The button shows for either, and is named
                     after what it holds: subtitles, the audio track (with its own icon), or both.
                 -->
-                <Grid Visibility="{x:Bind GetSubtitleMenuVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
+                <Grid Visibility="{x:Bind GetSubtitleMenuVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages, ViewModel.CanUseSubtitles, ViewModel.CanSelectAudioTrack, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                     <Button
                         x:Name="SubtitleButton"
                         Margin="0,0,8,0"
@@ -608,12 +622,13 @@
             </StackPanel>
         </Grid>
 
-        <!--  底部进度条  -->
+        <!--  底部进度条：只属于有时间轴的媒体  -->
         <Grid
+            x:Name="TimelineRow"
             Grid.Row="1"
             Margin="16,-32,16,12"
             ColumnSpacing="12"
-            Visibility="{x:Bind ProgressBarVisible, Mode=OneWay}">
+            Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="60" />
                 <ColumnDefinition />
@@ -715,13 +730,46 @@
                 Text="{x:Bind GetTimeText(ViewModel.Player.Duration), Mode=OneWay}" />
         </Grid>
 
+        <!--
+            Live status: for a media without a timeline it takes the place of the timeline, in the same box
+            (the height of the progress slider and the same margin), so the buttons above stay where they are.
+            It is text, not a control: it takes no focus and is read as it is written.
+        -->
+        <StackPanel
+            x:Name="LiveStatus"
+            Grid.Row="1"
+            Height="32"
+            Margin="16,-32,16,12"
+            HorizontalAlignment="Left"
+            Orientation="Horizontal"
+            RequestedTheme="Dark"
+            Spacing="8"
+            Visibility="{x:Bind GetLiveStatusVisibility(ProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+            <Ellipse
+                Width="8"
+                Height="8"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                Opacity="{x:Bind local:PlayerOverlay.GetLiveStatusDotOpacity(ViewModel.Player.PlaybackState), Mode=OneWay}" />
+            <TextBlock
+                VerticalAlignment="Center"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsTextScaleFactorEnabled="False"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{ext:Locale Name=PlayerLiveStatus}"
+                TextWrapping="NoWrap" />
+        </StackPanel>
+
         <TeachingTip
             x:Name="DanmakuOptionsTip"
             IsLightDismissEnabled="True"
             IsOpen="{x:Bind IsDanmakuOptionsOpen(IsActive, ViewModel.IsDanmakuOptionsVisible), Mode=OneWay}"
             PreferredPlacement="TopLeft"
             Target="{x:Bind DanmakuOptionButton}">
-            <danmaku:DanmakuDisplayOptions ViewModel="{x:Bind ViewModel.Danmaku, Mode=OneWay}" />
+            <danmaku:DanmakuDisplayOptions IsCommandDanmakuSwitchVisible="{x:Bind local:PlayerOverlay.IsCapabilityShown(ViewModel.CanUseInteractiveDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}" ViewModel="{x:Bind ViewModel.Danmaku, Mode=OneWay}" />
         </TeachingTip>
 
         <VisualStateManager.VisualStateGroups>

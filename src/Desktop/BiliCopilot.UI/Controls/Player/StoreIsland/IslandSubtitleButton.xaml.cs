@@ -126,8 +126,12 @@ public sealed partial class IslandSubtitleButton : PlayerControlBase
     }
 
     // The button shows for subtitles, and for a media that has dubbing languages even without subtitles.
-    private Visibility GetMenuVisibility(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
-        => !isSubtitleEmpty || hasMultipleAudioLanguages ? Visibility.Visible : Visibility.Collapsed;
+    // Each half also needs its media capability: a media that cannot use subtitles or audio tracks has no menu.
+    private Visibility GetMenuVisibility(bool isSubtitleEmpty, bool hasMultipleAudioLanguages,
+        bool canUseSubtitles, bool canSelectAudioTrack, bool hasAdmittedMedia)
+        => (!isSubtitleEmpty && PlayerOverlay.IsCapabilityShown(canUseSubtitles, hasAdmittedMedia))
+            || (hasMultipleAudioLanguages && PlayerOverlay.IsCapabilityShown(canSelectAudioTrack, hasAdmittedMedia))
+            ? Visibility.Visible : Visibility.Collapsed;
 
     // Subtitles only: "Subtitle". Languages only: "Audio track", with the audio icon. Both: "Audio track and subtitles".
     private string GetMenuName(bool isSubtitleEmpty, bool hasMultipleAudioLanguages)

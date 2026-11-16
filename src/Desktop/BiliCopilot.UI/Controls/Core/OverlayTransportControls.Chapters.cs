@@ -25,7 +25,7 @@ public sealed partial class OverlayTransportControls
     private PlayerViewModel? _chapterOwner;
 
     private bool IsProgressBarShown
-        => _loaded && ProgressBarVisible && Visibility == Visibility.Visible && Opacity > 0
+        => _loaded && IsTimelineShown && Visibility == Visibility.Visible && Opacity > 0
             && ViewModel?.IsControlsVisible == true;
 
     private void InitializeChapters()
@@ -68,7 +68,8 @@ public sealed partial class OverlayTransportControls
     private void OnChapterOwnerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!ReferenceEquals(sender, _chapterOwner)) return;
-        if (e.PropertyName is nameof(PlayerViewModel.HasChapters) or nameof(PlayerViewModel.IsChapterVisible))
+        if (e.PropertyName is nameof(PlayerViewModel.HasChapters) or nameof(PlayerViewModel.IsChapterVisible)
+            or nameof(PlayerViewModel.CanSeek) or nameof(PlayerViewModel.CanUseChapters))
         {
             UpdateChapters();
         }
@@ -82,7 +83,9 @@ public sealed partial class OverlayTransportControls
     {
         if (_chapterTrack is null || _chapterPreviewTrack is null) return;
         var owner = _chapterOwner;
-        var visible = owner is { HasChapters: true, IsChapterVisible: true };
+
+        // Segments belong to a timeline: a media without one, or without chapters, draws none.
+        var visible = owner is { CanSeek: true, CanUseChapters: true, HasChapters: true, IsChapterVisible: true };
         var chapters = visible ? owner!.Chapters : null;
         _chapterTrack.SetChapters(chapters);
         _chapterPreviewTrack.SetChapters(chapters);

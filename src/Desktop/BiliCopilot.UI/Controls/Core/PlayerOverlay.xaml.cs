@@ -575,7 +575,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         => NextTip?.Hide();
 
     private void OnRequestShowNextTip(object? sender, EventArgs e)
-        => NextTip?.Show();
+    {
+        // The countdown to the next item belongs to a media with a playlist.
+        if (ViewModel is { } vm && !IsCapabilityShown(vm.CanNavigatePlaylist, vm.HasAdmittedMedia)) return;
+        NextTip?.Show();
+    }
 
     private void OnWarningOccurred(object? sender, string e)
     {

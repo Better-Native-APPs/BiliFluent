@@ -215,7 +215,8 @@ public sealed partial class PlayerOverlay
         if (!_sponsorViewsApplied) return;
         if (propertyName is null or "" or nameof(PlayerViewModel.IsControlsVisible) or nameof(PlayerViewModel.Presentation)
             or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.IsPlaybackClosing)
-            or nameof(PlayerViewModel.IsWindowDeactivated) or nameof(PlayerViewModel.ErrorMessage))
+            or nameof(PlayerViewModel.IsWindowDeactivated) or nameof(PlayerViewModel.ErrorMessage)
+            or nameof(PlayerViewModel.CanUseSponsorContent))
         {
             UpdateSponsorChrome();
         }
@@ -232,8 +233,10 @@ public sealed partial class PlayerOverlay
         if (SponsorNoticeHost is null) return;
         var vm = ViewModel;
         var isCompact = vm?.Presentation == PlayerPresentationMode.CompactOverlay;
+        // A media without Sponsor content has no entry, no page entry and no notices, even while the views stay bound.
         var usable = _loaded && _sponsorViewsApplied && vm is not null
-            && !vm.IsConnecting && !vm.IsPlaybackClosing && string.IsNullOrEmpty(vm.ErrorMessage);
+            && !vm.IsConnecting && !vm.IsPlaybackClosing && string.IsNullOrEmpty(vm.ErrorMessage)
+            && IsCapabilityShown(vm.CanUseSponsorContent, vm.HasAdmittedMedia);
         var entry = usable && !isCompact ? Visibility.Visible : Visibility.Collapsed;
         if (SponsorEntryVisibility != entry) SponsorEntryVisibility = entry;
         SetSponsorPageOwner(usable && vm!.IsEmbedded && vm.Presentation == PlayerPresentationMode.Normal ? vm : null);
