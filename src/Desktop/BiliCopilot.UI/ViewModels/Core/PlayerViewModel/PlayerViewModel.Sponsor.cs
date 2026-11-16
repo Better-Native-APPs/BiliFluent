@@ -23,8 +23,8 @@ public sealed partial class PlayerViewModel
 
     internal SponsorControllerResult? SponsorSnapshot => _sponsor?.Snapshot;
     internal event Action<SponsorControllerResult>? SponsorUpdated;
-    internal bool UpdateSponsorInput(SponsorCoordinatorInput input) => _sponsor?.Update(input) == true;
-    internal bool RequestSponsorAction(PlaybackRequest request) => _sponsor?.Request(request) == true;
+    internal bool UpdateSponsorInput(SponsorCoordinatorInput input) => CanUseSponsorContent && _sponsor?.Update(input) == true;
+    internal bool RequestSponsorAction(PlaybackRequest request) => CanUseSponsorContent && _sponsor?.Request(request) == true;
     internal Task<SponsorControllerResult?> ObserveSponsorAsync()
         => _sponsor is null ? Task.FromResult<SponsorControllerResult?>(null) : ObserveAsync(_sponsor);
     private static async Task<SponsorControllerResult?> ObserveAsync(SponsorPlaybackController controller)
@@ -38,7 +38,7 @@ public sealed partial class PlayerViewModel
     // Reservations precede the first await; only the VM acquires/drains the physical-input gate.
     internal Task<SponsorEditorReply> RequestSponsorFrameAsync(PlaybackStamp expected, FrameDirection direction)
     {
-        if (_sponsor is not { } controller) return EditorUnavailableAsync();
+        if (!CanUseSponsorContent || _sponsor is not { } controller) return EditorUnavailableAsync();
         var rejected = controller.ReserveEditorFrame(expected, direction, out var reservation);
         if (rejected is not null) return Task.FromResult(rejected);
         return OwnSponsorEditorWork(ApplyAsync());
@@ -55,7 +55,7 @@ public sealed partial class PlayerViewModel
 
     internal Task<SponsorEditorReply> RequestSponsorPreviewAsync(PlaybackStamp expected, PreviewInterval preview)
     {
-        if (_sponsor is not { } controller) return EditorUnavailableAsync();
+        if (!CanUseSponsorContent || _sponsor is not { } controller) return EditorUnavailableAsync();
         var rejected = controller.ReserveEditorPreview(expected, preview, out var reservation);
         if (rejected is not null) return Task.FromResult(rejected);
         return OwnSponsorEditorWork(ApplyAsync());
@@ -76,7 +76,7 @@ public sealed partial class PlayerViewModel
 
     internal Task<SponsorEditorReply> RequestSponsorMuteReleaseAsync(PlaybackStamp expected, string leaseToken)
     {
-        if (_sponsor is not { } controller) return EditorUnavailableAsync();
+        if (!CanUseSponsorContent || _sponsor is not { } controller) return EditorUnavailableAsync();
         var rejected = controller.ReserveEditorMuteRelease(expected, leaseToken, out var reservation);
         return rejected is not null ? Task.FromResult(rejected)
             : OwnSponsorEditorWork(controller.ExecuteEditorMuteReleaseAsync(reservation!));
@@ -121,6 +121,7 @@ public sealed partial class PlayerViewModel
 
     private MediaIdentity? GetSelectedSponsorIdentity()
     {
+        if (!CanUseSponsorContent) return null;
         string? bvId = null;
         string? cid = null;
         if (Connector is VideoConnectorViewModel { _part: { } part } video)
@@ -191,7 +192,7 @@ public sealed partial class PlayerViewModel
 
     private Task SeekUserAsync(double position)
     {
-        if (_sponsor?.CanUseBinding != true) return Task.CompletedTask;
+        if (!CanSeek || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Seek);
         return OwnWork(ApplyAsync());
         async Task ApplyAsync()
@@ -199,7 +200,7 @@ public sealed partial class PlayerViewModel
             try
             {
                 await RestorePhysicalPlayerInputAsync();
-                await _sponsor.SeekAsync(ticket, position);
+                if (CanSeek) await _sponsor.SeekAsync(ticket, position);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }
@@ -207,7 +208,7 @@ public sealed partial class PlayerViewModel
 
     private Task SendOpaqueUserKeyAsync(string key)
     {
-        if (_sponsor?.CanUseBinding != true || Client is not { } client) return Task.CompletedTask;
+        if (!CanSendOpaquePlayerKey(key) || _sponsor?.CanUseBinding != true || Client is not { } client) return Task.CompletedTask;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.OpaqueControl);
         return OwnWork(ApplyAsync());
         async Task ApplyAsync()
@@ -223,7 +224,7 @@ public sealed partial class PlayerViewModel
 
     private Task SetPersistentUserRateAsync(double speed)
     {
-        if (!double.IsFinite(speed) || speed < .1 || speed > 3 || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
+        if (!CanChangePlaybackRate || !double.IsFinite(speed) || speed < .1 || speed > 3 || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
         var controller = _sponsor;
         var ticket = controller.NoteUserIntent(PlayerIntentKind.PersistentRate); // before physical drain/first await, even same value.
         var version = _mediaVersion;
@@ -233,7 +234,7 @@ public sealed partial class PlayerViewModel
             try
             {
                 await RestorePhysicalPlayerInputAsync();
-                if (!IsCurrentPlayback(version)) return;
+                if (!CanChangePlaybackRate || !IsCurrentPlayback(version)) return;
                 IsSpeedChanging = true;
                 LastSpeedChangingTime = DateTimeOffset.Now;
                 var confirmed = await controller.SetPersistentRateAsync(ticket, speed);

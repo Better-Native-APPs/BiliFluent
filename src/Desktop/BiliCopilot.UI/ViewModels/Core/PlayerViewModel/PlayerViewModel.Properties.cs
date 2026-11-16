@@ -107,7 +107,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// Whether the quality menu has a choice to offer: more than one video quality, or more than one audio quality.
     /// </summary>
-    public bool IsQualityMenuAvailable => IsSourceSelectable || HasMultipleAudioQualities;
+    public bool IsQualityMenuAvailable => CanSelectOnDemandQuality && (IsSourceSelectable || HasMultipleAudioQualities);
 
     [ObservableProperty]
     public partial bool IsSubtitleEmpty { get; set; }

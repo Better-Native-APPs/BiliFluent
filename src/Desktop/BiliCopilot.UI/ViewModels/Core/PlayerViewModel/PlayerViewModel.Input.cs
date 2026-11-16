@@ -63,7 +63,7 @@ public sealed partial class PlayerViewModel
 
     private async Task BeginTemporarySpeedAsync(int owner)
     {
-        if (!CanAcceptPlayerInput || Player?.IsPlaying != true || _sponsor?.CanUseBinding != true)
+        if (!CanChangePlaybackRate || !CanAcceptPlayerInput || Player?.IsPlaying != true || _sponsor?.CanUseBinding != true)
         {
             return;
         }
@@ -78,11 +78,11 @@ public sealed partial class PlayerViewModel
         await _physicalRateGate.WaitAsync();
         try
         {
-            if (!CanAcceptPlayerInput || !IsCurrentPlayback(version)) return;
+            if (!CanChangePlaybackRate || !CanAcceptPlayerInput || !IsCurrentPlayback(version)) return;
             var factor = ReadTemporaryAccelerationFactor();
             _sponsorPhysicalRate ??= await controller.AcquirePhysicalRateAsync(ticket);
             var handoff = _sponsorPhysicalRate;
-            if (!CanAcceptPlayerInput || !IsCurrentPlayback(version))
+            if (!CanChangePlaybackRate || !CanAcceptPlayerInput || !IsCurrentPlayback(version))
             {
                 controller.ReleasePhysicalRate(handoff);
                 _sponsorPhysicalRate = null;
@@ -307,7 +307,7 @@ public sealed partial class PlayerViewModel
 
             if (IsAltKey(args.Key))
             {
-                if (HasNonAltModifier() || Player?.IsPlaying != true)
+                if (!CanChangePlaybackRate || HasNonAltModifier() || Player?.IsPlaying != true)
                 {
                     return;
                 }

@@ -25,10 +25,10 @@ public sealed partial class PlayerViewModel
     [ObservableProperty]
     public partial bool HasChapters { get; private set; }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseChapters))]
     private Task JumpToChapterAsync(ChapterItemViewModel? chapter)
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending || IsConnecting
+        if (!CanUseChapters || IsPlaybackClosing || IsPlayerInputCancellationPending || IsConnecting
             || Player is null || Player.PlaybackState == MpvPlayerState.Idle
             || chapter is null || !Chapters.Contains(chapter))
         {
@@ -53,7 +53,7 @@ public sealed partial class PlayerViewModel
 
     private void InitializeVideoChapters()
     {
-        if (!IsCurrentPlayback(_mediaVersion) || _snapshot.Type != BiliMediaType.Video
+        if (!CanUseChapters || !IsCurrentPlayback(_mediaVersion) || _snapshot.Type != BiliMediaType.Video
             || Connector is not VideoConnectorViewModel video
             || _requestedVideoChapterRevision == _chapterRevision
             || !long.TryParse(video._part.Identifier.Id, out var cid))
@@ -66,10 +66,11 @@ public sealed partial class PlayerViewModel
     }
 
     private bool IsCurrentChapterRequest(long mediaVersion, long revision)
-        => IsCurrentPlayback(mediaVersion) && revision == _chapterRevision;
+        => CanUseChapters && IsCurrentPlayback(mediaVersion) && revision == _chapterRevision;
 
     private async Task LoadVideoChaptersAsync(MediaIdentifier video, long cid, long mediaVersion, long revision, CancellationToken cancellationToken)
     {
+        if (!CanUseChapters) return;
         try
         {
             var chapters = await this.Get<IPlayerService>().GetVideoChaptersAsync(video, cid, cancellationToken);
@@ -95,7 +96,7 @@ public sealed partial class PlayerViewModel
     private bool TryApplyVideoChapters()
     {
         // Chapter controls use duration to position markers, so stage early API results.
-        if (!_chapterFileLoaded || _pendingVideoChapters is not { Count: >= 2 } chapters || Player is not { Duration: > 0 }) return false;
+        if (!CanUseChapters || !_chapterFileLoaded || _pendingVideoChapters is not { Count: >= 2 } chapters || Player is not { Duration: > 0 }) return false;
         var items = chapters.OrderBy(chapter => chapter.Start)
             .Select((chapter, index) => new ChapterItemViewModel(index, chapter.Title, chapter.Start, chapter.End, chapter.ImageUrl, chapter.Type))
             .ToArray();
@@ -131,6 +132,7 @@ public sealed partial class PlayerViewModel
 
     private void UpdateChapterDuration()
     {
+        if (!CanUseChapters) return;
         if (TryApplyVideoChapters()) return;
         UpdateChapterEnds();
         UpdateChapterFlags(Player.Position);

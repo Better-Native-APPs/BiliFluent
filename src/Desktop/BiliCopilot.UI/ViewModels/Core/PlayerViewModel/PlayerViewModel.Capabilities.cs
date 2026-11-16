@@ -1,6 +1,7 @@
 // Copyright (c) BiliFluent. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using CommunityToolkit.Mvvm.Input;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -53,6 +54,10 @@ public sealed partial class PlayerViewModel
     /// <summary>Whether this media supports a send entry; live sends need the room-session pipeline.</summary>
     public bool CanSendDanmaku => MediaCapabilities.CanSendDanmaku;
 
+    // Raw mpv bindings can seek or change rate behind transport commands. Only stats keys are common.
+    private bool CanSendOpaquePlayerKey(string? key)
+        => (CanSeek && CanChangePlaybackRate) || key is "ESC" or "i" or "I" or "1" or "2" or "3" or "4" or "5";
+
     private void NotifyMediaCapabilitiesChanged()
     {
         OnPropertyChanged(nameof(CanSeek));
@@ -70,6 +75,18 @@ public sealed partial class PlayerViewModel
         OnPropertyChanged(nameof(CanSendOnDemandDanmaku));
         OnPropertyChanged(nameof(CanAutoReplay));
         OnPropertyChanged(nameof(CanSendDanmaku));
+        OnPropertyChanged(nameof(IsQualityMenuAvailable));
+
+        IRelayCommand[] commands =
+        [
+            IncreaseSpeedCommand, DecreaseSpeedCommand, SkipBackwardCommand, SkipForwardCommand,
+            TripleSpeedCommand, RestoreSpeedCommand, ResetSubtitlePositionCommand, ChangeSubtitlePositionCommand,
+            ReloadFontsCommand, ChangeSubtitleFontSizeCommand, ChangeSubtitleFontFamilyCommand,
+            SwitchToPreviousChapterCommand, SwitchToNextChapterCommand, JumpToChapterCommand,
+            SetSubtitleDelaySecondsCommand, ToggleSubtitleEnabledCommand, PlayNextCommand, PlayPreviousCommand,
+            InitializeDanmakuCommand, ReloadDanmakuCommand, SendDanmakuCommand, SendKeyCommand,
+        ];
+        foreach (var command in commands) command.NotifyCanExecuteChanged();
     }
 }
 

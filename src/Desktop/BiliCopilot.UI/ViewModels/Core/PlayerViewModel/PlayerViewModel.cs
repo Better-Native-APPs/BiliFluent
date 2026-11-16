@@ -83,7 +83,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Player.PropertyChanged -= OnPlayerPropertyChanged;
             Player.RelayUpstreamFailed -= OnRelayUpstreamFailed;
-            if (_historyResolver is not null && Player.Duration > 0)
+            if (CanUsePlaybackHistory && _historyResolver is not null && Player.Duration > 0)
             {
                 // Shutdown resets these properties before MpvPlayer can save the final progress.
                 var position = Player.Position;
@@ -163,6 +163,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         await SuspendPlaybackDiagnosticsAsync();
         await SuspendNetworkMonitorAsync();
         CheckMediaAdmission();
+        var previousHistoryResolver = CanUsePlaybackHistory ? _historyResolver : null;
         _snapshot = snapshot;
         NotifyMediaCapabilitiesChanged();
         ResetCommandDanmakuMedia();
@@ -181,6 +182,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         IsSubtitleEmpty = true;
         _isDanmakuInitialized = false;
         IsNextTipShownInThisMedia = false;
+        if (!CanNavigatePlaylist)
+        {
+            IsPrevButtonEnabled = false;
+            IsNextButtonEnabled = false;
+            IsVideoNavigationAvailable = false;
+            if (_smtc is not null)
+            {
+                _smtc.IsNextEnabled = false;
+                _smtc.IsPreviousEnabled = false;
+            }
+        }
+        if (!CanSeek)
+        {
+            PositionText = null;
+            DurationText = null;
+            IsBottomProgressBarVisible = false;
+        }
+        if (!CanSelectOnDemandQuality)
+        {
+            Sources.Clear();
+            SelectedSource = null;
+        }
         Danmaku.ClearAll();
         ResetChapters();
         IsChapterVisible = SettingsToolkit.ReadLocalSetting(SettingNames.IsChapterVisible, true);
@@ -246,13 +269,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _sourceResolver.SetInitializationCancellation(_activeMediaToken);
         _sourceResolver.WindowHandle = Window!.RenderHwnd;
 
-        if (_historyResolver != null && Player != null)
+        if (previousHistoryResolver != null && Player != null)
         {
-            await _historyResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true);
+            await previousHistoryResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true);
             CheckMediaAdmission();
         }
 
         // TODO: 创建历史记录处理器
+        _historyResolver = null;
         switch (_snapshot.Type)
         {
             case BiliMediaType.Video:
@@ -294,6 +318,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         else
         {
             Player.UpdateResolvers(_sourceResolver, _historyResolver);
+            Player.RelayOptions = CreateRelayOptions();
         }
 
         CheckMediaAdmission();
@@ -308,7 +333,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         CheckFullScreen();
         CheckCompactOverlay();
-        ProgressChanged?.Invoke(this, 0);
+        if (CanSeek) ProgressChanged?.Invoke(this, 0);
         await LoadSourcesAsync();
         CheckMediaAdmission();
 
@@ -418,7 +443,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     private void CheckBottomProgressBarVisible()
-        => IsBottomProgressBarVisible = !IsControlsVisible && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
+        => IsBottomProgressBarVisible = CanSeek && !IsControlsVisible && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
 
     partial void OnIsControlsVisibleChanged(bool value)
         => Window?.SetCaptionButtonVisibility(value);

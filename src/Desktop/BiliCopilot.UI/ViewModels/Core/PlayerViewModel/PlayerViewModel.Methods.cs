@@ -277,7 +277,8 @@ public sealed partial class PlayerViewModel
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBytesAsync($"{Convert.ToInt32(cacheSize)}MiB"));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerReadheadSecondsAsync(Convert.ToInt32(cacheSeconds)));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB"));
-                await AwaitInitializationStepAsync(() => Client.SetCachePauseWaitAsync(PlaybackNetworkPolicy.CachePauseWaitSeconds));
+                if (CanUseOnDemandNetwork)
+                    await AwaitInitializationStepAsync(() => Client.SetCachePauseWaitAsync(PlaybackNetworkPolicy.CachePauseWaitSeconds));
 
                 var useCacheOnDisk = SettingsToolkit.ReadLocalSetting(SettingNames.CacheOnDisk, false);
                 await AwaitInitializationStepAsync(() => Client.SetCacheOnDiskAsync(useCacheOnDisk));
@@ -308,7 +309,7 @@ public sealed partial class PlayerViewModel
                 }
 
                 var hrSeek = SettingsToolkit.ReadLocalSetting(SettingNames.HrSeek, HrSeekType.Default);
-                await AwaitInitializationStepAsync(() => Client.SetHrSeekAsync(hrSeek));
+                if (CanSeek) await AwaitInitializationStepAsync(() => Client.SetHrSeekAsync(hrSeek));
 
                 MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
                 await AwaitInitializationStepAsync(() => Client.SetMaxVolumeAsync(Convert.ToInt32(MaxVolume)));
@@ -400,11 +401,11 @@ public sealed partial class PlayerViewModel
             {
                 PlayPauseCommand.Execute(default);
             }
-            else if (args.Button == SystemMediaTransportControlsButton.Next && IsNextButtonEnabled)
+            else if (args.Button == SystemMediaTransportControlsButton.Next && CanNavigatePlaylist && IsNextButtonEnabled)
             {
                 PlayNextCommand.Execute(default);
             }
-            else if (args.Button == SystemMediaTransportControlsButton.Previous && IsPrevButtonEnabled)
+            else if (args.Button == SystemMediaTransportControlsButton.Previous && CanNavigatePlaylist && IsPrevButtonEnabled)
             {
                 PlayPreviousCommand.Execute(default);
             }
@@ -473,7 +474,7 @@ public sealed partial class PlayerViewModel
             // The automatic node switch answers for this load once it has succeeded or failed.
             return;
         }
-        else if (Player.Duration < 1 && !_isBroken)
+        else if (CanAutoReplay && Player.Duration < 1 && !_isBroken)
         {
             _isBroken = true;
             try { await ReplayAsync(); }
@@ -725,6 +726,7 @@ public sealed partial class PlayerViewModel
 
     private void UpdateChapterFlags(double position)
     {
+        if (!CanUseChapters) return;
         if (_chapterFlagsCount == Chapters.Count && (_chapterFlagsPosition == position
             || (position >= _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
         {
@@ -797,19 +799,23 @@ public sealed partial class PlayerViewModel
             IsPreviewProgressChanging = false;
             var position = _pendingFanOutPosition ?? Player.Position;
             _pendingFanOutPosition = null;
-            var positionTime = TimeSpan.FromSeconds(position);
-            var positionSecond = positionTime.Ticks / TimeSpan.TicksPerSecond;
-            if (_positionTextSecond != positionSecond)
+            if (CanSeek)
             {
-                _positionTextSecond = positionSecond;
-                PositionText = positionTime.ToString(@"hh\:mm\:ss");
+                var positionTime = TimeSpan.FromSeconds(position);
+                var positionSecond = positionTime.Ticks / TimeSpan.TicksPerSecond;
+                if (_positionTextSecond != positionSecond)
+                {
+                    _positionTextSecond = positionSecond;
+                    PositionText = positionTime.ToString(@"hh\:mm\:ss");
+                }
+
+                ProgressChanged?.Invoke(this, position);
             }
 
-            ProgressChanged?.Invoke(this, position);
-            Danmaku.UpdatePosition(Convert.ToInt32(position));
+            if (CanLoadOnDemandDanmaku) Danmaku.UpdatePosition(Convert.ToInt32(position));
             UpdateChapterFlags(position);
 
-            if (Player.Duration > 5)
+            if (CanNavigatePlaylist && Player.Duration > 5)
             {
                 IsEnd = false;
                 var isShowTip = !_playNextWithoutTip;
@@ -877,7 +883,7 @@ public sealed partial class PlayerViewModel
         }
         else if (e.PropertyName == nameof(Player.Duration))
         {
-            DurationText = TimeSpan.FromSeconds(Player.Duration).ToString(@"hh\:mm\:ss");
+            if (CanSeek) DurationText = TimeSpan.FromSeconds(Player.Duration).ToString(@"hh\:mm\:ss");
             UpdateChapterDuration();
         }
         else if (e.PropertyName == nameof(Player.IsFullScreen))
@@ -1006,7 +1012,7 @@ public sealed partial class PlayerViewModel
 
     private async void OnConnectorNewMediaRequest(object? sender, MediaSnapshot e)
     {
-        if (_snapshot == e || IsPlaybackClosing || !ReferenceEquals(sender, Connector))
+        if (!CanNavigatePlaylist || _snapshot == e || IsPlaybackClosing || !ReferenceEquals(sender, Connector))
         {
             return;
         }
@@ -1029,11 +1035,11 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        IsPrevButtonEnabled = e.CanPrev;
-        IsNextButtonEnabled = e.CanNext;
+        IsPrevButtonEnabled = CanNavigatePlaylist && e.CanPrev;
+        IsNextButtonEnabled = CanNavigatePlaylist && e.CanNext;
         PrevButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.PrevVideoTemplate), e.PrevTitle);
         NextButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.NextVideoTemplate), e.NextTitle);
-        IsVideoNavigationAvailable = e.CanPrev || e.CanNext;
+        IsVideoNavigationAvailable = CanNavigatePlaylist && (e.CanPrev || e.CanNext);
         if (_smtc != null)
         {
             _smtc.IsNextEnabled = IsNextButtonEnabled;
@@ -1063,7 +1069,7 @@ public sealed partial class PlayerViewModel
 
     private async Task VerifyChaptersAsync()
     {
-        if (!IsCurrentPlayback(_mediaVersion) || !_chapterFileLoaded || Client is null || Player is not { Duration: > 0 } || _usingBilibiliChapters
+        if (!CanUseChapters || !IsCurrentPlayback(_mediaVersion) || !_chapterFileLoaded || Client is null || Player is not { Duration: > 0 } || _usingBilibiliChapters
             || TryApplyVideoChapters() || Chapters.Count > 0)
         {
             return;
@@ -1091,6 +1097,7 @@ public sealed partial class PlayerViewModel
 
     private async Task LoadSourcesAsync()
     {
+        if (!CanSelectOnDemandQuality) return;
         var version = _mediaVersion;
         try
         {
@@ -1124,6 +1131,7 @@ public sealed partial class PlayerViewModel
     // Fills the quality list: the automatic entry first, then the qualities of the media.
     private void ResetSources(List<PlayerFormatInformation>? sources, long version)
     {
+        if (!CanSelectOnDemandQuality) return;
         IsSourceSelectable = sources?.Count > 1;
         Sources.Clear();
         if (sources is not { Count: > 0 })
@@ -1146,6 +1154,7 @@ public sealed partial class PlayerViewModel
 
     private async Task LoadSubtitlesAsync()
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         try
@@ -1198,6 +1207,7 @@ public sealed partial class PlayerViewModel
 
     private async Task SelectSubtitleAsync(SubtitleItemViewModel vm)
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         var entered = false;
@@ -1218,7 +1228,7 @@ public sealed partial class PlayerViewModel
 
     private async Task SelectSubtitleCoreAsync(SubtitleItemViewModel vm, long version, CancellationToken token)
     {
-        if (!IsCurrentPlayback(version) || !Subtitles.Any(item => ReferenceEquals(item, vm)) || Client is null) return;
+        if (!CanUseSubtitles || !IsCurrentPlayback(version) || !Subtitles.Any(item => ReferenceEquals(item, vm)) || Client is null) return;
 
         if (string.IsNullOrEmpty(vm._srtFilePath))
         {
@@ -1242,6 +1252,7 @@ public sealed partial class PlayerViewModel
 
     private async Task DeselectSubtitleAsync(SubtitleItemViewModel vm)
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         var entered = false;
@@ -1249,7 +1260,7 @@ public sealed partial class PlayerViewModel
         {
             await _initializationGate.WaitAsync(token);
             entered = true;
-            if (!IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
+            if (!CanUseSubtitles || !IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
 
             var result = await Client.SetSubtitleTrackAsync(default, token);
             if (!IsCurrentPlayback(version)) return;

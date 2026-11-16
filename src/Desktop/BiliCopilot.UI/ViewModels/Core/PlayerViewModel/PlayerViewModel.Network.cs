@@ -60,7 +60,7 @@ public sealed partial class PlayerViewModel
     // Starts with the configured client of a media; the sampler is the only part that uses the native handle.
     private void StartNetworkMonitor()
     {
-        if (IsPlaybackClosing || Client is not { IsDisposed: false } client)
+        if (!CanUseOnDemandNetwork || IsPlaybackClosing || Client is not { IsDisposed: false } client)
         {
             return;
         }
@@ -133,7 +133,7 @@ public sealed partial class PlayerViewModel
         var version = Volatile.Read(ref _mediaVersion);
         queue.TryEnqueue(() =>
         {
-            if (epoch == Volatile.Read(ref _networkEpoch) && IsCurrentPlayback(version))
+            if (CanUseOnDemandNetwork && epoch == Volatile.Read(ref _networkEpoch) && IsCurrentPlayback(version))
             {
                 handler();
             }
@@ -207,6 +207,7 @@ public sealed partial class PlayerViewModel
 
     private void OnNetworkSample(NetworkSample raw)
     {
+        if (!CanUseOnDemandNetwork) return;
         _userPausedSample = raw.UserPaused;
         var streams = _sourceResolver?.CurrentStreams;
         var cache = Volatile.Read(ref _cacheState);
@@ -256,7 +257,7 @@ public sealed partial class PlayerViewModel
         => streams is null ? 0 : streams.Video is not null ? streams.VideoBandwidth : streams.AudioBandwidth;
 
     private StreamAvailability? GetStreamAvailability()
-        => _sourceResolver?.CurrentStreams is { } streams ? GetStreamAvailability(streams) : null;
+        => CanUseOnDemandNetwork && _sourceResolver?.CurrentStreams is { } streams ? GetStreamAvailability(streams) : null;
 
     private static StreamAvailability GetStreamAvailability(PlaybackStreamSelection streams)
         => new(
@@ -269,6 +270,7 @@ public sealed partial class PlayerViewModel
     // mpv keeps playing without sound when the audio address cannot be opened.
     private async Task ConfirmAudioTrackAsync(long load, long epoch, long version, CancellationToken token)
     {
+        if (!CanUseOnDemandNetwork || !CanSelectAudioTrack) return;
         try
         {
             if (await HasAudioTrackAsync() != false)
@@ -311,7 +313,7 @@ public sealed partial class PlayerViewModel
 
     private void ApplyFailoverDecision(CdnFailoverDecision decision, PlaybackCacheSample sample = default)
     {
-        if (decision.Action == CdnFailoverAction.None)
+        if (!CanUseOnDemandNetwork || decision.Action == CdnFailoverAction.None)
         {
             return;
         }
@@ -396,6 +398,7 @@ public sealed partial class PlayerViewModel
     // False when no untried address is left or the relay does not know it; the caller reloads.
     private bool TrySwitchNodeInPlace(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, CdnFailoverDecision decision, string reason)
     {
+        if (!CanUseOnDemandNetwork) return false;
         var kind = ToRelayKind(decision.Stream);
         var left = player.GetRelayStatistics(kind);
         if (resolver.MoveToNextStream(decision.Stream) is not { } next || !player.TrySwitchRelayNode(kind, next.Url))
@@ -423,6 +426,7 @@ public sealed partial class PlayerViewModel
     private async Task RefreshForFailoverAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
         CdnFailoverDecision decision, string reason, long version, CancellationToken token)
     {
+        if (!CanUseOnDemandNetwork) return;
         var (updated, refreshed) = await TryRefreshRelayInPlaceAsync(player, resolver, version, token);
         if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver))
         {
@@ -453,6 +457,7 @@ public sealed partial class PlayerViewModel
     // do not serve the same files; Refreshed tells whether the play URLs were requested again.
     private async Task<(bool Updated, bool Refreshed)> TryRefreshRelayInPlaceAsync(MpvPlayer player, MediaSourceResolverBase resolver, long version, CancellationToken token)
     {
+        if (!CanUseOnDemandNetwork) return (false, false);
         var entered = false;
         var refreshed = false;
         try
@@ -493,6 +498,7 @@ public sealed partial class PlayerViewModel
     private void ReloadForFailover(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
         CdnFailoverDecision decision, string reason, long version, bool rejected, bool refreshed)
     {
+        if (!CanUseOnDemandNetwork) return;
         // A reload that did not get as far as a loaded file continues from where the first one started.
         // A media that never loaded has no position, pause or speed of its own to keep.
         (double? Position, bool Paused, double? Speed) state = _reloadState
@@ -512,7 +518,7 @@ public sealed partial class PlayerViewModel
                 if (position is null)
                 {
                     // A media that never loaded starts where it was meant to start, at the speed of its source.
-                    position = _historyResolver is { } history ? await history.GetStartPositionAsync() : null;
+                    position = CanUsePlaybackHistory && _historyResolver is { } history ? await history.GetStartPositionAsync() : null;
                 }
                 else
                 {
@@ -573,7 +579,7 @@ public sealed partial class PlayerViewModel
     private void OnRelayUpstreamFailed(object? sender, MpvRelayUpstreamFailedEventArgs e)
         => PostNetworkEvent(() =>
         {
-            if (!ReferenceEquals(sender, Player) || Player is not { } player || _sourceResolver is not { } resolver
+            if (!CanUseOnDemandNetwork || !ReferenceEquals(sender, Player) || Player is not { } player || _sourceResolver is not { } resolver
                 || resolver.CurrentStreams is not { } from)
             {
                 return;
@@ -610,6 +616,7 @@ public sealed partial class PlayerViewModel
     private async Task RefreshRelayAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, long version,
         CancellationToken token, string reason, bool reloadOnFailure)
     {
+        if (!CanUseOnDemandNetwork) return;
         var (updated, refreshed) = await TryRefreshRelayInPlaceAsync(player, resolver, version, token);
         if (updated)
         {
@@ -636,6 +643,7 @@ public sealed partial class PlayerViewModel
     // Returns false when no source could be served, so nothing was loaded.
     private async Task<bool> ReloadForNetworkAsync(MpvPlayer player, double? position, bool resume, double? speed)
     {
+        if (!CanUseOnDemandNetwork) return false;
         ResetChapters();
         InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
@@ -651,7 +659,7 @@ public sealed partial class PlayerViewModel
         }
 
         _subtitleToRestore = null;
-        if (IsSubtitleEnabled && subtitle.IsSelected && Subtitles.Any(item => ReferenceEquals(item, subtitle)))
+        if (CanUseSubtitles && IsSubtitleEnabled && subtitle.IsSelected && Subtitles.Any(item => ReferenceEquals(item, subtitle)))
         {
             _ = OwnWork(SelectSubtitleAsync(subtitle));
         }
@@ -667,7 +675,7 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var resolver = _sourceResolver;
         var now = Environment.TickCount64;
-        if (player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
+        if (!CanUseOnDemandNetwork || player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
             || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime
             || IsPlaybackClosing || IsConnecting
             || (_lastResumeRefresh != 0 && now - _lastResumeRefresh < PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
@@ -692,7 +700,7 @@ public sealed partial class PlayerViewModel
     // Loads the media again at the position from play URLs that are requested again, unless they already were.
     private Task ReloadExpiredSourceAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, long version,
         double position, double? speed, bool refreshed)
-        => RunWithoutPlayerInputAsync(
+        => !CanUseOnDemandNetwork ? Task.CompletedTask : RunWithoutPlayerInputAsync(
             async () =>
             {
                 if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver))
@@ -744,7 +752,7 @@ public sealed partial class PlayerViewModel
     // Errors of a load whose outcome the policy answers for are held back until that outcome is known.
     private bool TryDeferLoadError(MpvError error)
     {
-        if (!_failover.IsAwaitingLoad)
+        if (!CanUseOnDemandNetwork || !_failover.IsAwaitingLoad)
         {
             return false;
         }
@@ -805,8 +813,9 @@ public sealed partial class PlayerViewModel
             && (streams.Audio is null || player.IsRelaying(MpvRelayStreamKind.Audio));
 
     // The relay validates the certificate of a node exactly as mpv is told to: not in Debug, always in Release.
-    private static LoopbackMediaRelayOptions CreateRelayOptions()
+    private LoopbackMediaRelayOptions? CreateRelayOptions()
     {
+        if (!CanUseOnDemandNetwork) return null;
 #if DEBUG
         return new() { VerifyTls = false };
 #else

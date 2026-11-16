@@ -14,6 +14,7 @@ public sealed partial class PlayerViewModel
     /// <summary>Replay through the same real serial boundary as media replacement.</summary>
     public Task ReplayAsync(double? preferPosition = null)
     {
+        if (!CanSeek && preferPosition.HasValue) return Task.CompletedTask;
         var player = Player;
         return player is null ? Task.CompletedTask
             : RunWithoutPlayerInputAsync(() => ReplayWithSubtitleRestoreAsync(player, preferPosition), nativeReplay: true);
@@ -21,7 +22,7 @@ public sealed partial class PlayerViewModel
 
     private Task SelectSourceAsync(SourceItemViewModel source)
     {
-        if (source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
+        if (!CanSelectOnDemandQuality || source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
             return Task.CompletedTask;
 
         var player = Player;
@@ -117,7 +118,7 @@ public sealed partial class PlayerViewModel
         InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
         _subtitleToRestore = null; // This reload restores the subtitle itself.
-        var subtitle = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
+        var subtitle = CanUseSubtitles && IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
         if (subtitle is null || Connector is not VideoConnectorViewModel video)
         {
             await player.ReplayAsync(preferPosition);
