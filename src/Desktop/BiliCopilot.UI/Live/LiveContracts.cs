@@ -2,6 +2,7 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using BiliCopilot.UI.Live.Application;
 using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
@@ -44,6 +45,35 @@ public interface ILiveChatClient : IAsyncDisposable
     Task ConnectAsync(LiveBinding binding, CancellationToken cancellationToken);
     Task DisconnectAsync();
     Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
+}
+
+/// <summary>Room/chat ownership, independent of video playback and window presentation.</summary>
+public interface ILiveRoomSession : INotifyPropertyChanged, IAsyncDisposable
+{
+    LiveBinding? Binding { get; }
+    LiveRoomScope? CurrentScope { get; }
+    string Title { get; }
+    string AnchorName { get; }
+    Uri? AnchorAvatar { get; }
+    UserProfile? Anchor { get; }
+    bool? IsFollowing { get; }
+    long? AudienceCount { get; }
+    string AudienceLabel { get; }
+    LiveChatState ChatState { get; }
+    string? ChatError { get; }
+    bool CanSend { get; }
+    bool IsClosing { get; }
+    bool ReleaseConfirmed { get; }
+    ReadOnlyObservableCollection<LiveChatMessage> Messages { get; }
+    event EventHandler<LiveChatMessage>? MessageReceived;
+    LiveRoomScope PrepareRoom(LiveInformation live, LiveAccountStamp account, CancellationToken cancellationToken);
+    void PublishRoomReset(LiveRoomScope scope);
+    void BindRoom(LiveRoomScope scope, long roomId, LiveInformation information);
+    Task ConnectAsync(LiveRoomScope scope);
+    Task StopAsync(LiveRoomScope scope);
+    void RequestClose();
+    Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
+    Task CloseAsync();
 }
 
 public interface ILiveSession : INotifyPropertyChanged, IAsyncDisposable
