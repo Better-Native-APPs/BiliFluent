@@ -128,17 +128,72 @@ internal sealed class TVAuthorizeClient
 
     public async Task SignInWithCookiesAsync(IDictionary<string, string> cookies, CancellationToken cancellationToken)
     {
-        _localCookiesResolver.SaveCookies(cookies);
-        var qrCode = await GetQRCodeAsync(cancellationToken).ConfigureAwait(false) ?? throw new KernelException("获取二维码失败");
-        var parameters = new Dictionary<string, string>
+        // Stage the existing Cookie -> TV QR confirm/poll flow entirely in memory.
+        // Shared credentials are written only after a usable App token is available.
+        using var credentials = new CookieImportCredentials(cookies);
+        using var httpClient = new BiliHttpClient();
+        var authenticator = new BiliAuthenticator(credentials, credentials);
+        var client = new TVAuthorizeClient(httpClient, credentials, credentials, authenticator);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        try
         {
-            { "auth_code", qrCode.AuthCode },
-        };
-        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Passport.QRCodeConfirm));
-        _basicAuthenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings() { ForceNoToken = true, NeedCSRF = true, RequireCookie = true });
-        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        _isScanCheckInvoking = false;
-        await WaitQRCodeScanAsync(qrCode, cancellationToken).ConfigureAwait(false);
+            var qrCode = await client.GetQRCodeAsync(timeout.Token).ConfigureAwait(false)
+                ?? throw new KernelException("Cookie session import failed.");
+            using var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Passport.QRCodeConfirm));
+            var parameters = new Dictionary<string, string> { ["auth_code"] = qrCode.AuthCode };
+            authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedCSRF = true, RequireCookie = true });
+            using var response = await httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            parameters.Clear();
+
+            while (true)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                BiliToken token;
+                try
+                {
+                    token = await client.GetTokenIfCodeScannedAsync(qrCode.AuthCode, timeout.Token).ConfigureAwait(false);
+                }
+                catch (KernelException ex) when (IsCookieImportPending(ex))
+                {
+                    await Task.Delay(1000, timeout.Token).ConfigureAwait(false);
+                    continue;
+                }
+
+                BasicTokenCheck(token);
+                timeout.Token.ThrowIfCancellationRequested();
+                _localCookiesResolver.SaveCookies(credentials.GetCookies());
+                SaveToken(token);
+                return;
+            }
+        }
+        catch (Exception) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("The cookie session import was canceled.", cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Never attach response bodies, temporary QR codes, cookies, or tokens to an exception.
+            throw new KernelException("Cookie session import failed.");
+        }
+    }
+
+    private static bool IsCookieImportPending(KernelException exception)
+    {
+        if (exception.InnerException is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(exception.InnerException.Message);
+            return WebLoginProtocol.GetInt(document.RootElement, "code") is 86090 or 86039;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static void BasicTokenCheck(BiliToken? localToken)
