@@ -20,7 +20,7 @@ public sealed partial class MpvClient : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly MpvCoreHandle _handle;
     private Task? _eventLoopTask;
-#pragma warning disable CA2213 // The one cached disposal worker releases this source in its finally.
+#pragma warning disable CA2213 // The one cached asynchronous disposal releases this source in its finally.
     private CancellationTokenSource? _eventCts;
 #pragma warning restore CA2213
     private readonly MpvWorkGate _callbackWork = new();
@@ -173,17 +173,35 @@ public sealed partial class MpvClient : IAsyncDisposable
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {
+        Task callbacksDrained;
+        TaskCompletionSource completion;
         lock (_disposeSync)
         {
-#pragma warning disable VSTHRD003 // Every caller joins this client's one pool-owned disposal task.
+#pragma warning disable VSTHRD003 // Every caller joins this client's one asynchronous disposal completion.
             if (_disposeTask is not null) return new(_disposeTask);
-            IsDisposed = true;
-            var drained = _callbackWork.CloseAsync();
-            // Never run the join on the event thread or hold a callback across it.
-            _disposeTask = Task.Run(() => DisposeCoreAsync(drained));
-            return new(_disposeTask);
 #pragma warning restore VSTHRD003
+            IsDisposed = true;
+            callbacksDrained = _callbackWork.CloseAsync();
+            completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _disposeTask = completion.Task;
         }
+
+        // Cancellation and wakeup do not block; native stop/destroy remain pool operations.
+        // Start them now instead of inserting another pool hop before the stop command.
+        _ = CompleteDisposalAsync(callbacksDrained, completion);
+        return new(completion.Task);
+    }
+
+    private async Task CompleteDisposalAsync(Task callbacksDrained, TaskCompletionSource completion)
+    {
+        try
+        {
+#pragma warning disable VSTHRD003 // This core and segment-drain task belong to the one completion created by DisposeAsync.
+            await DisposeCoreAsync(callbacksDrained).ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+            completion.TrySetResult();
+        }
+        catch (Exception ex) { completion.TrySetException(ex); }
     }
 
     private async Task DisposeCoreAsync(Task callbacksDrained)

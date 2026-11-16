@@ -48,6 +48,8 @@ internal static partial class DisposeChecks
         report.Check("drain: client callback refused after close", !ranLate);
         report.Equal("drain: queued native read cannot access handle", MpvError.Uninitialized, native.GetProperty("volume", out double _));
         report.Equal("drain: queued native command cannot access handle", MpvError.Uninitialized, native.SendTrackCommand(1, ["audio-add", "unused"]));
+        report.Check("drain: closed composite state query is refused", (await client.GetPlayerStateAsync()).IsFailed);
+        report.Check("drain: closed track refresh is refused", (await client.GetTracksAsync()).IsFailed);
 
         var failure = new InvalidOperationException("Injected destruction failure.");
         var failedClient = new MpvClient(new MpvCoreHandle(() => throw failure));

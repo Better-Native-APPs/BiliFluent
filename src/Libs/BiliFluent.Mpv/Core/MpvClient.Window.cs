@@ -16,7 +16,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         bool node = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(FullScreen, out node));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(FullScreen, out node));
         var stateResult = WrapAsResult(errorCode, "Mpv | get fullscreen failed");
         if (stateResult.IsFailed)
         {
@@ -52,7 +52,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         bool node = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(CompactOverlay, out node));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(CompactOverlay, out node));
         var stateResult = WrapAsResult(errorCode, "Mpv | get ontop failed");
         if (stateResult.IsFailed)
         {
