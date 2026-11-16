@@ -29,8 +29,8 @@ public sealed partial class StartupWindow : WindowEx
         IsResizable = false;
         AppWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
 
-        Width = 720;
-        Height = 460;
+        Width = 760;
+        Height = 500;
 
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
 
@@ -50,7 +50,11 @@ public sealed partial class StartupWindow : WindowEx
         this.Get<AppViewModel>().Windows.Remove(this);
         Activated -= OnActivated;
         Closed -= OnClosed;
-        this.Get<StartupPageViewModel>().ExitCommand.Execute(false);
+        var startup = this.Get<StartupPageViewModel>();
+        startup.ExitCommand.Execute(false);
+
+        // A closing window does not always unload its page, so what was typed is cleared here as well.
+        startup.ResetSignInForm();
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -61,6 +65,31 @@ public sealed partial class StartupWindow : WindowEx
             return;
         }
 
-        this.Get<StartupPageViewModel>().ReloadQRCodeCommand.Execute(default);
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            return;
+        }
+
+        // Waits for pending input, so the click that activated this window still reaches what was clicked.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, OnReactivated);
+    }
+
+    private void OnReactivated()
+    {
+        // A challenge or web sign-in window that is still open belongs in front of this one.
+        if (CaptchaWindow.TryActivateCurrent())
+        {
+            return;
+        }
+
+        var webSignIn = this.Get<AppViewModel>().Windows.FirstOrDefault(p => p is WebSignInWindow);
+        if (webSignIn is not null)
+        {
+            webSignIn.Activate();
+            return;
+        }
+
+        // The QR code keeps its place while it is being polled; only a stopped one is replaced.
+        this.Get<StartupPageViewModel>().ResumeQRCodeCommand.Execute(default);
     }
 }
