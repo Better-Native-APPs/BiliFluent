@@ -66,6 +66,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         _speedRefreshTimer.Tick += OnSpeedRefreshTick;
         _volumeCorrectionTimer.Tick += OnVolumeCorrectionTick;
         InitializeComponent();
+        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
+        LiveStatus.Visibility = Visibility.Collapsed;
         RegisterPropertyChangedCallback(VisibilityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
@@ -104,6 +106,11 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     }
 
     public bool IsInteracting { get; private set; }
+
+    // The timeline row is shown when the host wants it and the media has a timeline. Before a media is known
+    // it stays, as it always has.
+    private bool IsTimelineShown
+        => ProgressBarVisible && (ViewModel is not { } vm || PlayerOverlay.IsCapabilityShown(vm.CanSeek, vm.HasAdmittedMedia));
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
     internal FrameworkElement PlayPauseTarget => PlayPauseButton;
@@ -178,6 +185,13 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             _isFirstChangeVolume = true;
         }
         else if (args.PropertyName == nameof(PlayerViewModel.IsConnecting)) SynchronizeControls();
+        else if (args.PropertyName == nameof(PlayerViewModel.CanSeek))
+        {
+            // The timeline row came or went with the media: nothing pending may outlive it, and a row that
+            // came back starts from the current position.
+            if (!IsTimelineShown) CancelPendingInput();
+            else if (CaptureDisplay() is { } owner) SynchronizeProgress(owner.Player.Position, true);
+        }
         else if (args.PropertyName == nameof(PlayerViewModel.IsWindowDeactivated))
         {
             if (_subscribedViewModel!.IsWindowDeactivated) CancelPendingInput();
@@ -400,10 +414,14 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private Visibility GetWindowModeButtonVisibility(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.CompactOverlay ? Visibility.Collapsed : Visibility.Visible;
 
+    // The live status stands in the row of the timeline, so a host that hides that row hides it as well.
+    private Visibility GetLiveStatusVisibility(bool rowVisible, bool canSeek, bool hasAdmittedMedia)
+        => rowVisible ? PlayerOverlay.GetLiveStatusVisibility(canSeek, hasAdmittedMedia) : Visibility.Collapsed;
+
     private void OnViewModelProgressChanged(object? sender, double e)
     {
         // Shown is enough; active is not needed. An inactive window keeps its bar moving.
-        if (!_loaded || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        if (!_loaded || !IsTimelineShown || Visibility != Visibility.Visible || Opacity <= 0
             || ViewModel?.IsControlsVisible != true || !ReferenceEquals(sender, _subscribedViewModel)) return;
         var seekedBackwards = e < _lastProgressPosition;
         _lastProgressPosition = e;
@@ -413,7 +431,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void SynchronizeProgress(double position, bool force)
     {
         // A drag or a pending seek owns the slider; nothing is written back over it.
-        if (CaptureDisplay() is not { } owner || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        if (CaptureDisplay() is not { } owner || !IsTimelineShown || Visibility != Visibility.Visible || Opacity <= 0
             || _pendingProgressOwner.HasValue || _progressContacts.Count > 0 || !double.IsFinite(position)) return;
         var duration = owner.Player.Duration;
         var durationChanged = ProgressSlider.Maximum != duration;
@@ -577,8 +595,12 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     // The subtitle menu holds the subtitles and, when the media has dubbing languages, the audio track.
     // A media without subtitles still shows the button for its languages.
-    private Visibility GetSubtitleMenuVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
-        => (isSubtitleEnabled && !isSubtitleEmpty) || hasMultipleAudioLanguages ? Visibility.Visible : Visibility.Collapsed;
+    // Each half also needs its media capability: a media that cannot use subtitles or audio tracks has no menu.
+    private Visibility GetSubtitleMenuVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages,
+        bool canUseSubtitles, bool canSelectAudioTrack, bool hasAdmittedMedia)
+        => (isSubtitleEnabled && !isSubtitleEmpty && PlayerOverlay.IsCapabilityShown(canUseSubtitles, hasAdmittedMedia))
+            || (hasMultipleAudioLanguages && PlayerOverlay.IsCapabilityShown(canSelectAudioTrack, hasAdmittedMedia))
+            ? Visibility.Visible : Visibility.Collapsed;
 
     private Visibility GetSubtitleListVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty)
         => isSubtitleEnabled && !isSubtitleEmpty ? Visibility.Visible : Visibility.Collapsed;
