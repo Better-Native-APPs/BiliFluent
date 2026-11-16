@@ -86,7 +86,6 @@
     <None Remove="Controls\Components\UserCardControl.xaml" />
     <None Remove="Controls\Components\VideoMomentPresenter.xaml" />
     <None Remove="Controls\Core\CacheBar.xaml" />
-    <None Remove="Controls\Core\ChapterPanel.xaml" />
     <None Remove="Controls\Core\IslandTransportControls.xaml" />
     <None Remove="Controls\Core\NextTip.xaml" />
     <None Remove="Controls\Core\OverlayTransportControls.xaml" />
@@ -1182,9 +1181,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Update="Controls\Core\NextTip.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Update="Controls\Core\ChapterPanel.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Update="Controls\Core\CacheBar.xaml">
