@@ -480,4 +480,7 @@
   <data name="WebSignInFailedDescription" xml:space="preserve">
     <value>You're signed in on the web page, but the app couldn't finish authorizing. Check your network and try again.</value>
   </data>
+  <data name="PlayerLiveStatus" xml:space="preserve">
+    <value>Live</value>
+  </data>
 </root>
