@@ -2,9 +2,8 @@
 // Licensed under the MIT License.
 
 using Richasy.BiliKernel.Bili.Authorization;
-using System.Text.Json;
+using Richasy.BiliKernel.Resolvers.Storage;
 using System.Text.Json.Serialization;
-using Windows.Storage;
 
 namespace Richasy.BiliKernel.Resolvers.WinUICookies;
 
@@ -14,55 +13,79 @@ namespace Richasy.BiliKernel.Resolvers.WinUICookies;
 public sealed class WinUIBiliCookiesResolver : IBiliCookiesResolver
 {
     private const string CookiesKey = "BiliUserCookies";
+    private const string CookiesFileName = "cookies.dpapi";
+    private static readonly byte[] _entropy = "BiliFluent.Credentials.Cookies.v1"u8.ToArray();
+    private readonly Lock _sync = new();
+    private readonly ProtectedCredentialStore<IDictionary<string, string>> _store;
     private IDictionary<string, string>? _cacheCookies;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WinUIBiliCookiesResolver"/> class.
+    /// </summary>
+    public WinUIBiliCookiesResolver()
+        => _store = ProtectedCredentialStore<IDictionary<string, string>>.CreateForApplication(
+            CookiesFileName, _entropy, CookiesSourceGenerationContext.Default.IDictionaryStringString, CookiesKey);
+
+    internal WinUIBiliCookiesResolver(
+        string localFolderPath,
+        Func<string?> readLegacyValue,
+        Action removeLegacyValue,
+        Func<string, byte[]>? readFile = null,
+        Action<Stream, byte[]>? writeFile = null)
+        => _store = new ProtectedCredentialStore<IDictionary<string, string>>(
+            () => localFolderPath, CookiesFileName, _entropy, CookiesSourceGenerationContext.Default.IDictionaryStringString,
+            readLegacyValue, removeLegacyValue, readFile, writeFile);
 
     /// <inheritdoc/>
     public IDictionary<string, string> GetCookies()
     {
-        if (_cacheCookies?.Count > 0)
+        lock (_sync)
         {
-            return _cacheCookies;
-        }
+            if (_cacheCookies?.Count > 0)
+            {
+                return _cacheCookies;
+            }
 
-        var container = GetContainer();
-        if (container.Values.TryGetValue(CookiesKey, out var cookies))
-        {
-            _cacheCookies = JsonSerializer.Deserialize(cookies.ToString(), SourceGenerationContext.Default.DictionaryStringString);
+            _cacheCookies = _store.Read();
+            // Preserve the existing null result and the reload of an empty cache.
+            return _cacheCookies!;
         }
-
-        return _cacheCookies;
     }
 
     /// <inheritdoc/>
     public string GetCookieString()
     {
-        var cookies = GetCookies();
-        var cookieList = cookies.Select(item => $"{item.Key}={item.Value}");
-        return string.Join("; ", cookieList);
+        lock (_sync)
+        {
+            var cookies = GetCookies();
+            var cookieList = cookies.Select(item => $"{item.Key}={item.Value}");
+            return string.Join("; ", cookieList);
+        }
     }
 
     /// <inheritdoc/>
     public void RemoveCookies()
     {
-        _cacheCookies = null;
-        var container = GetContainer();
-        container.Values.Remove(CookiesKey);
+        lock (_sync)
+        {
+            _cacheCookies = null;
+            _store.Remove();
+        }
     }
 
     /// <inheritdoc/>
     public void SaveCookies(IDictionary<string, string> cookies)
     {
-        _cacheCookies = cookies;
-        var container = GetContainer();
-        container.Values[CookiesKey] = JsonSerializer.Serialize(cookies, SourceGenerationContext.Default.DictionaryStringString);
+        lock (_sync)
+        {
+            _store.Save(cookies);
+            _cacheCookies = cookies;
+        }
     }
-
-    private static ApplicationDataContainer GetContainer()
-        => ApplicationData.Current.LocalSettings.CreateContainer("BiliKernel", ApplicationDataCreateDisposition.Always);
 }
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(Dictionary<string, string>))]
-internal sealed partial class SourceGenerationContext : JsonSerializerContext
+[JsonSerializable(typeof(IDictionary<string, string>))]
+internal sealed partial class CookiesSourceGenerationContext : JsonSerializerContext
 {
 }
