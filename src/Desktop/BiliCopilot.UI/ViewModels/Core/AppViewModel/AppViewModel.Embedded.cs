@@ -129,8 +129,13 @@ public sealed partial class AppViewModel
     {
         // Synchronous callbacks are observed by the transition/close owner, not an unowned exit.
 #pragma warning disable VSTHRD103
-        request?.Cancel();
+        try { request?.Cancel(); }
 #pragma warning restore VSTHRD103
+        catch (ObjectDisposedException)
+        {
+            // The opening transition disposes this source only after it has left its gate, so a close
+            // that reaches it later has nothing left to cancel. It is not a failed cancellation.
+        }
     }
 
     internal Action? CaptureEmbeddedOpeningCancellation(PlayerViewModel player)

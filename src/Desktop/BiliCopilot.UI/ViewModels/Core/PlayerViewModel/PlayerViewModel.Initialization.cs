@@ -333,7 +333,9 @@ public sealed partial class PlayerViewModel
             await RefreshSponsorApplicationMetadataAsync();
             if (!IsEmbedded) _independentInitializationCompleted = true;
         }
-        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        // A close invalidates the connector requests before it cancels this source: leaving while the media
+        // still loads is a cancellation as well, not a playback failure.
+        catch (OperationCanceledException) when (request.IsCancellationRequested || IsPlaybackClosing)
         {
             if (!IsEmbedded && !_independentInitializationCompleted) throw;
         }
