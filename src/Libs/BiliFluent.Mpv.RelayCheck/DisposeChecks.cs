@@ -15,6 +15,7 @@ internal static partial class DisposeChecks
         await report.RunAsync("drain: client results", () => CheckClientResultsAsync(report));
         await report.RunAsync("drain: event-thread reentry", () => CheckEventThreadAsync(report));
         await report.RunAsync("drain: event-thread warning", () => CheckBlockedLoopAsync(report));
+        await RunPlayerChecksAsync(report);
     }
 
     private static async Task CheckGateAsync(Report report)
@@ -106,6 +107,7 @@ internal static partial class DisposeChecks
     {
         public readonly List<string> Messages = [];
         public readonly TaskCompletionSource Warning = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Error = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Errors;
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
@@ -115,7 +117,11 @@ internal static partial class DisposeChecks
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             lock (Messages) Messages.Add(formatter(state, exception));
-            if (logLevel == LogLevel.Error) Interlocked.Increment(ref Errors);
+            if (logLevel == LogLevel.Error)
+            {
+                Interlocked.Increment(ref Errors);
+                Error.TrySetResult();
+            }
             if (logLevel == LogLevel.Warning) Warning.TrySetResult();
         }
     }

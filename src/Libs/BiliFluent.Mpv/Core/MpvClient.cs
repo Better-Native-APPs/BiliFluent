@@ -227,7 +227,7 @@ public sealed partial class MpvClient : IAsyncDisposable
     internal void RunClientCallback(Action action)
     {
         using var callback = _callbackWork.TryEnter();
-        if (!callback.IsActive) return;
+        if (!callback.IsActive || IsDisposed) return;
         try { action(); }
         catch (Exception ex) { MpvCallbackError.Log(_logger, "client-event", ex); }
     }
@@ -275,7 +275,7 @@ public sealed partial class MpvClient : IAsyncDisposable
 
             var eventId = eventPtr->EventId;
             using var callback = _callbackWork.TryEnter();
-            if (!callback.IsActive) break;
+            if (!callback.IsActive || IsDisposed) break;
             try
             {
                 HandleEvent(eventPtr);

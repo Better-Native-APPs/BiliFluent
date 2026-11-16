@@ -9,27 +9,29 @@ public sealed partial class MpvPlayer
 {
     private void CheckStateProperties()
     {
-        _uiContext.Post(_ =>
+        PostCounted(_ =>
         {
             IsPlaying = PlaybackState == Core.Enums.MpvPlayerState.Playing;
             IsBuffering = PlaybackState is Core.Enums.MpvPlayerState.Buffering or Core.Enums.MpvPlayerState.Seeking;
             IsStopped = PlaybackState is Core.Enums.MpvPlayerState.Idle or Core.Enums.MpvPlayerState.End;
-        }, default);
+        });
     }
 
     private void TryShowSubtitle()
-        => _subtitleResolver?.ShowSubtitle(Convert.ToInt32(Position));
+        => RunPlayerCallback(() => _subtitleResolver?.ShowSubtitle(Convert.ToInt32(Position)), "subtitle");
 
     private async Task InitializeTracksAsync()
     {
-        var tracks = await Client.GetTracksAsync();
+        if (!TryStartPlayerOperation(Client.GetTracksAsync, out var pending)) return;
+        var tracks = await pending.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (tracks.IsSuccess)
         {
-            _uiContext.Post(_ =>
+            PostCounted(_ =>
             {
                 var args = new MpvTrackUpdatedEventArgs(tracks.Value);
                 TrackUpdated?.Invoke(this, args);
-            }, default);
+            });
         }
     }
 }

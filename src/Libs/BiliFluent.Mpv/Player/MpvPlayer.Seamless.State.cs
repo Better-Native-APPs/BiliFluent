@@ -43,20 +43,31 @@ public sealed partial class MpvPlayer
 
     private void OnSeamlessFileLoading(object? sender, EventArgs e)
     {
-        CancelPendingSeamless(MpvSeamlessSwitchReason.PlaybackChanged);
-        ReleaseSeamlessTracks();
+        RunPlayerCallback(() =>
+        {
+            CancelPendingSeamless(MpvSeamlessSwitchReason.PlaybackChanged);
+            ReleaseSeamlessTracks();
+        }, "seamless-loading");
     }
 
-    private void OnSeamlessPlaybackEnded(object? sender, EventArgs e) => CancelPendingSeamless(MpvSeamlessSwitchReason.PlaybackChanged);
+    private void OnSeamlessPlaybackEnded(object? sender, EventArgs e)
+        => RunPlayerCallback(() => CancelPendingSeamless(MpvSeamlessSwitchReason.PlaybackChanged), "seamless-end");
 
-    private void OnSeamlessSeek(object? sender, EventArgs e) => CancelPendingSeamless(MpvSeamlessSwitchReason.Seeked);
+    private void OnSeamlessSeek(object? sender, EventArgs e)
+        => RunPlayerCallback(() => CancelPendingSeamless(MpvSeamlessSwitchReason.Seeked), "seamless-seek");
 
     private void OnSeamlessPause(object? sender, bool paused)
     {
-        if (paused) CancelPendingSeamless(MpvSeamlessSwitchReason.Paused);
+        RunPlayerCallback(() =>
+        {
+            if (paused) CancelPendingSeamless(MpvSeamlessSwitchReason.Paused);
+        }, "seamless-pause");
     }
 
     private void OnSeamlessDataNotify(object? sender, MpvClientNotifyEventArgs e)
+        => RunPlayerCallback(() => HandleSeamlessDataNotify(e), "seamless-data");
+
+    private void HandleSeamlessDataNotify(MpvClientNotifyEventArgs e)
     {
         if (e.Id == MpvClientEventId.SpeedChanged && e.Data is double speed)
         {
@@ -81,6 +92,9 @@ public sealed partial class MpvPlayer
     }
 
     private void OnSeamlessRelayUpstreamFailed(object? sender, RelayUpstreamFailedEventArgs e)
+        => RunPlayerCallback(() => HandleSeamlessRelayUpstreamFailed(e), "seamless-relay");
+
+    private void HandleSeamlessRelayUpstreamFailed(RelayUpstreamFailedEventArgs e)
     {
         MpvRelayStreamKind? kind;
         lock (_seamlessSync)
