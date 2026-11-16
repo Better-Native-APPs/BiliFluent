@@ -5,7 +5,7 @@ using BiliCopilot.UI.ViewModels.Items;
 namespace BiliCopilot.UI.Controls.Components;
 
 /// <summary>
-/// Watched mark laid over the video cover of a dynamic card: a corner label and a thin bar along the bottom edge.
+/// Watched mark laid over the video cover of a dynamic card: a corner label and a bar along the bottom edge.
 /// Collapsed when there is no mark, so an unwatched card looks exactly as before.
 /// </summary>
 public sealed partial class WatchMarkOverlay : UserControl
@@ -20,6 +20,10 @@ public sealed partial class WatchMarkOverlay : UserControl
     /// <summary><see cref="BadgeMargin"/> dependency property.</summary>
     public static readonly DependencyProperty BadgeMarginProperty =
         DependencyProperty.Register(nameof(BadgeMargin), typeof(Thickness), typeof(WatchMarkOverlay), new PropertyMetadata(new Thickness(8), OnBadgeMarginChanged));
+
+    /// <summary><see cref="BarHeight"/> dependency property.</summary>
+    public static readonly DependencyProperty BarHeightProperty =
+        DependencyProperty.Register(nameof(BarHeight), typeof(double), typeof(WatchMarkOverlay), new PropertyMetadata(5d, OnBarHeightChanged));
 
     /// <summary>Initializes a new instance of the <see cref="WatchMarkOverlay"/> class.</summary>
     public WatchMarkOverlay() => InitializeComponent();
@@ -38,16 +42,44 @@ public sealed partial class WatchMarkOverlay : UserControl
         set => SetValue(BadgeMarginProperty, value);
     }
 
+    /// <summary>
+    /// Thickness of the bar. Keep it within the gap between the cover edge and the duration badge of the host card,
+    /// so the bar never runs into that badge.
+    /// </summary>
+    public double BarHeight
+    {
+        get => (double)GetValue(BarHeightProperty);
+        set => SetValue(BarHeightProperty, value);
+    }
+
     private static void OnMarkChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((WatchMarkOverlay)d).Apply(e.NewValue as WatchMark);
 
     private static void OnBadgeMarginChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        // The label does not exist until the first mark arrives; Apply picks the margin up then.
-        if (((WatchMarkOverlay)d).Badge is Border badge)
+        // The labels do not exist until the first mark arrives; Apply picks the margin up then.
+        var overlay = (WatchMarkOverlay)d;
+        if (overlay.Root is not null)
         {
-            badge.Margin = (Thickness)e.NewValue;
+            overlay.ApplyMetrics();
         }
+    }
+
+    private static void OnBarHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var overlay = (WatchMarkOverlay)d;
+        if (overlay.Root is not null)
+        {
+            overlay.ApplyMetrics();
+        }
+    }
+
+    private void ApplyMetrics()
+    {
+        FinishedBadge.Margin = BadgeMargin;
+        PartialBadge.Margin = BadgeMargin;
+        BarTrack.Height = BarHeight;
+        Bar.MinHeight = BarHeight;
     }
 
     private void Apply(WatchMark? mark)
@@ -63,9 +95,12 @@ public sealed partial class WatchMarkOverlay : UserControl
             _ = FindName(nameof(Root));
         }
 
-        Badge.Margin = BadgeMargin;
-        Label.Text = mark.Text;
-        FinishedIcon.Visibility = mark.IsFinished ? Visibility.Visible : Visibility.Collapsed;
+        ApplyMetrics();
+
+        // One label per state, each fully described in XAML. Only the one in use is shown.
+        FinishedBadge.Visibility = mark.IsFinished ? Visibility.Visible : Visibility.Collapsed;
+        PartialBadge.Visibility = mark.IsFinished ? Visibility.Collapsed : Visibility.Visible;
+        (mark.IsFinished ? FinishedLabel : PartialLabel).Text = mark.Text;
         Bar.Value = mark.Ratio;
         BarTrack.Visibility = mark.Ratio > 0 ? Visibility.Visible : Visibility.Collapsed;
         Visibility = Visibility.Visible;

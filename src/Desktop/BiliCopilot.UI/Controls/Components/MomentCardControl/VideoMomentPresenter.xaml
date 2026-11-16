@@ -98,7 +98,11 @@
                 Text="{x:Bind ViewModel.VideoDuration, Mode=OneWay}" />
         </Border>
         <Border Grid.Row="1" Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}">
-            <local:WatchMarkOverlay BadgeMargin="4" Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
+            <!--  The duration badge sits 4px above the cover edge here, so the bar stays within those 4px.  -->
+            <local:WatchMarkOverlay
+                BadgeMargin="4"
+                BarHeight="4"
+                Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
         </Border>
         <TextBlock
             x:Name="VideoTitleBlock"
