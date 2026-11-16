@@ -2,6 +2,7 @@
 
 using System.Collections.Concurrent;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 
 namespace Richasy.MpvKernel.Core;
 
@@ -11,6 +12,7 @@ namespace Richasy.MpvKernel.Core;
 public sealed partial class MpvClient
 {
     private static readonly TimeSpan MediaTrackTimeout = TimeSpan.FromSeconds(8);
+    private readonly Lock _trackCommandSync = new();
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource<MpvError>> _trackCommands = new();
 #pragma warning disable CA2213 // Outstanding add operations release this gate after native completion.
     private readonly SemaphoreSlim _trackAddGate = new(1, 1);
@@ -58,8 +60,10 @@ public sealed partial class MpvClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
-        using var operation = CancellationTokenSource.CreateLinkedTokenSource(token);
-        var work = Task.Run(() => AddMediaTrackCoreAsync(type, url, select, title, operation.Token), CancellationToken.None);
+        var operation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var detached = false;
+        var cleanup = new LateTrackAdd(type, url);
+        var work = Task.Run(() => AddMediaTrackCoreAsync(type, url, select, title, operation.Token, cleanup), CancellationToken.None);
         try
         {
             return await work.WaitAsync(MediaTrackTimeout, token).ConfigureAwait(false);
@@ -67,18 +71,28 @@ public sealed partial class MpvClient
         catch (TimeoutException)
         {
             await operation.CancelAsync().ConfigureAwait(false);
-            ObserveLateTrackAdd(work);
+            detached = true;
+#pragma warning disable CA2025 // Cleanup awaits work, then disposes the CTS; the caller's finally skips it.
+            _ = CleanupLateTrackAddAsync(work, cleanup, operation);
+#pragma warning restore CA2025
             return MpvResult.Fail("Mpv | add media track timed out");
         }
         catch (OperationCanceledException)
         {
             await operation.CancelAsync().ConfigureAwait(false);
-            ObserveLateTrackAdd(work);
+            detached = true;
+#pragma warning disable CA2025 // Ownership transfers to the late cleanup worker, not the caller's finally.
+            _ = CleanupLateTrackAddAsync(work, cleanup, operation);
+#pragma warning restore CA2025
             throw;
+        }
+        finally
+        {
+            if (!detached) operation.Dispose();
         }
     }
 
-    private async Task<MpvResult<int>> AddMediaTrackCoreAsync(MpvTrackType type, string url, bool select, string title, CancellationToken token)
+    private async Task<MpvResult<int>> AddMediaTrackCoreAsync(MpvTrackType type, string url, bool select, string title, CancellationToken token, LateTrackAdd cleanup)
     {
         await _trackAddGate.WaitAsync(token).ConfigureAwait(false);
         int? addedId = null;
@@ -87,6 +101,7 @@ public sealed partial class MpvClient
             token.ThrowIfCancellationRequested();
             var before = ReadMediaTracks();
             if (before.IsFailed) return MpvResult.Fail(before.ErrorMessage!);
+            cleanup.PreviousId = before.Value.FirstOrDefault(track => track.Type == type && track.IsSelected)?.Id;
             var ids = before.Value.Where(track => track.Type == type).Select(track => track.Id).ToHashSet();
 
             // Like subtitle loading, add without selection. Even a command that completes after
@@ -128,10 +143,13 @@ public sealed partial class MpvClient
         return Task.Run(() =>
         {
             token.ThrowIfCancellationRequested();
-            var result = WrapAsResult(SetPropertyString(property, id.ToString(CultureInfo.InvariantCulture)), "Mpv | select media track failed");
-            return result.IsSuccess && GetPropertyString(property) != id.ToString(CultureInfo.InvariantCulture)
-                ? MpvResult.Fail("Mpv | media track selection did not take effect")
-                : result;
+            lock (_trackCommandSync)
+            {
+                var result = WrapAsResult(SetPropertyString(property, id.ToString(CultureInfo.InvariantCulture)), "Mpv | select media track failed");
+                return result.IsSuccess && GetPropertyString(property) != id.ToString(CultureInfo.InvariantCulture)
+                    ? MpvResult.Fail("Mpv | media track selection did not take effect")
+                    : result;
+            }
         }, token);
     }
 
@@ -151,6 +169,11 @@ public sealed partial class MpvClient
 
     private MpvResult<IReadOnlyList<MpvMediaTrack>> ReadMediaTracks()
     {
+        lock (_trackCommandSync) return ReadMediaTracksCore();
+    }
+
+    private MpvResult<IReadOnlyList<MpvMediaTrack>> ReadMediaTracksCore()
+    {
         if (IsDisposed) return MpvResult.Fail("Mpv | get media tracks failed: client disposed");
         var error = _handle.GetPropertyNode("track-list", out var node);
         if (error != MpvError.Success) return WrapAsResult(error, "Mpv | get media tracks failed");
@@ -167,7 +190,7 @@ public sealed partial class MpvClient
             };
             if (type != MpvTrackType.Unknown && track.GetInteger("id") is long id)
             {
-                tracks.Add(new(checked((int)id), type, track.GetString("title"), track.GetFlag("selected"), track.GetFlag("external")));
+                tracks.Add(new(checked((int)id), type, track.GetString("title"), track.GetFlag("selected"), track.GetFlag("external")) { ExternalFile = track.GetString("external-filename") });
             }
         }
 
@@ -177,11 +200,15 @@ public sealed partial class MpvClient
     private async Task<MpvResult> RunTrackCommandAsync(string[] args, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (IsDisposed) return MpvResult.Fail("Mpv | media track command failed: client disposed");
         var id = unchecked((ulong)Interlocked.Increment(ref _trackCommandId));
         var completion = new TaskCompletionSource<MpvError>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _trackCommands[id] = completion;
-        var error = _handle.SendTrackCommand(id, args);
+        MpvError error;
+        lock (_trackCommandSync)
+        {
+            if (IsDisposed) return MpvResult.Fail("Mpv | media track command failed: client disposed");
+            _trackCommands[id] = completion;
+            error = _handle.SendTrackCommand(id, args);
+        }
         if (error != MpvError.Success)
         {
             _trackCommands.TryRemove(id, out _);
@@ -190,7 +217,10 @@ public sealed partial class MpvClient
 
         using var registration = token.Register(() =>
         {
-            if (!IsDisposed) _handle.AbortTrackCommand(id);
+            lock (_trackCommandSync)
+            {
+                if (!IsDisposed) _handle.AbortTrackCommand(id);
+            }
         });
         // Await native completion even after abort: the add gate stays held until the before/after
         // comparison and orphan cleanup are done. The public wait above is independently bounded.
@@ -209,9 +239,40 @@ public sealed partial class MpvClient
         foreach (var (id, _) in _trackCommands) CompleteTrackCommand(id, (int)MpvError.Uninitialized);
     }
 
-    private static void ObserveLateTrackAdd(Task<MpvResult<int>> work)
+    private async Task CleanupLateTrackAddAsync(Task<MpvResult<int>> work, LateTrackAdd cleanup, CancellationTokenSource operation)
     {
-        _ = work.ContinueWith(static finished => _ = finished.Exception, CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        try
+        {
+#pragma warning disable VSTHRD003 // The timed-out caller transfers this operation's cleanup to this worker.
+            var result = await work.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+            if (result.IsFailed || IsDisposed) return;
+            var tracks = ReadMediaTracks();
+            if (tracks.IsFailed) return;
+            var orphan = tracks.Value.FirstOrDefault(track => track.Type == cleanup.Type && track.Id == result.Value && track.ExternalFile == cleanup.Url);
+            if (orphan is null) return; // A main-file change already removed it; IDs can be reused.
+            if (orphan.IsSelected && cleanup.PreviousId is { } previous)
+                await SelectMediaTrackAsync(cleanup.Type == MpvTrackType.Video ? "vid" : "aid", previous, CancellationToken.None).ConfigureAwait(false);
+            await RemoveMediaTrackAsync(cleanup.Type == MpvTrackType.Video ? "video-remove" : "audio-remove", orphan.Id, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The add worker already removed its unselected orphan before throwing.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Mpv | late media track cleanup failed error={Error}", ex.GetType().Name);
+        }
+        finally
+        {
+            operation.Dispose();
+        }
+    }
+
+    private sealed class LateTrackAdd(MpvTrackType type, string url)
+    {
+        public MpvTrackType Type { get; } = type;
+        public string Url { get; } = url;
+        public int? PreviousId { get; set; }
     }
 }

@@ -10,4 +10,8 @@ namespace Richasy.MpvKernel.Core.Models;
 /// <param name="Title">The title given when the track was added.</param>
 /// <param name="IsSelected">Whether mpv currently selects this track.</param>
 /// <param name="IsExternal">Whether the track can be removed independently of the main file.</param>
-public sealed record MpvMediaTrack(int Id, MpvTrackType Type, string? Title, bool IsSelected, bool IsExternal);
+public sealed record MpvMediaTrack(int Id, MpvTrackType Type, string? Title, bool IsSelected, bool IsExternal)
+{
+    // Used only to recognize a late add after cancellation; never part of public diagnostics.
+    internal string? ExternalFile { get; init; }
+}
