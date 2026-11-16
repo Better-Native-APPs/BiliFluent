@@ -83,7 +83,8 @@ public sealed partial class PlayerOverlay
         if (propertyName is null or "" or nameof(PlayerViewModel.IsControlsVisible) or nameof(PlayerViewModel.Presentation)
             or nameof(PlayerViewModel.IsEmbedded) or nameof(PlayerViewModel.UsingPanscan) or nameof(PlayerViewModel.Connector)
             or nameof(PlayerViewModel.MediaGeneration) or nameof(PlayerViewModel.IsConnecting)
-            or nameof(PlayerViewModel.IsPlaybackClosing) or nameof(PlayerViewModel.ErrorMessage))
+            or nameof(PlayerViewModel.IsPlaybackClosing) or nameof(PlayerViewModel.ErrorMessage)
+            or nameof(PlayerViewModel.CanUseInteractiveDanmaku))
         {
             UpdateCommandDanmakuEnvironment();
         }
@@ -99,7 +100,8 @@ public sealed partial class PlayerOverlay
         if (CommandDanmakuLayer is null) return;
         var vm = ViewModel;
         var usable = _loaded && vm is not null && !vm.IsConnecting && !vm.IsPlaybackClosing
-            && string.IsNullOrEmpty(vm.ErrorMessage) && vm.Presentation != PlayerPresentationMode.CompactOverlay;
+            && string.IsNullOrEmpty(vm.ErrorMessage) && vm.Presentation != PlayerPresentationMode.CompactOverlay
+            && IsCapabilityShown(vm.CanUseInteractiveDanmaku, vm.HasAdmittedMedia);
         var visibility = usable ? Visibility.Visible : Visibility.Collapsed;
         if (CommandDanmakuLayer.Visibility != visibility) CommandDanmakuLayer.Visibility = visibility;
         if (!usable || vm is null) return;

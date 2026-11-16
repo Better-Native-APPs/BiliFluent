@@ -452,7 +452,7 @@
                 Background="{ThemeResource AcrylicInAppFillColorCustomBrush}"
                 CornerRadius="20"
                 Orientation="Horizontal"
-                Visibility="{x:Bind ViewModel.IsProgressChanging, Mode=OneWay}">
+                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.IsProgressChanging, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PositionText, Mode=OneWay}" />
                 <TextBlock
                     Margin="8,0"
@@ -491,7 +491,7 @@
                 CornerRadius="20"
                 Orientation="Horizontal"
                 Spacing="12"
-                Visibility="{x:Bind ViewModel.IsSpeedChanging, Mode=OneWay}">
+                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.IsSpeedChanging, ViewModel.CanChangePlaybackRate, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=PlaySpeed}" />
                 <TextBlock
                     VerticalAlignment="Center"
@@ -586,7 +586,7 @@
                     IsIndeterminate="{x:Bind local:PlayerOverlay.IsLoading(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}"
                     Maximum="{x:Bind ViewModel.Player.Duration, Mode=OneWay}"
                     ShowPaused="{x:Bind local:PlayerOverlay.IsPaused(ViewModel.Player.PlaybackState), Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.IsBottomProgressBarVisible, Mode=OneWay}" />
+                    Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.IsBottomProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}" />
             </Grid>
             <Grid Height="60" Visibility="{x:Bind local:PlayerOverlay.IsOverlayHeaderVisible(ViewModel.IsControlsVisible, ViewModel.IsEmbedded, ViewModel.Presentation), Mode=OneWay}">
                 <Grid.Background>
@@ -741,7 +741,8 @@
                                 Margin="8,0,0,0"
                                 Padding="0"
                                 VerticalAlignment="Center"
-                                ToolTipService.ToolTip="{ext:Locale Name=Settings}">
+                                ToolTipService.ToolTip="{ext:Locale Name=Settings}"
+                                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanUseSubtitles, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                                 <ic:SymbolIcon FontSize="14" Symbol="Settings" />
                                 <Button.Flyout>
                                     <MenuFlyout Opened="OnOverlayFlyoutOpened" Placement="Bottom">
@@ -891,7 +892,8 @@
                                 x:Name="EmbeddedSettingButton"
                                 AutomationProperties.Name="{ext:Locale Name=Settings}"
                                 Style="{StaticResource EmbeddedHeaderButtonStyle}"
-                                ToolTipService.ToolTip="{ext:Locale Name=Settings}">
+                                ToolTipService.ToolTip="{ext:Locale Name=Settings}"
+                                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanUseSubtitles, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                                 <ic:SymbolIcon FontSize="14" Symbol="Settings" />
                                 <Button.Flyout>
                                     <MenuFlyout Opened="OnOverlayFlyoutOpened" Placement="Bottom">
