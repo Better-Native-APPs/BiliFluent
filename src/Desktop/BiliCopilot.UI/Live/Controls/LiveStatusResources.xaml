@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Status dot palette shared by LiveRoomHeader (playback) and LiveChatPanel (chat connection):
+        Fluent status colours per theme. Referenced with ThemeResource so a theme switch repaints the dots.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="LiveStateLiveBrush" Color="{ThemeResource SystemFillColorSuccess}" />
+            <SolidColorBrush x:Key="LiveStateWarnBrush" Color="{ThemeResource SystemFillColorCaution}" />
+            <SolidColorBrush x:Key="LiveStateErrorBrush" Color="{ThemeResource SystemFillColorCritical}" />
+            <SolidColorBrush x:Key="LiveStateIdleBrush" Color="{ThemeResource SystemFillColorNeutral}" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="LiveStateLiveBrush" Color="{ThemeResource SystemFillColorSuccess}" />
+            <SolidColorBrush x:Key="LiveStateWarnBrush" Color="{ThemeResource SystemFillColorCaution}" />
+            <SolidColorBrush x:Key="LiveStateErrorBrush" Color="{ThemeResource SystemFillColorCritical}" />
+            <SolidColorBrush x:Key="LiveStateIdleBrush" Color="{ThemeResource SystemFillColorNeutral}" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="LiveStateLiveBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="LiveStateWarnBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="LiveStateErrorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="LiveStateIdleBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

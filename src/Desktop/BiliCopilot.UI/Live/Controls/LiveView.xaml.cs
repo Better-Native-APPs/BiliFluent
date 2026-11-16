@@ -1,8 +1,6 @@
 #nullable enable
 
-using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Globalization;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.Toolkits;
@@ -12,14 +10,16 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Richasy.BiliKernel.Models.Media;
+using Richasy.BiliKernel.Models.User;
 using Windows.System;
 
 namespace BiliCopilot.UI.Live.Controls;
 
 /// <summary>
-/// Video-first Live layout: header, host video anchor, a floating transport card and a toggleable chat list.
+/// Video-first Live layout: room header, host video anchor, a floating transport card and a toggleable chat panel.
+/// The header and the chat panel are display-only controls (<see cref="LiveRoomHeader"/>, <see cref="LiveChatPanel"/>);
+/// this view feeds them from the session and decides where and when they are shown.
 /// The transport card is placed once in the video island's overlay layer (VOD PlayerOverlay model) and serves
 /// normal, full-screen and compact modes; presentation changes only switch its layout state.
 /// The view owns only its subscriptions, toggles, composer state and the overlay instance it creates.
@@ -27,16 +27,13 @@ namespace BiliCopilot.UI.Live.Controls;
 /// </summary>
 public sealed partial class LiveView : UserControl
 {
-    private const double WideChatWidth = 340;
-    private const double CompactChatWidth = 284;
-    private const double NarrowChatWidth = 260;
+    private const double WideChatWidth = LiveChatPanel.RecommendedWidth;
+    private const double CompactChatWidth = LiveChatPanel.CompactWidth;
+    private const double NarrowChatWidth = LiveChatPanel.MinimumWidth;
     private const double CompactBreakpoint = 960;
     private const double NarrowBreakpoint = 640;
-    private const double FollowThreshold = 48;
 
-    // Room-info copy owned by the view (LiveText is outside this lane).
-    private const string FollowingCopy = "已关注";
-    private const string NotFollowingCopy = "未关注";
+    // Copy owned by the view (LiveText is outside this lane).
     private const string QualityCopy = "清晰度";
 
     // Same idea as the VOD overlay: controls fade after a short idle period, in every presentation mode.
@@ -53,7 +50,6 @@ public sealed partial class LiveView : UserControl
     private readonly LiveDanmakuOverlay _overlay;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcher;
 
-    private INotifyCollectionChanged? _messageSource;
     private CancellationTokenSource? _lifetime;
     private bool _attached;
     private int _refreshQueued;
@@ -68,7 +64,6 @@ public sealed partial class LiveView : UserControl
     private bool _isNarrow;
     private double _lastWidth;
 
-    private Uri? _shownAvatar;
     private bool _syncingQuality;
 
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _idleTimer;
@@ -79,10 +74,6 @@ public sealed partial class LiveView : UserControl
     private bool _compactLayout;
     private bool _overlayLayout;
     private Grid? _transportOverlayHost;
-
-    private ScrollViewer? _scroller;
-    private bool _followLatest = true;
-    private int _unseen;
 
     private LiveBinding? _shownBinding;
     private bool _bindingSeen;
@@ -138,8 +129,6 @@ public sealed partial class LiveView : UserControl
         TransportCard.Loaded += OnTransportLoaded;
         ActualThemeChanged += OnActualThemeChanged;
 
-        MessageList.ContainerContentChanging += OnMessageContainerChanging;
-        MessageList.Loaded += OnMessageListLoaded;
         ComposerBox.TextCompositionStarted += OnCompositionStarted;
         ComposerBox.TextCompositionEnded += OnCompositionEnded;
         RootGrid.SizeChanged += OnRootSizeChanged;
@@ -186,14 +175,9 @@ public sealed partial class LiveView : UserControl
     {
         QualityCaption.Text = QualityCopy;
         VolumeCaption.Text = LiveText.Volume;
-        ChatHeaderText.Text = LiveText.ChatHeader;
-        JumpText.Text = LiveText.JumpToLatest;
         AutomationProperties.SetName(RefreshButton, LiveText.RefreshName);
         AutomationProperties.SetName(VolumeSlider, LiveText.Volume);
         AutomationProperties.SetName(OverlayToggle, LiveText.OverlayToggleName);
-        AutomationProperties.SetName(ChatToggle, LiveText.ChatToggleName);
-        AutomationProperties.SetName(MessageList, LiveText.ChatHeader);
-        AutomationProperties.SetName(JumpButton, LiveText.JumpToLatest);
         AutomationProperties.SetName(ComposerBox, LiveText.ComposerName);
         AutomationProperties.SetName(SendButton, LiveText.SendName);
         AutomationProperties.SetName(VolumeButton, LiveText.Volume);
@@ -201,7 +185,6 @@ public sealed partial class LiveView : UserControl
         // Icon-only commands carry their name as a tooltip, as on the VOD transport.
         ToolTipService.SetToolTip(RefreshButton, LiveText.RefreshName);
         ToolTipService.SetToolTip(OverlayToggle, LiveText.OverlayToggleName);
-        ToolTipService.SetToolTip(ChatToggle, LiveText.ChatToggleName);
         ToolTipService.SetToolTip(SendButton, LiveText.SendName);
         ToolTipService.SetToolTip(VolumeButton, LiveText.Volume);
     }
@@ -214,7 +197,6 @@ public sealed partial class LiveView : UserControl
         _attached = true;
         _session.PropertyChanged += OnSessionPropertyChanged;
         _presentation.PropertyChanged += OnPresentationPropertyChanged;
-        BindMessages();
         RefreshAll();
         UpdatePresentation();
     }
@@ -225,18 +207,13 @@ public sealed partial class LiveView : UserControl
         _attached = false;
         _session.PropertyChanged -= OnSessionPropertyChanged;
         _presentation.PropertyChanged -= OnPresentationPropertyChanged;
-        if (_messageSource is not null) _messageSource.CollectionChanged -= OnMessagesChanged;
-        _messageSource = null;
-        MessageList.ItemsSource = null;
-        if (_scroller is not null) _scroller.ViewChanged -= OnScrollViewChanged;
-        _scroller = null;
+        ChatPanel.Messages = null; // The panel lets go of the session collection; Attach hands it back.
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_lifetime is null || _lifetime.IsCancellationRequested) _lifetime = new CancellationTokenSource();
         Attach();
-        HookScroller();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -256,18 +233,6 @@ public sealed partial class LiveView : UserControl
     }
 
     private bool IsCurrentActivation(CancellationToken token) => _attached && !token.IsCancellationRequested;
-
-    private void BindMessages()
-    {
-        var messages = _session.Messages;
-        if (ReferenceEquals(MessageList.ItemsSource, messages) && _messageSource is not null) return;
-        if (_messageSource is not null) _messageSource.CollectionChanged -= OnMessagesChanged;
-        _messageSource = messages;
-        _messageSource.CollectionChanged += OnMessagesChanged;
-        MessageList.ItemsSource = messages; // The bounded session collection; never copied.
-        _unseen = 0;
-        SetFollow(true);
-    }
 
     private void OnSessionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -402,7 +367,7 @@ public sealed partial class LiveView : UserControl
 
     private void RefreshAll()
     {
-        BindMessages();
+        ChatPanel.Messages = _session.Messages; // The bounded session collection; never copied.
 
         var binding = _session.Binding;
         if (!_bindingSeen || binding != _shownBinding)
@@ -413,15 +378,14 @@ public sealed partial class LiveView : UserControl
             if (!first) OnBindingChanged();
         }
 
+        ChatPanel.RoomBinding = binding; // A new room/account/refresh returns the list to the latest message.
+
         var playback = _session.PlaybackState;
         var chat = _session.ChatState;
         var busy = _session.IsBusy;
 
-        TitleText.Text = string.IsNullOrWhiteSpace(_session.Title) ? LiveText.UntitledRoom : _session.Title;
-        PlaybackStatusText.Text = LiveText.Playback(playback);
-        PlaybackDot.Fill = PlaybackBrush(playback);
-        ChatStatusText.Text = LiveText.Chat(chat);
-        ChatDot.Fill = ChatBrush(chat);
+        PageHeader.PlaybackState = playback;
+        ChatPanel.ChatState = chat;
 
         var transportReady = !busy && !_commandBusy
             && playback is LivePlaybackState.Playing or LivePlaybackState.Paused
@@ -440,50 +404,19 @@ public sealed partial class LiveView : UserControl
         UpdateRoomInfo();
         UpdateQuality();
         UpdateComposerState();
-        UpdateEmptyText();
-        UpdateJumpButton();
         EvaluateTransport();
     }
 
-    /// <summary>Anchor avatar/name, follow state (hidden while unknown) and audience metric (hidden until received).</summary>
+    /// <summary>Room values for the header. Unchanged values are no-ops there; RefreshAll runs on every session notification.</summary>
     private void UpdateRoomInfo()
     {
-        var anchor = _session.AnchorName;
-        var hasAnchor = !string.IsNullOrWhiteSpace(anchor);
-        AnchorNameText.Text = hasAnchor ? anchor : string.Empty;
-        AnchorNameText.Visibility = hasAnchor ? Visibility.Visible : Visibility.Collapsed;
-        AnchorPicture.DisplayName = hasAnchor ? anchor : string.Empty; // Initials fallback while/if the image is unavailable.
-        AnchorButton.IsEnabled = !string.IsNullOrEmpty(_session.Anchor?.Id);
-        var spaceName = ResourceToolkit.GetLocalizedString(StringNames.UserSpace);
-        var anchorAction = hasAnchor ? $"{anchor}：{spaceName}" : spaceName;
-        AutomationProperties.SetName(AnchorButton, anchorAction);
-        ToolTipService.SetToolTip(AnchorButton, anchorAction);
-
-        var avatar = _session.AnchorAvatar;
-        if (!Equals(avatar, _shownAvatar))
-        {
-            // Only rebuild the image when the URI really changes; RefreshAll runs on every session notification.
-            _shownAvatar = avatar;
-            AnchorPicture.ProfilePicture = avatar is { IsAbsoluteUri: true }
-                ? new BitmapImage(avatar) { DecodePixelWidth = 72, DecodePixelType = DecodePixelType.Logical }
-                : null;
-        }
-
-        var following = _session.IsFollowing;
-        FollowTag.Visibility = following is null ? Visibility.Collapsed : Visibility.Visible;
-        if (following is { } isFollowing) FollowText.Text = isFollowing ? FollowingCopy : NotFollowingCopy;
-
-        var count = _session.AudienceCount;
-        AudiencePanel.Visibility = count is null ? Visibility.Collapsed : Visibility.Visible;
-        if (count is { } audience)
-        {
-            AudienceText.Text = string.Format(CultureInfo.CurrentCulture, "{0} {1:N0}", _session.AudienceLabel, audience);
-            AutomationProperties.SetName(AudiencePanel, AudienceText.Text);
-        }
-
-        AnchorMetaRow.Visibility = hasAnchor || following is not null || count is not null
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        PageHeader.Title = _session.Title;
+        PageHeader.AnchorName = _session.AnchorName;
+        PageHeader.Anchor = _session.Anchor;
+        PageHeader.AnchorAvatar = _session.AnchorAvatar;
+        PageHeader.IsFollowing = _session.IsFollowing;
+        PageHeader.AudienceLabel = _session.AudienceLabel;
+        PageHeader.AudienceCount = _session.AudienceCount;
     }
 
     /// <summary>Quality button (VOD IslandFormatButton): shown once the room reports any quality; enabled only when a switch is allowed.</summary>
@@ -572,25 +505,7 @@ public sealed partial class LiveView : UserControl
         _sendInFlight = false;
         ShowSendFeedback(null, null);
         SetCommandFeedback(null);
-        _unseen = 0;
-        SetFollow(true);
     }
-
-    private Brush PlaybackBrush(LivePlaybackState state) => state switch
-    {
-        LivePlaybackState.Playing => LocalBrush("LiveStateLiveBrush"),
-        LivePlaybackState.Opening or LivePlaybackState.Paused => LocalBrush("LiveStateWarnBrush"),
-        LivePlaybackState.Failed or LivePlaybackState.Ended => LocalBrush("LiveStateErrorBrush"),
-        _ => LocalBrush("LiveStateIdleBrush"),
-    };
-
-    private Brush ChatBrush(LiveChatState state) => state switch
-    {
-        LiveChatState.Connected => LocalBrush("LiveStateLiveBrush"),
-        LiveChatState.Connecting or LiveChatState.Authenticating or LiveChatState.Retrying => LocalBrush("LiveStateWarnBrush"),
-        LiveChatState.Failed or LiveChatState.Unavailable => LocalBrush("LiveStateErrorBrush"),
-        _ => LocalBrush("LiveStateIdleBrush"),
-    };
 
     private Brush LocalBrush(string key) => (Brush)Resources[key];
 
@@ -714,13 +629,10 @@ public sealed partial class LiveView : UserControl
     /// Same in-app route as the VOD publisher avatar (VideoConnectorViewModel.OpenUserSpace). The shared navigation
     /// queue hides this Live owner and opens the user space overlay while the retained owner closes.
     /// </summary>
-    private void OnAnchorClick(object sender, RoutedEventArgs e)
-    {
-        if (_session.Anchor is { } anchor)
-            this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), anchor);
-    }
+    private void OnAnchorInvoked(object? sender, UserProfile anchor)
+        => this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), anchor);
 
-    private void OnChatToggleClick(object sender, RoutedEventArgs e)
+    private void OnChatToggleRequested(object? sender, EventArgs e)
     {
         var show = ChatPanel.Visibility != Visibility.Visible; // SideSplitButton semantics: a click flips the panel.
         if (_isNarrow)
@@ -752,109 +664,11 @@ public sealed partial class LiveView : UserControl
         ChatPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         ChatColumn.Width = new GridLength(!show ? 0 : _isNarrow ? NarrowChatWidth
             : _lastWidth < CompactBreakpoint ? CompactChatWidth : WideChatWidth);
-        ChatToggleIcon.Symbol = show ? FluentIcons.Common.Symbol.PanelRightContract : FluentIcons.Common.Symbol.PanelRightExpand;
-        if (show) UpdateJumpButton();
+        PageHeader.IsChatOpen = show;
     }
 
-    // ---------------------------------------------------------------- chat list
-
-    private void OnMessageListLoaded(object sender, RoutedEventArgs e) => HookScroller();
-
-    private void HookScroller()
-    {
-        if (_scroller is not null || !_attached) return;
-        _scroller = FindDescendant<ScrollViewer>(MessageList);
-        if (_scroller is null) return;
-        _scroller.ViewChanged += OnScrollViewChanged;
-        ApplyScrollMode();
-    }
-
-    private void OnScrollViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-    {
-        if (_scroller is null || e.IsIntermediate) return;
-        var atEnd = _scroller.ScrollableHeight - _scroller.VerticalOffset <= FollowThreshold;
-        if (atEnd) _unseen = 0;
-        SetFollow(atEnd);
-        UpdateJumpButton();
-    }
-
-    private void SetFollow(bool follow)
-    {
-        if (_followLatest == follow) return;
-        _followLatest = follow;
-        ApplyScrollMode();
-    }
-
-    private void ApplyScrollMode()
-    {
-        // At the end: built-in bounded follow. Scrolled back: keep the rows the user is reading in place,
-        // including when the session trims its oldest rows at the 200 cap.
-        if (MessageList.ItemsPanelRoot is ItemsStackPanel panel)
-        {
-            panel.ItemsUpdatingScrollMode = _followLatest
-                ? ItemsUpdatingScrollMode.KeepLastItemInView
-                : ItemsUpdatingScrollMode.KeepItemsInView;
-        }
-    }
-
-    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (!_attached || !_dispatcher.HasThreadAccess) return;
-        switch (e.Action)
-        {
-            case NotifyCollectionChangedAction.Add when !_followLatest:
-                _unseen = Math.Min(_unseen + (e.NewItems?.Count ?? 1), 1000);
-                break;
-            case NotifyCollectionChangedAction.Reset:
-                _unseen = 0;
-                SetFollow(true);
-                break;
-        }
-
-        UpdateEmptyText();
-        UpdateJumpButton();
-    }
-
-    private void OnJumpClick(object sender, RoutedEventArgs e)
-    {
-        var messages = _session.Messages;
-        _unseen = 0;
-        SetFollow(true);
-        if (messages.Count > 0) MessageList.ScrollIntoView(messages[messages.Count - 1], ScrollIntoViewAlignment.Leading);
-        UpdateJumpButton();
-        ComposerBox.Focus(FocusState.Programmatic);
-    }
-
-    private void UpdateJumpButton()
-    {
-        var show = !_followLatest && _session.Messages.Count > 0;
-        JumpButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        var text = LiveText.NewMessages(_unseen);
-        JumpText.Text = text;
-        AutomationProperties.SetName(JumpButton, text);
-    }
-
-    private void UpdateEmptyText()
-    {
-        var empty = _session.Messages.Count == 0;
-        EmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        if (empty)
-        {
-            EmptyText.Text = _session.ChatState == LiveChatState.Connected
-                ? LiveText.EmptyConnected
-                : LiveText.Chat(_session.ChatState);
-        }
-    }
-
-    private void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
-    {
-        // Records' ToString() includes binding/account data; give assistive tech only the visible text.
-        if (args.InRecycleQueue || args.Item is not LiveChatMessage message) return;
-        AutomationProperties.SetName(args.ItemContainer, $"{DisplayName(message)}：{message.Text}");
-    }
-
-    private static string DisplayName(LiveChatMessage message)
-        => string.IsNullOrWhiteSpace(message.UserName) ? LiveText.AnonymousUser : message.UserName;
+    /// <summary>After "back to latest" the keyboard continues in the composer, as before the panel became a control.</summary>
+    private void OnChatJumpedToLatest(object? sender, EventArgs e) => ComposerBox.Focus(FocusState.Programmatic);
 
     // ---------------------------------------------------------------- composer and manual send
 
@@ -1074,22 +888,5 @@ public sealed partial class LiveView : UserControl
     {
         _openTransportFlyouts = Math.Max(0, _openTransportFlyouts - 1);
         if (_transportShown) ShowTransport();
-    }
-
-    // ---------------------------------------------------------------- helpers
-
-    private static T? FindDescendant<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match) return match;
-            var nested = FindDescendant<T>(child);
-            if (nested is not null) return nested;
-        }
-
-        return null;
     }
 }
