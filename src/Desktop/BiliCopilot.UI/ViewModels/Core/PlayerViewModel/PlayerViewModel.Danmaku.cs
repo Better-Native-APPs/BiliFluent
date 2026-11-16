@@ -135,6 +135,12 @@ public sealed partial class PlayerViewModel
                     }
                 }
                 catch (OperationCanceledException) when (segmentToken.IsCancellationRequested) { throw; }
+
+                // The service wraps a cancelled request in its own exception type: still a cancellation.
+                catch (Exception ex) when (segmentToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("The danmaku segment request was cancelled.", ex, segmentToken);
+                }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, $"获取弹幕分片失败： {index}");
