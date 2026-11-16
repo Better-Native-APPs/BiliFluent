@@ -42,6 +42,7 @@ internal static class GlobalDependencies
             .AddWinUITokenResolver()
             .AddWinUIQRCodeResolver(RenderQRCodeAsync)
             .AddTVAuthenticationService()
+            .AddBiliLoginService()
             .AddMyProfileService()
             .AddUserService()
             .AddSingleton<BiliCopilot.UI.Services.UserSpace.UserSpaceService>()
