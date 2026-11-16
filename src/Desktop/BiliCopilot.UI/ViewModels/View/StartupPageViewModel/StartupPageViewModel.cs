@@ -21,10 +21,12 @@ public sealed partial class StartupPageViewModel : ViewModelBase
     /// </summary>
     public StartupPageViewModel(
         IAuthenticationService authenticationService,
+        IBiliLoginService loginService,
         ILogger<StartupPageViewModel> logger,
         DispatcherQueue dispatcherQueue)
     {
         _authenticationService = authenticationService;
+        _loginService = loginService;
         _logger = logger;
         _dispatcherQueue = dispatcherQueue;
     }
@@ -38,13 +40,14 @@ public sealed partial class StartupPageViewModel : ViewModelBase
     {
         Version = this.Get<IAppToolkit>().GetPackageVersion();
         QRCodeImage = qrcodeImageControl;
+        InitializeSignInForm();
         await ReloadQRCodeAsync();
     }
 
     [RelayCommand]
     private async Task ReloadQRCodeAsync()
     {
-        if (_isExiting)
+        if (_isExiting || _isSuspended)
         {
             return;
         }
@@ -64,6 +67,8 @@ public sealed partial class StartupPageViewModel : ViewModelBase
                 return;
             }
 
+            // The code was scanned. Stop the sign-in form: only one of the two paths may finish the sign-in.
+            CancelFormSignIn();
             var isSignedIn = await CheckAuthorizeStatusAsync(cancellationToken);
             if (!IsCurrentAttempt(attempt))
             {
@@ -120,6 +125,13 @@ public sealed partial class StartupPageViewModel : ViewModelBase
         var attempt = _loginAttempt;
         _loginAttempt = null;
         attempt?.Cancel();
+
+        // The form keeps showing its last status while the app restarts; only its request and secrets go.
+        var formAttempt = _formAttempt;
+        _formAttempt = null;
+        formAttempt?.Cancel();
+        ReleaseSignInSessions();
+        Password = string.Empty;
 
         if (shouldRestart)
         {
