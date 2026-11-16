@@ -133,6 +133,25 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         BottomProgressBar.RegisterPropertyChangedCallback(ProgressBar.MaximumProperty, OnBottomProgressMaximumChanged);
     }
 
+    // A send of the room that did not go through: the draft stays in the box and the tip tells why.
+    private void OnRoomComposerNoticed(object? sender, BiliCopilot.UI.Live.Controls.LiveComposerNotice notice)
+        => ShowTip(notice.Message, notice.Type);
+
+    // The button of the ended state: ask for the newest picture of the room once.
+    private async void OnRoomRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { IsPlaybackClosing: false, IsLiveReleaseBlocked: false } owner) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            // The player shows what went wrong with the picture; nothing is retried here.
+            System.Diagnostics.Debug.WriteLine($"Live refresh failed: {ex.Message}");
+        }
+    }
+
     public void ShowTip(string text, InfoType type = InfoType.Error)
     {
         // Capture the requesting owner/media on the UI thread; an off-thread caller is bound when dispatched.

@@ -2151,4 +2151,52 @@
   <data name="PlayerLiveStatus" xml:space="preserve">
     <value>正在直播</value>
   </data>
+  <data name="LiveComposerPlaceholder" xml:space="preserve">
+    <value>发个弹幕…</value>
+  </data>
+  <data name="LiveComposerUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕</value>
+  </data>
+  <data name="LiveSendUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕，请等直播和弹幕连接好后再试。</value>
+  </data>
+  <data name="LiveSendNotSent" xml:space="preserve">
+    <value>弹幕没有发出，内容已保留。请检查登录状态后再试。</value>
+  </data>
+  <data name="LiveSendUnknown" xml:space="preserve">
+    <value>无法确认弹幕是否已发出。请先看看弹幕列表，确认没有发出后再手动发送。</value>
+  </data>
+  <data name="LiveSendRejected" xml:space="preserve">
+    <value>弹幕被拒绝，内容已保留。</value>
+  </data>
+  <data name="LiveSendRejectedTemplate" xml:space="preserve">
+    <value>弹幕被拒绝（代码 {0}），内容已保留。</value>
+  </data>
+  <data name="LiveQualitySwitching" xml:space="preserve">
+    <value>正在切换…</value>
+  </data>
+  <data name="LiveQualityTemplate" xml:space="preserve">
+    <value>清晰度：{0}</value>
+  </data>
+  <data name="LiveQualityItemCurrentTemplate" xml:space="preserve">
+    <value>{0}，当前清晰度</value>
+  </data>
+  <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
+    <value>{0}，正在切换</value>
+  </data>
+  <data name="LiveRefresh" xml:space="preserve">
+    <value>刷新到最新画面</value>
+  </data>
+  <data name="LiveEndedTitle" xml:space="preserve">
+    <value>直播已结束或连接中断</value>
+  </data>
+  <data name="LiveEndedDescription" xml:space="preserve">
+    <value>可以刷新一下，看看直播是否还在继续。</value>
+  </data>
+  <data name="LiveFailedTitle" xml:space="preserve">
+    <value>直播画面没有加载出来</value>
+  </data>
+  <data name="LiveFailedDescription" xml:space="preserve">
+    <value>可能是网络不稳定，或者直播刚刚结束。可以再试一次。</value>
+  </data>
 </root>

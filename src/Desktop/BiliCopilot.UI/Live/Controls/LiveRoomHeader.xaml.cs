@@ -60,6 +60,7 @@ public sealed partial class LiveRoomHeader : UserControl
         Register(nameof(IsChatToggleVisible), typeof(bool), true, header => header.UpdateChatToggle());
 
     private Uri? _shownAvatar;
+    private bool _isBackdropVisible = true;
 
     /// <summary>Initializes a new instance of the <see cref="LiveRoomHeader"/> class.</summary>
     public LiveRoomHeader()
@@ -155,6 +156,21 @@ public sealed partial class LiveRoomHeader : UserControl
     {
         get => (bool)GetValue(IsChatToggleVisibleProperty);
         set => SetValue(IsChatToggleVisibleProperty, value);
+    }
+
+    /// <summary>
+    /// Whether the header paints its own card fill. A host that already paints the header row turns it off, so
+    /// the fill is not laid twice. Plain property (not a dependency property): set it from code or markup.
+    /// </summary>
+    public bool IsBackdropVisible
+    {
+        get => _isBackdropVisible;
+        set
+        {
+            if (_isBackdropVisible == value) return;
+            _isBackdropVisible = value;
+            Backdrop.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private static DependencyProperty Register(string name, Type type, object? defaultValue, Action<LiveRoomHeader> changed)

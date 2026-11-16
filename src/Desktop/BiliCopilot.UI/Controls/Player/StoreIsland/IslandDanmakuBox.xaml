@@ -8,6 +8,7 @@
     xmlns:danmaku="using:BiliCopilot.UI.Controls.Danmaku"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:live="using:BiliCopilot.UI.Live.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:store="using:BiliCopilot.UI.Controls.Player.StoreIsland"
     mc:Ignorable="d">
@@ -24,7 +25,11 @@
         </ResourceDictionary>
     </core:PlayerControlBase.Resources>
 
-    <!--  Store 源 Controls/Danmaku/DanmakuBox.xaml：列间距 8、两列 Auto/*，开关/显示设置/输入框/发送设置原样保留  -->
+    <!--
+        Store 源 Controls/Danmaku/DanmakuBox.xaml：列间距 8、两列 Auto/*，开关/显示设置/输入框/发送设置原样保留.
+        The display settings, the inline box and the send settings belong to on-demand danmaku and leave for a
+        media without it. A room keeps the switch and puts its own box in the same place.
+    -->
     <Grid ColumnSpacing="8">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -51,7 +56,8 @@
                 AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
                 IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                 Style="{StaticResource CircleIconButtonStyle}"
-                ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
+                Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                 <Button.Flyout>
                     <!--  与全屏弹幕设置共用同一固定宽度面板；弹出层不受视频区域边界约束  -->
@@ -71,7 +77,8 @@
             VerticalAlignment="Center"
             PlaceholderText="{ext:Locale Name=DanmakuPlaceholder}"
             QuerySubmitted="OnDanmakuInputBoxSubmittedAsync"
-            TextChanged="OnDraftChanged">
+            TextChanged="OnDraftChanged"
+            Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSendOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <AutoSuggestBox.TextBoxStyle>
                 <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
                     <Setter Property="Padding" Value="36,4,8,4" />
@@ -86,7 +93,8 @@
             VerticalAlignment="Center"
             AutomationProperties.Name="{ext:Locale Name=DanmakuSendSettings}"
             Style="{StaticResource IconButtonStyle}"
-            ToolTipService.ToolTip="{ext:Locale Name=DanmakuSendSettings}">
+            ToolTipService.ToolTip="{ext:Locale Name=DanmakuSendSettings}"
+            Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSendOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <ic:SymbolIcon FontSize="12" Symbol="Options" />
             <Button.Flyout>
                 <Flyout
@@ -96,5 +104,14 @@
                 </Flyout>
             </Button.Flyout>
         </Button>
+        <!--  The box of a room. It is created only for a room, so other media never carry it.  -->
+        <live:LiveComposer
+            x:Name="RoomComposer"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            x:Load="{x:Bind core:PlayerOverlay.HasRoomDanmaku(ViewModel.Connector), Mode=OneWay}"
+            Connector="{x:Bind core:PlayerOverlay.GetRoomConnector(ViewModel.Connector), Mode=OneWay}"
+            IsActive="{x:Bind IsActive, Mode=OneWay}"
+            Noticed="OnRoomComposerNoticed" />
     </Grid>
 </core:PlayerControlBase>

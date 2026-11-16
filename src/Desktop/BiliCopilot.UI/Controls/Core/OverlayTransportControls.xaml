@@ -123,7 +123,7 @@
                         <Button
                             x:Name="PlayPauseButton"
                             Click="OnPlayPauseButtonClick"
-                            IsEnabled="{x:Bind IsPlayPauseEnabled(ViewModel.Player.PlaybackState), Mode=OneWay}"
+                            IsEnabled="{x:Bind IsPlayPauseEnabled(ViewModel.Player.PlaybackState, ViewModel.IsLiveReleaseBlocked), Mode=OneWay}"
                             Style="{StaticResource PrimaryPlayerButtonStyle}"
                             ToolTipService.ToolTip="{x:Bind GetPlayPauseTip(ViewModel.Player.IsPlaying), Mode=OneWay}">
                             <ic:SymbolIcon
@@ -195,6 +195,14 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     EntryStyle="{StaticResource ChapterEntryStyle}"
+                    IsActive="{x:Bind IsActive, Mode=OneWay}"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                <!--  The quality of a live room: it appears with the tiers of the room and takes no room otherwise.  -->
+                <local:LiveQualityButton
+                    x:Name="LiveQualityEntry"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    EntryStyle="{StaticResource BasicPlayerIconButtonStyle}"
                     IsActive="{x:Bind IsActive, Mode=OneWay}"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                 <StackPanel
@@ -576,7 +584,7 @@
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
-                    Visibility="{x:Bind ViewModel.IsDanmakuControlVisible, Mode=OneWay}">
+                    Visibility="{x:Bind local:PlayerOverlay.GetDanmakuSwitchVisibility(ViewModel.IsDanmakuControlVisible, ViewModel.Connector), Mode=OneWay}">
                     <ToggleButton
                         x:Name="DanmakuToggleButton"
                         Margin="0,0,8,0"
@@ -595,7 +603,8 @@
                         Click="OnDanmakuOptionsButtonClick"
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
+                        Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                         <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                     </Button>
                 </StackPanel>
@@ -733,7 +742,7 @@
         <!--
             Live status: for a media without a timeline it takes the place of the timeline, in the same box
             (the height of the progress slider and the same margin), so the buttons above stay where they are.
-            It is text, not a control: it takes no focus and is read as it is written.
+            With no timeline to drag, the button in front of it is the way back to the newest picture.
         -->
         <StackPanel
             x:Name="LiveStatus"
@@ -745,6 +754,17 @@
             RequestedTheme="Dark"
             Spacing="8"
             Visibility="{x:Bind GetLiveStatusVisibility(ProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+            <Button
+                x:Name="RefreshButton"
+                Width="32"
+                Height="32"
+                AutomationProperties.Name="{ext:Locale Name=LiveRefresh}"
+                Click="OnRefreshClick"
+                IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                Style="{StaticResource BasicPlayerIconButtonStyle}"
+                ToolTipService.ToolTip="{ext:Locale Name=LiveRefresh}">
+                <ic:SymbolIcon FontSize="14" Symbol="ArrowClockwise" />
+            </Button>
             <Ellipse
                 Width="8"
                 Height="8"
