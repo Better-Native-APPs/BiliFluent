@@ -18,7 +18,9 @@ public sealed partial class MpvPlayer
     // libcurl, which mpv reads http with, sends requests for the loopback address to these proxies as well.
     private static readonly string[] ProxyVariables = ["http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY"];
     private readonly Lock _relaySync = new();
+#pragma warning disable CA2213 // The cached disposal worker awaits DisposeRelayAsync after client shutdown.
     private LoopbackMediaRelay? _relay;
+#pragma warning restore CA2213
 
     // The streams of the source that was loaded last, and of the one before it: mpv may still
     // be reading the earlier one until its replacement has loaded.
@@ -78,7 +80,7 @@ public sealed partial class MpvPlayer
     {
         lock (_relaySync)
         {
-            return _relay is { } relay && _relayCurrent?.GetKey(kind) is { } key && relay.SwitchNode(key, url);
+            return !_isDisposed && _relay is { } relay && _relayCurrent?.GetKey(kind) is { } key && relay.SwitchNode(key, url);
         }
     }
 
@@ -90,6 +92,7 @@ public sealed partial class MpvPlayer
     public async Task<bool> TryUpdateRelayAsync(MpvMediaSource source, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
+        if (_isDisposed) return false;
         LoopbackMediaRelay? relay;
         RelayedSource? current;
         lock (_relaySync)
@@ -115,7 +118,9 @@ public sealed partial class MpvPlayer
                     continue;
                 }
 
-                var result = await relay.UpdateUrlsAsync(key, stream.Upstreams, stream.Current, streams.Headers, cancellationToken);
+                if (!TryStartPlayerOperation(() => relay.UpdateUrlsAsync(key, stream.Upstreams, stream.Current, streams.Headers, cancellationToken), out var update)) return false;
+                var result = await update.ConfigureAwait(false);
+                if (_isDisposed) return false;
                 if (result != RelayUpdateResult.Updated)
                 {
                     _logger.LogInformation("Playback | relay address update failed stream={Stream} result={Result}", kind, result);
@@ -128,16 +133,17 @@ public sealed partial class MpvPlayer
             return false;
         }
 
-        lock (_relaySync)
+        var updated = false;
+        TryRunPlayerWork(() =>
         {
-            if (!ReferenceEquals(current, _relayCurrent))
+            lock (_relaySync)
             {
-                return false;
+                if (!ReferenceEquals(current, _relayCurrent)) return;
+                _cachedSource = source;
+                updated = true;
             }
-        }
-
-        _cachedSource = source;
-        return true;
+        });
+        return updated;
     }
 
     // What to hand to mpv for the source: the URLs of the relay when it can serve the streams,
@@ -300,6 +306,9 @@ public sealed partial class MpvPlayer
     }
 
     private void OnRelayUpstreamFailed(object? sender, RelayUpstreamFailedEventArgs e)
+        => RunPlayerCallback(() => HandleRelayUpstreamFailed(e), "relay-upstream");
+
+    private void HandleRelayUpstreamFailed(RelayUpstreamFailedEventArgs e)
     {
         MpvRelayStreamKind? kind;
         lock (_relaySync)
@@ -319,6 +328,9 @@ public sealed partial class MpvPlayer
     // A load that failed without the relay having passed on a single byte may have failed
     // because of the relay. The next load plays directly, as it would have without a relay.
     private void OnRelayFileFailed(object? sender, MpvError e)
+        => RunPlayerCallback(HandleRelayFileFailed, "relay-file-failed");
+
+    private void HandleRelayFileFailed()
     {
         lock (_relaySync)
         {

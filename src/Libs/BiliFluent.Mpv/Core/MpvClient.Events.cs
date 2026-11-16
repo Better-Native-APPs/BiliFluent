@@ -198,15 +198,24 @@ public sealed partial class MpvClient
         }
     }
 
-    private async void NotifyPlayerState()
-    {
-        var stateResult = await GetPlayerStateAsync();
-        if (stateResult.IsFailed)
-        {
-            return;
-        }
+    private void NotifyPlayerState() => _ = NotifyPlayerStateAsync();
 
-        SendNotify(MpvClientEventId.StateChanged, stateResult.Value);
+    private async Task NotifyPlayerStateAsync()
+    {
+        try
+        {
+            Task<MpvResult<MpvPlayerState>> pending;
+            using (var callback = _callbackWork.TryEnter())
+            {
+                if (!callback.IsActive || IsDisposed) return;
+                pending = GetPlayerStateAsync();
+            }
+
+            var stateResult = await pending.ConfigureAwait(false);
+            if (stateResult.IsSuccess && !IsDisposed)
+                SendNotify(MpvClientEventId.StateChanged, stateResult.Value);
+        }
+        catch (Exception ex) { MpvCallbackError.Log(_logger, "player-state", ex); }
     }
 
     private unsafe void HandleObservePropertyChanged(MpvEventProperty* eventProp)

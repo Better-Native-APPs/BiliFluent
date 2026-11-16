@@ -1,72 +1,61 @@
 // Copyright (c) Richasy. All rights reserved.
 // Licensed under the MIT License.
 
-using Microsoft.Extensions.Logging;
 using System.Timers;
 
 namespace Richasy.MpvKernel.Player;
 
 public sealed partial class MpvPlayer
 {
-    private async void OnStatusTimerElapsedAsync(object? sender, ElapsedEventArgs e)
+    private void OnStatusTimerElapsedAsync(object? sender, ElapsedEventArgs e)
     {
-        // Five-second state checks, thirty-second correction for observed values.
-        var refreshObserved = Interlocked.Increment(ref _statusRefreshTicks) % ObservedPropertyRefreshTicks == 0;
-        await RefreshStatusAsync(refreshObserved);
+        RunPlayerCallbackAsync(() =>
+        {
+            // Five-second state checks, thirty-second correction for observed values.
+            var refreshObserved = Interlocked.Increment(ref _statusRefreshTicks) % ObservedPropertyRefreshTicks == 0;
+            return RefreshStatusAsync(refreshObserved);
+        }, "status-timer");
     }
 
-    private async void OnHistoryTimerElapsedAsync(object? sender, ElapsedEventArgs e)
+    private void OnHistoryTimerElapsedAsync(object? sender, ElapsedEventArgs e)
     {
-        if (_historyResolver != null && !IsLoading && Duration > 0 && !Client.IsDisposed)
+        RunPlayerCallbackAsync(() =>
         {
-            try
-            {
-                await _historyResolver.SaveHistoryAsync(Position, Duration, PlaybackState);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to save history.");
-            }
-        }
+            // Capture the whole request now. Its observer only retains a logger after await.
+            var history = _historyResolver;
+            return history != null && !IsLoading && Duration > 0 && !Client.IsDisposed
+                ? history.SaveHistoryAsync(Position, Duration, PlaybackState)
+                : Task.CompletedTask;
+        }, "history-timer");
     }
 
     private void OnClientShutdown(object? sender, EventArgs e)
     {
-        Client.Shutdown -= OnClientShutdown;
-        Client.ReachFileLoaded -= OnFileLoaded;
-        Client.ReachFileLoading -= OnFileLoading;
-        Client.ReachFileEnd -= OnFileEnd;
-        Client.DataNotify -= OnDataNotify;
-        Client.ErrorOccurred -= OnErrorOccurred;
-        var position = Position;
-        PostCounted(_ =>
+        RunPlayerCallback(() =>
         {
-            PlaybackState = MpvPlayerState.Idle;
-            Position = 0;
-            Duration = 0;
-            Volume = 0;
-            PlaybackRate = 0;
-            IsLoading = false;
-            IsFullScreen = false;
-            IsCompactOverlay = false;
-        });
+            DetachClientEvents();
+            PostCounted(_ => SetShutdownProperties());
+        }, "shutdown");
     }
 
     private void OnFileEnd(object? sender, EventArgs e)
     {
-        if (_isTlsError)
+        RunPlayerCallback(() =>
         {
-            return;
-        }
+            if (_isTlsError) return;
 
-        PostCounted(_ =>
-        {
-            IsLoading = false;
-            PlaybackState = MpvPlayerState.End;
-        });
+            PostCounted(_ =>
+            {
+                IsLoading = false;
+                PlaybackState = MpvPlayerState.End;
+            });
+        }, "file-end");
     }
 
-    private async void OnDataNotify(object? sender, MpvClientNotifyEventArgs e)
+    private void OnDataNotify(object? sender, MpvClientNotifyEventArgs e)
+        => RunPlayerCallbackAsync(() => HandleDataNotifyAsync(e), "data-notify");
+
+    private async Task HandleDataNotifyAsync(MpvClientNotifyEventArgs e)
     {
         switch (e.Id)
         {
@@ -93,7 +82,7 @@ public sealed partial class MpvPlayer
                 PostCounted(_ => IsCompactOverlay = (bool)e.Data!);
                 break;
             case MpvClientEventId.TrackCountChanged:
-                await InitializeTracksAsync();
+                await InitializeTracksAsync().ConfigureAwait(false);
                 break;
             case MpvClientEventId.PlaybackRestart:
                 _isTlsError = false;
@@ -109,30 +98,36 @@ public sealed partial class MpvPlayer
 
     private void OnErrorOccurred(object? sender, MpvError e)
     {
-        if (e == MpvError.TlsError)
+        RunPlayerCallback(() =>
         {
-            _isTlsError = true;
-        }
+            if (e == MpvError.TlsError) _isTlsError = true;
+        }, "player-error");
     }
 
-    private async void OnFileLoaded(object? sender, EventArgs e)
+    private void OnFileLoaded(object? sender, EventArgs e)
+        => RunPlayerCallbackAsync(HandleFileLoadedAsync, "file-loaded");
+
+    private async Task HandleFileLoadedAsync()
     {
         PostCounted(_ => IsLoading = false);
-        await RefreshStatusAsync();
-        if (Math.Abs(Duration - 1) < 0.01)
+        await RefreshStatusAsync().ConfigureAwait(false);
+        TryRunPlayerWork(() =>
         {
-            // No file loaded, throw an error.
-            PostCounted(_ => Client.ThrowError(MpvError.LoadingFailed));
-        }
+            if (Math.Abs(Duration - 1) < 0.01)
+                PostCounted(_ => Client.ThrowError(MpvError.LoadingFailed));
+        });
     }
 
     private void OnFileLoading(object? sender, EventArgs e)
         => PostCounted(_ => IsLoading = true);
 
-    // Same post as before; the client counts it only while stutter diagnostics run.
+    // Both admission and execution are guarded: old UI queue entries become no-ops.
     private void PostCounted(SendOrPostCallback callback)
     {
-        Client.CountUiPost();
-        _uiContext.Post(callback, default);
+        RunPlayerCallback(() =>
+        {
+            Client.CountUiPost();
+            _uiContext.Post(_ => RunPlayerCallback(() => callback(null), "ui-post"), null);
+        }, "ui-enqueue");
     }
 }

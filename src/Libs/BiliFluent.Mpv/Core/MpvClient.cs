@@ -20,7 +20,13 @@ public sealed partial class MpvClient : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly MpvCoreHandle _handle;
     private Task? _eventLoopTask;
+#pragma warning disable CA2213 // The one cached asynchronous disposal releases this source in its finally.
     private CancellationTokenSource? _eventCts;
+#pragma warning restore CA2213
+    private readonly MpvWorkGate _callbackWork = new();
+    private readonly object _disposeSync = new();
+    private Task? _disposeTask;
+    private volatile bool _isDisposed;
 
     /// <summary>
     /// Initialize a new instance of the <see cref="MpvClient"/> class.
@@ -44,7 +50,7 @@ public sealed partial class MpvClient : IAsyncDisposable
     /// <summary>
     /// 是否已经被释放.
     /// </summary>
-    public bool IsDisposed { get; private set; }
+    public bool IsDisposed { get => _isDisposed; private set => _isDisposed = value; }
 
     /// <summary>
     /// 创建一个新的 MPV 实例.
@@ -165,33 +171,84 @@ public sealed partial class MpvClient : IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (IsDisposed)
+        Task callbacksDrained;
+        TaskCompletionSource completion;
+        lock (_disposeSync)
         {
-            return;
+#pragma warning disable VSTHRD003 // Every caller joins this client's one asynchronous disposal completion.
+            if (_disposeTask is not null) return new(_disposeTask);
+#pragma warning restore VSTHRD003
+            IsDisposed = true;
+            callbacksDrained = _callbackWork.CloseAsync();
+            completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _disposeTask = completion.Task;
         }
 
-        IsDisposed = true;
+        // Cancellation and wakeup do not block; native stop/destroy remain pool operations.
+        // Start them now instead of inserting another pool hop before the stop command.
+        _ = CompleteDisposalAsync(callbacksDrained, completion);
+        return new(completion.Task);
+    }
 
+    private async Task CompleteDisposalAsync(Task callbacksDrained, TaskCompletionSource completion)
+    {
+        try
+        {
+#pragma warning disable VSTHRD003 // This core and segment-drain task belong to the one completion created by DisposeAsync.
+            await DisposeCoreAsync(callbacksDrained).ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+            completion.TrySetResult();
+        }
+        catch (Exception ex) { completion.TrySetException(ex); }
+    }
+
+    private async Task DisposeCoreAsync(Task callbacksDrained)
+    {
         if (_eventCts != null)
         {
-            await _eventCts.CancelAsync();
+            await _eventCts.CancelAsync().ConfigureAwait(false);
         }
 
-        await Task.Run(() => _handle.CommandString("stop"));
-        await StopEventLoopAsync();
-        CompletePendingTrackCommands();
-        _eventCts?.Dispose();
-        _eventCts = null;
-        await Task.Run(() =>
+        var stop = Task.Run(() => _handle.CommandString("stop"));
+        try
         {
-            lock (_trackCommandSync) _handle.Destroy();
-        });
+            await StopEventLoopAsync().ConfigureAwait(false);
+#pragma warning disable VSTHRD003 // These are this client's synchronous callback segments, not UI-dependent work.
+            await callbacksDrained.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+        }
+        finally
+        {
+            try
+            {
+                await stop.ConfigureAwait(false);
+            }
+            finally
+            {
+                CompletePendingTrackCommands();
+                _eventCts?.Dispose();
+                _eventCts = null;
+                await _handle.DrainNativeCallsAsync().ConfigureAwait(false);
+                await Task.Run(() =>
+                {
+                    lock (_trackCommandSync) _handle.Destroy();
+                }).ConfigureAwait(false);
+            }
+        }
     }
 
     internal void ThrowError(MpvError errorCode)
-        => ErrorOccurred?.Invoke(this, errorCode);
+        => RunClientCallback(() => ErrorOccurred?.Invoke(this, errorCode));
+
+    internal void RunClientCallback(Action action)
+    {
+        using var callback = _callbackWork.TryEnter();
+        if (!callback.IsActive || IsDisposed) return;
+        try { action(); }
+        catch (Exception ex) { MpvCallbackError.Log(_logger, "client-event", ex); }
+    }
 
     private static void ThrowIfFailed(MpvError errorCode, string message)
     {
@@ -220,7 +277,7 @@ public sealed partial class MpvClient : IAsyncDisposable
         var token = _eventCts.Token;
 
         // The loop blocks in the native wait for the whole life of the client, so it gets its own thread.
-        _eventLoopTask = Task.Factory.StartNew(() => RunEventLoop(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        _eventLoopTask = Task.Factory.StartNew(() => RunEventLoop(token), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
     private unsafe void RunEventLoop(CancellationToken token)
@@ -235,14 +292,19 @@ public sealed partial class MpvClient : IAsyncDisposable
             }
 
             var eventId = eventPtr->EventId;
-            HandleEvent(eventPtr);
-
-            if (eventId == NativeEventId.Shutdown)
+            using var callback = _callbackWork.TryEnter();
+            if (!callback.IsActive || IsDisposed) break;
+            try
             {
-                _logger.LogInformation("Mpv | Shutdown event received.");
-                Shutdown?.Invoke(this, EventArgs.Empty);
-                break;
+                HandleEvent(eventPtr);
+                if (eventId == NativeEventId.Shutdown)
+                {
+                    _logger.LogInformation("Mpv | Shutdown event received.");
+                    Shutdown?.Invoke(this, EventArgs.Empty);
+                }
             }
+            catch (Exception ex) { MpvCallbackError.Log(_logger, "event-loop", ex); }
+            if (eventId == NativeEventId.Shutdown) break;
         }
     }
 
@@ -252,17 +314,29 @@ public sealed partial class MpvClient : IAsyncDisposable
     private async Task StopEventLoopAsync()
     {
         var loop = _eventLoopTask;
-        if (loop is null || loop.IsCompleted)
+        if (loop is null)
         {
             return;
         }
 
-        // The loop may be blocked in the native wait, which cancellation alone does not interrupt.
-        _handle.Wakeup();
-        var finished = await Task.WhenAny(loop, Task.Delay(EventLoopExitTimeout));
-        if (finished != loop)
+        if (loop.IsCompleted)
         {
-            _logger.LogWarning("Mpv | The event loop did not stop in time.");
+            await loop.ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            // Cancellation alone does not interrupt the native wait.
+            _handle.Wakeup();
+            var finished = await Task.WhenAny(loop, Task.Delay(EventLoopExitTimeout)).ConfigureAwait(false);
+            if (finished != loop)
+                _logger.LogWarning("Mpv | The event loop did not stop in time; waiting for its actual exit.");
+        }
+        finally
+        {
+            // A warning, wakeup or logger failure must never authorize early destruction.
+            await loop.ConfigureAwait(false);
         }
     }
 
@@ -355,5 +429,6 @@ public sealed partial class MpvClient : IAsyncDisposable
         IsInitialized = true;
     }
 
-    private void SendNotify(MpvClientEventId id, object? data) => DataNotify?.Invoke(this, new(id, data));
+    private void SendNotify(MpvClientEventId id, object? data)
+        => RunClientCallback(() => DataNotify?.Invoke(this, new(id, data)));
 }

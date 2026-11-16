@@ -14,8 +14,10 @@ public sealed partial class MpvPlayer
     private static readonly TimeSpan SeamlessPreparationTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan SeamlessRetireDelay = TimeSpan.FromSeconds(3.5);
     private readonly Lock _seamlessSync = new();
+#pragma warning disable CA2213 // DisposeSeamlessAsync releases both, as awaited by the cached disposal worker.
     private readonly SemaphoreSlim _seamlessGate = new(1, 1);
     private readonly CancellationTokenSource _seamlessLifetime = new();
+#pragma warning restore CA2213
     private readonly Dictionary<long, Task<MpvSeamlessSwitchResult>> _seamlessWork = [];
     private readonly Dictionary<(MpvRelayStreamKind Kind, int Id), SeamlessTrack> _seamlessTracks = [];
     private readonly List<Task> _seamlessRetirements = [];
@@ -69,7 +71,11 @@ public sealed partial class MpvPlayer
     /// </summary>
     public async Task<MpvResult<MpvSeamlessPlaybackState>> GetSeamlessPlaybackStateAsync(CancellationToken cancellationToken = default)
     {
-        var tracks = await Client.GetMediaTracksAsync(cancellationToken).ConfigureAwait(false);
+        if (!TryStartPlayerOperation(() => Client.GetMediaTracksAsync(cancellationToken), out var pending))
+            return MpvResult.Fail("Mpv | Player is disposed.");
+        var tracks = await pending.ConfigureAwait(false);
+        using var work = _callbackWork.TryEnter();
+        if (!work.IsActive || Client.IsDisposed) return MpvResult.Fail("Mpv | Player is disposed.");
         if (tracks.IsFailed) return MpvResult.Fail(tracks.ErrorMessage!);
         var video = tracks.Value.FirstOrDefault(track => track.Type == MpvTrackType.Video && track.IsSelected);
         var audio = tracks.Value.FirstOrDefault(track => track.Type == MpvTrackType.Audio && track.IsSelected);
@@ -179,8 +185,11 @@ public sealed partial class MpvPlayer
 
     private void NotifySeamlessProgress(SeamlessOperation operation, MpvSeamlessSwitchPhase phase, MpvSeamlessSwitchResult? result = null)
     {
-        operation.Phase = phase;
-        SeamlessSwitchProgress?.Invoke(this, new(operation.Id, operation.Kind, phase, operation.Boundary, result) { RelayKey = operation.TargetKey });
+        RunPlayerCallback(() =>
+        {
+            operation.Phase = phase;
+            SeamlessSwitchProgress?.Invoke(this, new(operation.Id, operation.Kind, phase, operation.Boundary, result) { RelayKey = operation.TargetKey });
+        }, "seamless-progress");
     }
 
     private sealed record SeamlessTrack(int Id, MpvRelayStreamKind Kind, string Key, double MinimumSeekTime, DashIndex Index, RelayVirtualOffsetMap? Map);

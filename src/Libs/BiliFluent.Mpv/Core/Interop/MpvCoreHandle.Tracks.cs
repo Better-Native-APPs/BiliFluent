@@ -10,6 +10,8 @@ internal sealed unsafe partial class MpvCoreHandle
     // mpv copies the arguments before this call returns. Completion comes through CommandReply.
     public MpvError SendTrackCommand(ulong requestId, string[] args)
     {
+        using var call = _nativeWork.TryEnter();
+        if (!call.IsActive) return MpvError.Uninitialized;
         var pointers = new nint[args.Length + 1];
         try
         {
@@ -32,5 +34,9 @@ internal sealed unsafe partial class MpvCoreHandle
         }
     }
 
-    public void AbortTrackCommand(ulong requestId) => MpvApi.AbortAsyncCommand(_ctx, requestId);
+    public void AbortTrackCommand(ulong requestId)
+    {
+        using var call = _nativeWork.TryEnter();
+        if (call.IsActive) MpvApi.AbortAsyncCommand(_ctx, requestId);
+    }
 }

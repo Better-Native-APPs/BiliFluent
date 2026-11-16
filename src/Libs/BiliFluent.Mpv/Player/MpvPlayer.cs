@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Richasy.MpvKernel.Core;
+using Richasy.MpvKernel.Player.Models;
 
 namespace Richasy.MpvKernel.Player;
 
@@ -48,49 +49,50 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// <returns><see cref="Task"/>.</returns>
     public async Task InitializeAsync(bool alsoPlay = true)
     {
-        if (_sourceResolver is null)
+        IMpvMediaSourceResolver? sourceResolver = null;
+        IMpvMediaHistoryResolver? historyResolver = null;
+        if (!TryRunPlayerWork(() =>
         {
-            throw new InvalidOperationException("Source resolver is not set.");
-        }
-
-        try
-        {
+            sourceResolver = _sourceResolver ?? throw new InvalidOperationException("Source resolver is not set.");
+            historyResolver = _historyResolver;
             IsInternalLoading = true;
             ResetProperties();
-
-            // Another media: nothing of the previous one is served by the relay any longer.
             ReleaseRelayStreams();
-            _cachedSource = await _sourceResolver.GetSourceAsync();
-            if (_historyResolver != null)
+        })) return;
+
+        MpvMediaSource source;
+        try
+        {
+            if (!TryStartPlayerOperation(() => sourceResolver!.GetSourceAsync(), out var sourceWork)) return;
+            // Preserve normal UI affinity; a late continuation must re-enter the work gate.
+            source = await sourceWork;
+            if (_isDisposed) return;
+            if (historyResolver != null)
             {
-                _cachedSource.Options.StartPosition = await _historyResolver.GetStartPositionAsync();
+                if (!TryStartPlayerOperation(historyResolver.GetStartPositionAsync, out var historyWork)) return;
+                var start = await historyWork;
+                if (!TryRunPlayerWork(() => source.Options.StartPosition = start)) return;
             }
 
-            if (!string.IsNullOrEmpty(PreferExtraLoader))
+            if (!TryRunPlayerWork(() =>
             {
-                _cachedSource.Options?.InitExtraLoader = PreferExtraLoader;
-            }
-
-            Title = _cachedSource.Title;
+                _cachedSource = source;
+                if (!string.IsNullOrEmpty(PreferExtraLoader)) source.Options?.InitExtraLoader = PreferExtraLoader;
+                Title = source.Title;
+                IsInternalLoading = false;
+                _statusTimer.Start();
+                if (historyResolver != null) _historyTimer.Start();
+            })) return;
         }
         catch (Exception ex)
         {
-            IsInternalLoading = false;
-            _logger.LogError(ex, "Failed to get media source.");
-            Client.ThrowError(MpvError.VoInitFailed);
+            MpvCallbackError.Log(_logger, "media-source", ex);
+            RunPlayerCallback(() =>
+            {
+                IsInternalLoading = false;
+                Client.ThrowError(MpvError.VoInitFailed);
+            }, "initialize-error");
             return;
-        }
-
-        IsInternalLoading = false;
-        if (_isDisposed)
-        {
-            return;
-        }
-
-        _statusTimer.Start();
-        if (_historyResolver != null)
-        {
-            _historyTimer.Start();
         }
 
         if (alsoPlay)
@@ -98,17 +100,23 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             CheckStateProperties();
             try
             {
-                var (url, options) = PrepareLoad(_cachedSource);
-                await Client.PlayAsync(url, options);
-                if (PlaybackState == MpvPlayerState.Paused)
+                if (!TryStartPlayerOperation(() =>
                 {
-                    await Client.ResumeAsync();
-                }
+                    var (url, options) = PrepareLoad(source);
+                    return Client.PlayAsync(url, options);
+                }, out var play)) return;
+                await play;
+                Task<MpvResult>? resume = null;
+                if (!TryRunPlayerWork(() =>
+                {
+                    if (!Client.IsDisposed && PlaybackState == MpvPlayerState.Paused) resume = Client.ResumeAsync();
+                })) return;
+                if (resume is not null) await resume;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to play media.");
-                Client.ThrowError(MpvError.OptionError);
+                MpvCallbackError.Log(_logger, "play-media", ex);
+                RunPlayerCallback(() => Client.ThrowError(MpvError.OptionError), "play-error");
             }
         }
     }
@@ -118,11 +126,14 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// </summary>
     public void UpdateResolvers(IMpvMediaSourceResolver sourceResolver, IMpvMediaHistoryResolver? historyResolver = null, IMpvMediaSubtitleResolver? subtitleResolver = null)
     {
-        _sourceResolver = sourceResolver ?? throw new ArgumentNullException(nameof(sourceResolver));
-        _historyResolver = historyResolver;
-        _subtitleResolver = subtitleResolver;
-        _statusTimer?.Stop();
-        _historyTimer?.Stop();
+        TryRunPlayerWork(() =>
+        {
+            _sourceResolver = sourceResolver ?? throw new ArgumentNullException(nameof(sourceResolver));
+            _historyResolver = historyResolver;
+            _subtitleResolver = subtitleResolver;
+            _statusTimer?.Stop();
+            _historyTimer?.Stop();
+        });
     }
 
     /// <summary>
@@ -134,58 +145,73 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
 
     private async Task RefreshStatusAsync(bool refreshObservedProperties)
     {
-        if (!Client.IsInitialized || Client.IsDisposed)
+        if (_isDisposed || !Client.IsInitialized || Client.IsDisposed)
         {
             return;
         }
 
-        var state = await Client.GetPlayerStateAsync();
+        if (!TryStartPlayerOperation(Client.GetPlayerStateAsync, out var stateWork)) return;
+        var state = await stateWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (state.IsSuccess)
         {
-            _uiContext.Post(_ => PlaybackState = state.Value, null);
+            PostCounted(_ => PlaybackState = state.Value);
         }
 
         if (!refreshObservedProperties) return;
 
-        var duration = await Client.GetDurationAsync();
+        if (!TryStartPlayerOperation(Client.GetDurationAsync, out var durationWork)) return;
+        var duration = await durationWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (duration.IsSuccess)
         {
-            _uiContext.Post(_ => Duration = duration.Value, null);
+            PostCounted(_ => Duration = duration.Value);
         }
 
-        var positionVersion = Interlocked.Read(ref _positionUpdateVersion);
-        var position = await Client.GetCurrentPositionAsync();
+        long positionVersion = 0;
+        if (!TryRunPlayerWork(() => positionVersion = Interlocked.Read(ref _positionUpdateVersion))) return;
+        if (!TryStartPlayerOperation(Client.GetCurrentPositionAsync, out var positionWork)) return;
+        var position = await positionWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (position.IsSuccess)
         {
-            _uiContext.Post(_ =>
+            PostCounted(_ =>
             {
                 // A newer time-pos event wins over an in-flight correction.
                 if (positionVersion == Interlocked.Read(ref _positionUpdateVersion)) Position = position.Value;
-            }, null);
+            });
         }
 
-        var volume = await Client.GetVolumeAsync();
+        if (!TryStartPlayerOperation(Client.GetVolumeAsync, out var volumeWork)) return;
+        var volume = await volumeWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (volume.IsSuccess)
         {
-            _uiContext.Post(_ => Volume = volume.Value, null);
+            PostCounted(_ => Volume = volume.Value);
         }
 
-        var rate = await Client.GetSpeedAsync();
+        if (!TryStartPlayerOperation(Client.GetSpeedAsync, out var rateWork)) return;
+        var rate = await rateWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (rate.IsSuccess)
         {
-            _uiContext.Post(_ => PlaybackRate = rate.Value, null);
+            PostCounted(_ => PlaybackRate = rate.Value);
         }
 
-        var isFullScreen = await Client.GetFullScreenStateAsync();
+        if (!TryStartPlayerOperation(Client.GetFullScreenStateAsync, out var fullScreenWork)) return;
+        var isFullScreen = await fullScreenWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (isFullScreen.IsSuccess)
         {
-            _uiContext.Post(_ => IsFullScreen = isFullScreen.Value, null);
+            PostCounted(_ => IsFullScreen = isFullScreen.Value);
         }
 
-        var isCompactOverlay = await Client.GetCompactOverlayStateAsync();
+        if (!TryStartPlayerOperation(Client.GetCompactOverlayStateAsync, out var compactWork)) return;
+        var isCompactOverlay = await compactWork.ConfigureAwait(false);
+        if (_isDisposed) return;
         if (isCompactOverlay.IsSuccess)
         {
-            _uiContext.Post(_ => IsCompactOverlay = isCompactOverlay.Value, null);
+            PostCounted(_ => IsCompactOverlay = isCompactOverlay.Value);
         }
     }
 
@@ -198,52 +224,79 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// <returns>Whether the media was handed to mpv; <c>false</c> when no source could be served or loaded.</returns>
     public async Task<bool> ReplayAsync(double? preferPosition = null, bool resume = true, double? speed = null)
     {
+        IMpvMediaSourceResolver? resolver = null;
+        if (!TryRunPlayerWork(() => resolver = _sourceResolver)) return false;
         try
         {
-            _cachedSource = await _sourceResolver.GetSourceAsync();
-            if (!string.IsNullOrEmpty(PreferExtraLoader))
+            if (!TryStartPlayerOperation(() => resolver!.GetSourceAsync(), out var sourceWork)) return false;
+            var source = await sourceWork;
+            if (_isDisposed) return false;
+            if (!TryStartPlayerOperation(() =>
             {
-                _cachedSource.Options?.InitExtraLoader = PreferExtraLoader;
-            }
-
-            if (preferPosition != null)
-            {
-                _cachedSource.Options?.StartPosition = preferPosition.Value;
-            }
-
-            if (speed is > 0)
-            {
-                _cachedSource.Options?.InitialSpeed = speed.Value;
-            }
-
-            Title = _cachedSource.Title;
-            var (url, options) = PrepareLoad(_cachedSource);
-            await Client.PlayAsync(url, options);
+                _cachedSource = source;
+                if (!string.IsNullOrEmpty(PreferExtraLoader)) source.Options?.InitExtraLoader = PreferExtraLoader;
+                if (preferPosition != null) source.Options?.StartPosition = preferPosition.Value;
+                if (speed is > 0) source.Options?.InitialSpeed = speed.Value;
+                Title = source.Title;
+                var (url, options) = PrepareLoad(source);
+                return Client.PlayAsync(url, options);
+            }, out var play)) return false;
+            await play;
+            if (_isDisposed) return false;
             if (resume)
             {
-                await Client.ResumeAsync();
+                if (!TryStartPlayerOperation(Client.ResumeAsync, out var resumeWork)) return false;
+                await resumeWork;
             }
 
-            return true;
+            return !_isDisposed;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get media source.");
-            Client.ThrowError(MpvError.VoInitFailed);
+            MpvCallbackError.Log(_logger, "replay-media", ex);
+            RunPlayerCallback(() => Client.ThrowError(MpvError.VoInitFailed), "replay-error");
             return false;
         }
     }
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
+    /// <remarks>
+    /// Calls share one completion and failure. Await asynchronously while the UI context
+    /// dispatches the final state; synchronous waits inside callbacks are not supported.
+    /// </remarks>
+    public ValueTask DisposeAsync()
     {
-        _isDisposed = true;
+        lock (_disposeSync)
+        {
+#pragma warning disable VSTHRD003 // The player owns this one pool-based close, including its cached failure.
+            if (_disposeTask is not null) return new(_disposeTask);
+            _isDisposed = true;
+            var drained = _callbackWork.CloseAsync();
+            _disposeTask = Task.Run(() => DisposeCoreAsync(drained));
+            return new(_disposeTask);
+#pragma warning restore VSTHRD003
+        }
+    }
+
+    private async Task DisposeCoreAsync(Task callbacksDrained)
+    {
+        DetachClientEvents();
+#pragma warning disable VSTHRD003 // Only synchronous side-effect segments are joined; no network await is a segment.
+        await callbacksDrained.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
+        _statusTimer.Elapsed -= OnStatusTimerElapsedAsync;
+        _statusTimer.Stop();
+        _statusTimer.Dispose();
+        _historyTimer.Elapsed -= OnHistoryTimerElapsedAsync;
+        _historyTimer.Stop();
+        _historyTimer.Dispose();
+
         if (_historyResolver != null && Duration > 0)
         {
 #pragma warning disable RCS1075 // Avoid empty catch clause that catches System.Exception
             try
             {
-                await _historyResolver.SaveHistoryAsync(Position, Duration, PlaybackState, isExiting: true);
+                await _historyResolver.SaveHistoryAsync(Position, Duration, PlaybackState, isExiting: true).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -251,27 +304,28 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
 #pragma warning restore RCS1075 // Avoid empty catch clause that catches System.Exception
         }
 
-        _statusTimer.Elapsed -= OnStatusTimerElapsedAsync;
-        _statusTimer.Stop();
-        _statusTimer.Dispose();
-        _historyTimer.Elapsed -= OnHistoryTimerElapsedAsync;
-        _historyTimer.Stop();
-        _historyTimer.Dispose();
         try
-        {
-            await DisposeSeamlessAsync();
-        }
-        finally
         {
             try
             {
-                await Client.DisposeAsync();
+                await DisposeSeamlessAsync().ConfigureAwait(false);
             }
             finally
             {
-                // After mpv: nothing reads from the relay any more.
-                await DisposeRelayAsync();
+                try
+                {
+                    await Client.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    // After mpv: nothing reads from the relay any more.
+                    await DisposeRelayAsync().ConfigureAwait(false);
+                }
             }
+        }
+        finally
+        {
+            await SetShutdownPropertiesAsync().ConfigureAwait(false);
         }
     }
 
@@ -281,17 +335,17 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
     /// <param name="propertyName">属性名称.</param>
     public void RaisePropertyChanged(string propertyName)
     {
-        _uiContext.Post(_ => OnPropertyChanged(propertyName), default);
+        PostCounted(_ => OnPropertyChanged(propertyName));
     }
 
     private void ResetProperties()
     {
-        _uiContext.Post(_ =>
+        PostCounted(_ =>
         {
             IsPlaybackInitialized = false;
             Duration = 0;
             Position = 0;
-        }, default);
+        });
     }
 
     partial void OnPlaybackStateChanged(MpvPlayerState value)

@@ -30,6 +30,10 @@ internal static class Program
                 DashChecks.Run(report);
                 await RelayChecks.RunAsync(report);
                 await MemoryRelayChecks.RunAsync(report);
+                await DisposeChecks.RunAsync(report);
+                break;
+            case "drain":
+                await DisposeChecks.RunAsync(report);
                 break;
             case "smoke":
                 await Smoke.RunAsync(report, options);
@@ -37,8 +41,11 @@ internal static class Program
             case "seamless-smoke":
                 await SeamlessSmoke.RunAsync(report, options);
                 break;
+            case "drain-smoke":
+                await SeamlessSmoke.RunDrainAsync(report, options);
+                break;
             default:
-                Console.WriteLine("usage: unit | relay | all | smoke [dll=<libmpv-2.dll>] [bvid=..] [cid=..] [tls=on|off] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..]");
+                Console.WriteLine("usage: unit | relay | all | drain | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..]");
                 return 2;
         }
 
