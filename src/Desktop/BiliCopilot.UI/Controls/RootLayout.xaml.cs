@@ -313,13 +313,9 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private Task CloseEmbeddedLiveForNavigationAsync()
     {
-        if (_embeddedLiveOwner is not BiliCopilot.UI.Live.Hosting.LiveWindow owner) return Task.CompletedTask;
-        // Publish the real close barrier before presentation callbacks can reenter playback.
-        var close = this.Get<LiveApplicationBridge>().RegisterNavigationLiveClose(owner.CloseAsync());
-        RequestLiveBack(owner);
-        // Retain the exact owner's real close after hiding. Overlay navigation can finish first,
-        // while every later playback entry still joins this registered release barrier.
-        return close;
+        // App.CloseEmbeddedPlayerAsync has already captured and published the current live VM
+        // (or pre-host opening). Never recapture a successor or close an old LiveWindow here.
+        return this.Get<LiveApplicationBridge>().WaitForNavigationLiveCloseAsync();
     }
 
     /// <inheritdoc/>
@@ -892,12 +888,6 @@ public sealed partial class RootLayout : RootLayoutBase
                 if (IsCurrentScope(scope) && ReferenceEquals(owner, _embeddedViewModel))
                     _appViewModel.ShowTipCommand.Execute((ex.Message, InfoType.Error));
             }
-            return;
-        }
-
-        if (_embeddedLiveOwner is { } liveOwner && EmbeddedLiveHost.Visibility == Visibility.Visible)
-        {
-            RequestLiveBack(liveOwner);
             return;
         }
 

@@ -2,7 +2,7 @@
 
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Application;
-using BiliCopilot.UI.Live.Playback;
+using BiliCopilot.UI.Models;
 using BiliCopilot.UI.SponsorBlock.Application;
 using BiliCopilot.UI.SponsorBlock.Integration;
 using BiliCopilot.UI.Toolkits;
@@ -31,9 +31,9 @@ public sealed partial class AppViewModel
     private ApplicationPlaybackOperations ApplicationPlayback
         => _applicationPlayback ??= new ApplicationPlaybackOperations(CheckPlaybackAccess);
 
-    public bool HasLiveWork => _liveApplication?.HasWork == true;
+    public bool HasLiveWork => _liveApplication?.HasLiveWork == true;
     internal bool IsPlaybackStopping => _playbackShutdown is not null || IsClosed;
-    internal bool HasApplicationPlaybackKeepAlive => HasLiveWork || _applicationPlayback?.HasWork == true
+    internal bool HasApplicationPlaybackKeepAlive => _liveApplication?.HasWork == true || _applicationPlayback?.HasWork == true
         || _playbackObservers.Count != 0 || !_liveNotice.IsCompleted || _liveNoticeWorker is { IsCompleted: false }
         || _playbackShutdown is { IsCompleted: false } || _playbackShutdownFailed
         || _sponsorApplicationRuntime?.HasPendingCleanup == true
@@ -60,11 +60,8 @@ public sealed partial class AppViewModel
         if (IsPlaybackStopping) return Task.CompletedTask;
         try
         {
-            // Capture the account identity/generation/lifetime BEFORE any await.
-            var bridge = LiveApplication;
-            var account = bridge.CaptureLaunchAccount();
-            var decode = LiveDecodePreference.Auto;
-            return OwnApplicationPlaybackAsync(token => bridge.OpenLiveAsync(information, decode, account, token));
+            // The shared entry captures account identity/generation/lifetime before its first await.
+            return OpenMainPlayerAsync(new MediaSnapshot(information));
         }
         catch (Exception error)
         {

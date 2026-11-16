@@ -98,6 +98,13 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
     internal void ReportEmbeddedHostFailure(Exception exception)
     {
+        var app = this.Get<AppViewModel>();
+        if (app.EmbeddedPlayer is { } live && app.IsSharedLivePlayer(live))
+        {
+            SafeFailureContext.TryWrite(FailureStage.EmbeddedOpen, exception, () => this.Get<ILogger<App>>());
+            app.ReportLiveFailure();
+            return;
+        }
         this.Get<ILogger<App>>().LogError(exception, "Embedded native host layout failed.");
         if (this.Get<AppViewModel>().EmbeddedPlayer is { } vm) vm.ErrorMessage = exception.Message;
     }
@@ -469,11 +476,8 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
         if (point.Properties.IsXButton1Pressed || point.Properties.IsXButton2Pressed)
         {
             e.Handled = true;
-            if (IsEmbeddedLiveShown && CurrentEmbeddedLiveOwner is { } liveOwner)
-            {
-                RootLayout.RequestLiveBack(liveOwner);
-            }
-            else if (RootLayout.ViewModel.IsOverlayOpen || this.Get<AppViewModel>().HasEmbeddedWork)
+            var app = this.Get<AppViewModel>();
+            if (RootLayout.ViewModel.IsOverlayOpen || app.HasEmbeddedWork || app.HasLiveWork)
             {
                 RootLayout.ViewModel.Back();
             }
