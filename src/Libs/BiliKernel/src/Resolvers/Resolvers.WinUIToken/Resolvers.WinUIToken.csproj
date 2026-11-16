@@ -8,6 +8,7 @@
     <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &lt; 8">win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
 	<EnableMsixTooling>true</EnableMsixTooling>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <Import Project="$(RepoRoot)/src/nuget-package.props" />
@@ -15,7 +16,7 @@
   <PropertyGroup>
     <!-- NuGet Package Settings -->
     <Title>哔哩核心 - 适用于 WinUI 的令牌存取器</Title>
-    <Description>会将登录令牌以 JSON 文件的形式存储在本地设置，并进行读取和缓存的哔哩核心子模块</Description>
+    <Description>使用当前用户 DPAPI 加密本地文件，存储、读取和缓存登录令牌的哔哩核心子模块</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\ProtectedCredentialStore.cs" Link="Storage\ProtectedCredentialStore.cs" />
     <ProjectReference Include="..\..\BiliKernel.Abstractions\BiliKernel.Abstractions.csproj" />
     <ProjectReference Include="..\..\BiliKernel.Core\BiliKernel.Core.csproj" />
   </ItemGroup>
