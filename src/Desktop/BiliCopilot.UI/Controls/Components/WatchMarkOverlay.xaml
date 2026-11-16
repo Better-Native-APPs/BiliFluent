@@ -11,53 +11,93 @@
     mc:Ignorable="d">
 
     <!--
-        Laid over the video cover. The label follows the duration badge (60% black, white caption text) and the bar hugs the bottom edge.
+        Laid over the video cover. The label is meant to be seen at a glance, so it is heavier than the duration badge:
+        an opaque fill, a contrasting outline, and strong text. Finished is the filled accent label, partly watched is the dark label with the accent outline.
+        The colors are the same in both themes because they sit on the cover, not on the card.
         Nothing is created until a card actually has a mark, so unwatched cards pay nothing for it.
     -->
     <Grid
         x:Name="Root"
         x:Load="False"
         CornerRadius="{StaticResource ControlCornerRadius}">
+        <!--  Finished: dark accent fill with white text. The white outline keeps it apart from dark covers, the fill from bright ones.  -->
         <Border
-            x:Name="Badge"
-            Padding="6,4"
+            x:Name="FinishedBadge"
+            Padding="8,4"
             HorizontalAlignment="Right"
             VerticalAlignment="Top"
+            BorderThickness="1"
             CornerRadius="{StaticResource ControlCornerRadius}">
             <Border.Background>
-                <SolidColorBrush Opacity="0.6" Color="Black" />
+                <SolidColorBrush Color="{ThemeResource SystemAccentColorDark1}" />
             </Border.Background>
-            <StackPanel Orientation="Horizontal" Spacing="4">
+            <Border.BorderBrush>
+                <SolidColorBrush Opacity="0.85" Color="White" />
+            </Border.BorderBrush>
+            <StackPanel Orientation="Horizontal" Spacing="6">
                 <ic:SymbolIcon
-                    x:Name="FinishedIcon"
                     VerticalAlignment="Center"
-                    FontSize="12"
+                    FontSize="16"
                     Foreground="White"
                     IconVariant="Filled"
                     Symbol="CheckmarkCircle" />
                 <TextBlock
-                    x:Name="Label"
+                    x:Name="FinishedLabel"
                     VerticalAlignment="Center"
                     Foreground="White"
-                    Style="{StaticResource CaptionTextBlockStyle}" />
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Border>
+        <!--  Partly watched: near opaque black with the light accent outline and icon, the same tone as the bar below.  -->
+        <Border
+            x:Name="PartialBadge"
+            Padding="8,4"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            BorderThickness="1"
+            CornerRadius="{StaticResource ControlCornerRadius}">
+            <Border.Background>
+                <SolidColorBrush Opacity="0.88" Color="Black" />
+            </Border.Background>
+            <Border.BorderBrush>
+                <SolidColorBrush Color="{ThemeResource SystemAccentColorLight2}" />
+            </Border.BorderBrush>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    IconVariant="Filled"
+                    Symbol="History">
+                    <ic:SymbolIcon.Foreground>
+                        <SolidColorBrush Color="{ThemeResource SystemAccentColorLight2}" />
+                    </ic:SymbolIcon.Foreground>
+                </ic:SymbolIcon>
+                <TextBlock
+                    x:Name="PartialLabel"
+                    VerticalAlignment="Center"
+                    Foreground="White"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
             </StackPanel>
         </Border>
         <Grid
             x:Name="BarTrack"
-            Height="3"
+            Height="5"
             VerticalAlignment="Bottom">
             <Grid.Background>
-                <SolidColorBrush Opacity="0.45" Color="Black" />
+                <SolidColorBrush Opacity="0.7" Color="Black" />
             </Grid.Background>
             <!--
                 The card already reports the progress as its ItemStatus, so the bar stays out of the accessibility tree.
-                The light accent tone stays readable on any cover in both themes.
+                The bar is as thick as its MinHeight. Square ends, because the cover corner already rounds the left one.
             -->
             <ProgressBar
                 x:Name="Bar"
-                MinHeight="3"
+                MinHeight="5"
                 AutomationProperties.AccessibilityView="Raw"
                 Background="Transparent"
+                CornerRadius="0"
                 Maximum="1">
                 <ProgressBar.Foreground>
                     <SolidColorBrush Color="{ThemeResource SystemAccentColorLight2}" />
