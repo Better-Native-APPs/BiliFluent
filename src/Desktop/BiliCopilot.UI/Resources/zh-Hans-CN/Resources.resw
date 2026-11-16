@@ -1929,4 +1929,223 @@
   <data name="ChapterItemPlayingTemplate" xml:space="preserve">
     <value>第 {0} 章，{1}，{2} 开始，正在播放</value>
   </data>
+  <data name="SignInQRCodeTitle" xml:space="preserve">
+    <value>扫码登录</value>
+  </data>
+  <data name="SignInQRCodeImageName" xml:space="preserve">
+    <value>登录二维码</value>
+  </data>
+  <data name="SignInQRCodeUnavailable" xml:space="preserve">
+    <value>二维码已失效或加载失败，请刷新后重新扫码</value>
+  </data>
+  <data name="SignInRefreshQRCode" xml:space="preserve">
+    <value>刷新二维码</value>
+  </data>
+  <data name="SignInModeSelectorName" xml:space="preserve">
+    <value>登录方式</value>
+  </data>
+  <data name="SignInPasswordTab" xml:space="preserve">
+    <value>密码登录</value>
+  </data>
+  <data name="SignInSmsTab" xml:space="preserve">
+    <value>短信登录</value>
+  </data>
+  <data name="SignInAccountName" xml:space="preserve">
+    <value>账号</value>
+  </data>
+  <data name="SignInAccountPlaceholder" xml:space="preserve">
+    <value>手机号或邮箱</value>
+  </data>
+  <data name="SignInPasswordPlaceholder" xml:space="preserve">
+    <value>密码</value>
+  </data>
+  <data name="SignInButton" xml:space="preserve">
+    <value>登录</value>
+  </data>
+  <data name="SignInCountryName" xml:space="preserve">
+    <value>国家或地区</value>
+  </data>
+  <data name="SignInCountryLoading" xml:space="preserve">
+    <value>正在加载地区…</value>
+  </data>
+  <data name="SignInCountryLoadFailed" xml:space="preserve">
+    <value>地区列表加载失败，请检查网络后重试</value>
+  </data>
+  <data name="SignInRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="SignInClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="SignInCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="SignInPhonePlaceholder" xml:space="preserve">
+    <value>手机号</value>
+  </data>
+  <data name="SignInSmsCodePlaceholder" xml:space="preserve">
+    <value>短信验证码</value>
+  </data>
+  <data name="SignInSendSmsCode" xml:space="preserve">
+    <value>获取验证码</value>
+  </data>
+  <data name="SignInResendSmsCode" xml:space="preserve">
+    <value>重新获取</value>
+  </data>
+  <data name="SignInSmsCooldownTemplate" xml:space="preserve">
+    <value>{0} 秒后可重发</value>
+  </data>
+  <data name="SignInSmsCodeSent" xml:space="preserve">
+    <value>验证码已发送，请查看手机短信</value>
+  </data>
+  <data name="SignInVerificationTitle" xml:space="preserve">
+    <value>验证手机</value>
+  </data>
+  <data name="SignInVerificationDescription" xml:space="preserve">
+    <value>本次登录需要短信验证，验证码会发送到账号绑定的手机。</value>
+  </data>
+  <data name="SignInVerificationSend" xml:space="preserve">
+    <value>发送验证码</value>
+  </data>
+  <data name="SignInVerificationSubmit" xml:space="preserve">
+    <value>验证并登录</value>
+  </data>
+  <data name="SignInBack" xml:space="preserve">
+    <value>返回登录</value>
+  </data>
+  <data name="SignInTroubleTip" xml:space="preserve">
+    <value>登录遇到问题？</value>
+  </data>
+  <data name="SignInWebFallback" xml:space="preserve">
+    <value>使用网页登录</value>
+  </data>
+  <data name="SignInSwitchToWeb" xml:space="preserve">
+    <value>改用网页登录</value>
+  </data>
+  <data name="SignInStatusPreparing" xml:space="preserve">
+    <value>正在准备人机验证…</value>
+  </data>
+  <data name="SignInStatusCaptcha" xml:space="preserve">
+    <value>请在弹出的窗口中完成人机验证</value>
+  </data>
+  <data name="SignInStatusSigningIn" xml:space="preserve">
+    <value>正在登录…</value>
+  </data>
+  <data name="SignInStatusSendingSms" xml:space="preserve">
+    <value>正在发送验证码…</value>
+  </data>
+  <data name="SignInStatusVerifying" xml:space="preserve">
+    <value>正在验证…</value>
+  </data>
+  <data name="SignInStatusFinishing" xml:space="preserve">
+    <value>登录成功，正在进入应用…</value>
+  </data>
+  <data name="SignInAccountRequired" xml:space="preserve">
+    <value>请输入账号</value>
+  </data>
+  <data name="SignInPasswordRequired" xml:space="preserve">
+    <value>请输入密码</value>
+  </data>
+  <data name="SignInPhoneRequired" xml:space="preserve">
+    <value>请输入手机号</value>
+  </data>
+  <data name="SignInSmsCodeRequired" xml:space="preserve">
+    <value>请输入短信验证码</value>
+  </data>
+  <data name="SignInSmsCodeNotRequested" xml:space="preserve">
+    <value>请先获取短信验证码</value>
+  </data>
+  <data name="SignInPhoneChanged" xml:space="preserve">
+    <value>手机号或地区已更改，请重新获取验证码</value>
+  </data>
+  <data name="SignInErrorInvalidCredentials" xml:space="preserve">
+    <value>账号或密码不正确</value>
+  </data>
+  <data name="SignInErrorCaptchaFailed" xml:space="preserve">
+    <value>人机验证未通过，请重试</value>
+  </data>
+  <data name="SignInErrorRateLimited" xml:space="preserve">
+    <value>操作过于频繁，请稍后再试</value>
+  </data>
+  <data name="SignInErrorTimedOut" xml:space="preserve">
+    <value>请求超时，请检查网络后重试</value>
+  </data>
+  <data name="SignInErrorInvalidParameters" xml:space="preserve">
+    <value>提交的信息有误，请检查后重试</value>
+  </data>
+  <data name="SignInErrorInvalidPhoneNumber" xml:space="preserve">
+    <value>手机号格式不正确</value>
+  </data>
+  <data name="SignInErrorSmsAlreadySent" xml:space="preserve">
+    <value>验证码刚刚已经发送过，请查看短信或稍后再获取</value>
+  </data>
+  <data name="SignInErrorPhoneNumberBlocked" xml:space="preserve">
+    <value>该手机号无法用于登录</value>
+  </data>
+  <data name="SignInErrorInvalidSmsCode" xml:space="preserve">
+    <value>短信验证码不正确</value>
+  </data>
+  <data name="SignInErrorSmsCodeExpired" xml:space="preserve">
+    <value>短信验证码已过期，请重新获取</value>
+  </data>
+  <data name="SignInErrorSessionExpired" xml:space="preserve">
+    <value>本次登录已失效，请重新开始</value>
+  </data>
+  <data name="SignInErrorUnsupportedVerification" xml:space="preserve">
+    <value>本次登录需要应用内暂不支持的验证方式，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorUnsupportedCaptcha" xml:space="preserve">
+    <value>遇到了应用内暂不支持的验证码类型，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorInvalidResponse" xml:space="preserve">
+    <value>服务器返回了无法识别的内容，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorSessionImportFailed" xml:space="preserve">
+    <value>账号验证已通过，但应用授权没有完成，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorNetwork" xml:space="preserve">
+    <value>网络连接失败，请检查网络后重试</value>
+  </data>
+  <data name="SignInErrorUnknown" xml:space="preserve">
+    <value>登录失败，请稍后重试</value>
+  </data>
+  <data name="SignInErrorUnknownWithCode" xml:space="preserve">
+    <value>登录失败，请稍后重试（错误码 {0}）</value>
+  </data>
+  <data name="SignInErrorUnexpected" xml:space="preserve">
+    <value>出现意外错误，请重试</value>
+  </data>
+  <data name="CaptchaWindowTitle" xml:space="preserve">
+    <value>安全验证</value>
+  </data>
+  <data name="CaptchaViewName" xml:space="preserve">
+    <value>人机验证</value>
+  </data>
+  <data name="CaptchaLoading" xml:space="preserve">
+    <value>正在加载验证码…</value>
+  </data>
+  <data name="CaptchaStart" xml:space="preserve">
+    <value>开始验证</value>
+  </data>
+  <data name="CaptchaLoadFailed" xml:space="preserve">
+    <value>验证码加载失败</value>
+  </data>
+  <data name="CaptchaErrorTimeout" xml:space="preserve">
+    <value>加载超时，请检查网络后重试</value>
+  </data>
+  <data name="CaptchaErrorGeneric" xml:space="preserve">
+    <value>请检查网络后重试（{0}）</value>
+  </data>
+  <data name="CaptchaErrorComponent" xml:space="preserve">
+    <value>无法启动验证组件，请确认系统的 WebView2 运行时可用</value>
+  </data>
+  <data name="WebSignInFinishing" xml:space="preserve">
+    <value>正在完成登录…</value>
+  </data>
+  <data name="WebSignInFailedTitle" xml:space="preserve">
+    <value>登录没有完成</value>
+  </data>
+  <data name="WebSignInFailedDescription" xml:space="preserve">
+    <value>网页已登录，但应用授权没有完成。请检查网络后重试。</value>
+  </data>
 </root>
