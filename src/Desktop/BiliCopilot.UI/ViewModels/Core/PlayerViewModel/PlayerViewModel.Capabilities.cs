@@ -60,6 +60,8 @@ public sealed partial class PlayerViewModel
 
     private void NotifyMediaCapabilitiesChanged()
     {
+        // First, so a view that reads it alongside a capability already sees the admitted media.
+        OnPropertyChanged(nameof(HasAdmittedMedia));
         OnPropertyChanged(nameof(CanSeek));
         OnPropertyChanged(nameof(CanChangePlaybackRate));
         OnPropertyChanged(nameof(CanUseSubtitles));
@@ -118,7 +120,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// Whether a media has been admitted, so the capabilities above describe it. Before the first media they are
     /// all false and describe nothing: a view that drops what the media cannot do keeps its ordinary layout until then.
-    /// It changes only together with the capabilities and has no notification of its own; read it alongside one of them.
+    /// It changes only together with the capabilities and is notified with them, ahead of the first one.
     /// </summary>
     public bool HasAdmittedMedia => _snapshot is not null;
 }
