@@ -85,26 +85,33 @@ internal sealed class ChapterPreview
         _tip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = _tip.DesiredSize;
         var x = _anchor.X - (size.Width / 2);
-        if (_popup.XamlRoot is { } root)
+        if (_popup.XamlRoot is { } root && TryGetWindowOffset(out var origin))
         {
-            try
-            {
-                // Keep the whole bubble inside the window.
-                var origin = _popup.TransformToVisual(null).TransformPoint(default);
-                var minimum = EdgeMargin - origin.X;
-                var maximum = root.Size.Width - size.Width - EdgeMargin - origin.X;
-                x = Math.Clamp(x, minimum, Math.Max(minimum, maximum));
-            }
-            catch (Exception)
-            {
-                // Not in a live tree at this moment; the unclamped place is still right above the pointer.
-            }
+            // Keep the whole bubble inside the window.
+            var minimum = EdgeMargin - origin;
+            var maximum = root.Size.Width - size.Width - EdgeMargin - origin;
+            x = Math.Clamp(x, minimum, Math.Max(minimum, maximum));
         }
 
         var left = Math.Round(x);
         var top = Math.Round(_anchor.Y - size.Height - TrackSpacing);
         if (_popup.HorizontalOffset != left) _popup.HorizontalOffset = left;
         if (_popup.VerticalOffset != top) _popup.VerticalOffset = top;
+    }
+
+    private bool TryGetWindowOffset(out double x)
+    {
+        try
+        {
+            x = _popup.TransformToVisual(null).TransformPoint(default).X;
+            return true;
+        }
+        catch (Exception)
+        {
+            // Not in a live tree at this moment; the unclamped place is still right above the pointer.
+            x = 0;
+            return false;
+        }
     }
 
     /// <summary>Hides the bubble and the segment mark, keeping the pointer state.</summary>
