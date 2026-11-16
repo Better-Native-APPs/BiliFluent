@@ -83,6 +83,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         Unloaded += OnLocalUnloaded;
         ProgressSlider.SizeChanged += OnProgressSliderSizeChanged;
         ProgressSlider.RegisterPropertyChangedCallback(RangeBase.MaximumProperty, OnProgressMaximumChanged);
+        InitializeChapters();
     }
 
     /// <summary>
@@ -170,6 +171,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         _pendingSpeedOwner = null;
         _pendingSpeedClaim = null;
         _hasFocus = false;
+        _chapterPreview?.Reset();
         UpdateSlots(cancel: true);
         _popups.Cancel();
         RefreshInteraction();
@@ -253,6 +255,11 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         Update(LeftContent);
         Update(MiddleContent);
         Update(RightContent);
+        if (ChapterEntry is not null)
+        {
+            ChapterEntry.IsActive = !IsInputBlocked;
+            if (cancel) ChapterEntry.CancelPendingInput();
+        }
 
         void Update(object? content)
         {
@@ -316,6 +323,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             viewModel.ProgressChanged += OnViewModelProgressChanged;
         }
         SubscribePlayer(viewModel);
+        SubscribeChapters(viewModel);
     }
 
     private void SubscribePlayer(PlayerViewModel? owner)
