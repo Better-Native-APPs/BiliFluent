@@ -2151,4 +2151,25 @@
   <data name="PlayerLiveStatus" xml:space="preserve">
     <value>正在直播</value>
   </data>
+  <data name="LiveComposerPlaceholder" xml:space="preserve">
+    <value>发个弹幕…</value>
+  </data>
+  <data name="LiveComposerUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕</value>
+  </data>
+  <data name="LiveSendUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕，请等直播和弹幕连接好后再试。</value>
+  </data>
+  <data name="LiveSendNotSent" xml:space="preserve">
+    <value>弹幕没有发出，内容已保留。请检查登录状态后再试。</value>
+  </data>
+  <data name="LiveSendUnknown" xml:space="preserve">
+    <value>无法确认弹幕是否已发出。请先看看弹幕列表，确认没有发出后再手动发送。</value>
+  </data>
+  <data name="LiveSendRejected" xml:space="preserve">
+    <value>弹幕被拒绝，内容已保留。</value>
+  </data>
+  <data name="LiveSendRejectedTemplate" xml:space="preserve">
+    <value>弹幕被拒绝（代码 {0}），内容已保留。</value>
+  </data>
 </root>

@@ -483,4 +483,25 @@
   <data name="PlayerLiveStatus" xml:space="preserve">
     <value>Live</value>
   </data>
+  <data name="LiveComposerPlaceholder" xml:space="preserve">
+    <value>Send a danmaku…</value>
+  </data>
+  <data name="LiveComposerUnavailable" xml:space="preserve">
+    <value>Danmaku can't be sent right now</value>
+  </data>
+  <data name="LiveSendUnavailable" xml:space="preserve">
+    <value>Danmaku can't be sent yet. Try again once the stream and the chat are connected.</value>
+  </data>
+  <data name="LiveSendNotSent" xml:space="preserve">
+    <value>The danmaku wasn't sent, and your text is kept. Check that you're signed in, then try again.</value>
+  </data>
+  <data name="LiveSendUnknown" xml:space="preserve">
+    <value>Couldn't confirm whether the danmaku was sent. Check the chat list first, and send it again only if it isn't there.</value>
+  </data>
+  <data name="LiveSendRejected" xml:space="preserve">
+    <value>The danmaku was rejected. Your text is kept.</value>
+  </data>
+  <data name="LiveSendRejectedTemplate" xml:space="preserve">
+    <value>The danmaku was rejected (code {0}). Your text is kept.</value>
+  </data>
 </root>
