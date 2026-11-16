@@ -16,7 +16,7 @@
             Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
             Style="{StaticResource CircleIconButtonStyle}"
             ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.IsNextButtonEnabled, ViewModel.CanNavigatePlaylist, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <ic:SymbolIcon
                 FontSize="14"
                 IconVariant="Filled"

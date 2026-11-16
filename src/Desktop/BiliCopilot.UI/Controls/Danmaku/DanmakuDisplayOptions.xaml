@@ -135,7 +135,8 @@
             <ToggleSwitch
                 Header="{ext:Locale Name=CommandDanmakuEnabled}"
                 IsOn="{x:Bind Settings.IsCommandDanmakuEnabled, Mode=TwoWay}"
-                ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuEnabledDescription}" />
+                ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuEnabledDescription}"
+                Visibility="{x:Bind IsCommandDanmakuSwitchVisible, Mode=OneWay}" />
             <StackPanel
                 Padding="12,8"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"

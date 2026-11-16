@@ -12,6 +12,10 @@ namespace BiliCopilot.UI.Controls.Danmaku;
 /// </summary>
 public sealed partial class DanmakuDisplayOptions : DanmakuControlBase
 {
+    /// <summary><see cref="IsCommandDanmakuSwitchVisible"/> dependency property.</summary>
+    public static readonly DependencyProperty IsCommandDanmakuSwitchVisibleProperty =
+        DependencyProperty.Register(nameof(IsCommandDanmakuSwitchVisible), typeof(bool), typeof(DanmakuDisplayOptions), new PropertyMetadata(true));
+
     public DanmakuDisplayOptions()
     {
         Settings = this.Get<SettingsPageViewModel>();
@@ -22,6 +26,15 @@ public sealed partial class DanmakuDisplayOptions : DanmakuControlBase
     /// The shared settings view model that owns the interactive danmaku switch for every player.
     /// </summary>
     private SettingsPageViewModel Settings { get; }
+
+    /// <summary>
+    /// Whether the interactive danmaku switch shows. A host turns it off for a media that has no interactive danmaku.
+    /// </summary>
+    public bool IsCommandDanmakuSwitchVisible
+    {
+        get => (bool)GetValue(IsCommandDanmakuSwitchVisibleProperty);
+        set => SetValue(IsCommandDanmakuSwitchVisibleProperty, value);
+    }
 
     protected override void OnControlLoaded()
     {

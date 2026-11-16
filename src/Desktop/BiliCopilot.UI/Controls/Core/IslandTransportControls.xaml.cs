@@ -74,6 +74,8 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public IslandTransportControls()
     {
         InitializeComponent();
+        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
+        LiveStatus.Visibility = Visibility.Collapsed;
         // 仅在交互后启动的短时防抖计时器，非永动计时器.
         _speedChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
         _progressChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };

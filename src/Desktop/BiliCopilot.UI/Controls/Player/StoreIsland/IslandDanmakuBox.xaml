@@ -59,7 +59,7 @@
                         FlyoutPresenterStyle="{StaticResource TransportButtonFlyoutPresenterStyle}"
                         Opened="OnDisplayFlyoutOpened"
                         ShouldConstrainToRootBounds="False">
-                        <danmaku:DanmakuDisplayOptions ViewModel="{x:Bind RenderViewModel, Mode=OneWay}" />
+                        <danmaku:DanmakuDisplayOptions IsCommandDanmakuSwitchVisible="{x:Bind core:PlayerOverlay.IsCapabilityShown(ViewModel.CanUseInteractiveDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}" ViewModel="{x:Bind RenderViewModel, Mode=OneWay}" />
                     </Flyout>
                 </Button.Flyout>
             </Button>

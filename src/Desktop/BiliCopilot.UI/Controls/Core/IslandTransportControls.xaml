@@ -93,12 +93,20 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1"
         CornerRadius="{StaticResource OverlayCornerRadius}">
-        <Grid Padding="12,8" RowSpacing="4">
+        <Grid Padding="12,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Grid ColumnSpacing="12">
+            <!--
+                The timeline: position, progress and duration. It carries the gap to the row below itself, so a media
+                without a timeline leaves a single row of buttons with even padding instead of an empty row.
+            -->
+            <Grid
+                x:Name="TimelineRow"
+                Margin="0,0,0,4"
+                ColumnSpacing="12"
+                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition />
@@ -196,6 +204,33 @@
                     Content="{x:Bind LeftContent, Mode=OneWay}"
                     Style="{StaticResource AppContentControlStyle}" />
                 <!--
+                    Live status: for a media without a timeline it stands where the bar otherwise reads the time,
+                    next to the play button. It is text, not a control: it takes no focus and is read as it is written.
+                -->
+                <StackPanel
+                    x:Name="LiveStatus"
+                    Grid.Column="1"
+                    Margin="2,0,4,0"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Visibility="{x:Bind local:PlayerOverlay.GetLiveStatusVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                    <Ellipse
+                        Width="8"
+                        Height="8"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                        Opacity="{x:Bind local:PlayerOverlay.GetLiveStatusDotOpacity(ViewModel.Player.PlaybackState), Mode=OneWay}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        MaxLines="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{ext:Locale Name=PlayerLiveStatus}"
+                        TextWrapping="NoWrap" />
+                </StackPanel>
+                <!--
                     中部：当前章节入口（有章节时才出现，点开是章节列表）在前，原中部内容占剩余宽度。
                     没有章节时入口整体折叠、不留间距，这一格与原来一致.
                     这一格的宽度只由卡片宽度决定；宽度不够时入口先收起章节名、再整体收起，把位置还给原中部内容.
@@ -263,7 +298,8 @@
                     <Button
                         Margin="0,0,8,0"
                         Style="{StaticResource CircleIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=PlaybackRate}">
+                        ToolTipService.ToolTip="{ext:Locale Name=PlaybackRate}"
+                        Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanChangePlaybackRate, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                         <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
                         <Button.Flyout>
                             <!--  与全屏 OverlayTransportControls 倍速浮出内容同一模板：快捷倍速 + 0.1~3x 细调滑块  -->

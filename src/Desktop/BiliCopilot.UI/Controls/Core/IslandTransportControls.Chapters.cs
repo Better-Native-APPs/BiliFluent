@@ -63,7 +63,8 @@ public sealed partial class IslandTransportControls
     private void OnChapterOwnerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (ReferenceEquals(sender, _chapterOwner)
-            && e.PropertyName is nameof(PlayerViewModel.HasChapters) or nameof(PlayerViewModel.IsChapterVisible))
+            && e.PropertyName is nameof(PlayerViewModel.HasChapters) or nameof(PlayerViewModel.IsChapterVisible)
+                or nameof(PlayerViewModel.CanSeek) or nameof(PlayerViewModel.CanUseChapters))
         {
             UpdateChapters();
         }
@@ -73,7 +74,9 @@ public sealed partial class IslandTransportControls
     {
         if (_chapterTrack is null) return;
         var owner = _loaded ? _chapterOwner : null;
-        var visible = owner is { HasChapters: true, IsChapterVisible: true };
+
+        // Segments belong to a timeline: a media without one, or without chapters, draws none.
+        var visible = owner is { CanSeek: true, CanUseChapters: true, HasChapters: true, IsChapterVisible: true };
         _chapterTrack.SetChapters(visible ? owner!.Chapters : null);
         if (!visible) _chapterPreview?.Reset();
     }

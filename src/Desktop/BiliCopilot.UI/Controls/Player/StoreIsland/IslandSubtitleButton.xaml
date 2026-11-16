@@ -29,7 +29,7 @@
         A media with dubbing languages lists them first, above the subtitles; the button then shows even without subtitles.
         The button is named after what it holds: subtitles, the audio track (with its own icon), or both.
     -->
-    <Grid Margin="8,0,0,0" Visibility="{x:Bind GetMenuVisibility(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
+    <Grid Margin="8,0,0,0" Visibility="{x:Bind GetMenuVisibility(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages, ViewModel.CanUseSubtitles, ViewModel.CanSelectAudioTrack, ViewModel.HasAdmittedMedia), Mode=OneWay}">
         <Button
             VerticalAlignment="Center"
             AutomationProperties.Name="{x:Bind GetMenuName(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}"
