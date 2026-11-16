@@ -134,9 +134,12 @@ internal sealed class ChapterTrackLayer
     private bool EnsureAttached()
     {
         if (_track is not null && ReferenceEquals(_canvas.Parent, _track)) return true;
-        _track = null;
-        _thumb = null;
-        (_canvas.Parent as Panel)?.Children.Remove(_canvas);
+
+        // A slider that is leaving the tree still holds its template children but no longer reports their parent,
+        // so the canvas looks detached while its old track keeps it. Leave it alone until the slider is loaded again.
+        if (!_slider.IsLoaded) return false;
+
+        Detach();
 
         // Both the stock slider template and the player slider style name these two parts.
         if (FindChild<Grid>(_slider, "HorizontalTemplate") is not { } track
@@ -145,12 +148,38 @@ internal sealed class ChapterTrackLayer
             return false;
         }
 
-        // Before the thumb: above the track and the played fill, below the thumb.
-        var index = track.Children.IndexOf(thumb);
-        track.Children.Insert(index < 0 ? track.Children.Count : index, _canvas);
+        try
+        {
+            // Before the thumb: above the track and the played fill, below the thumb.
+            var index = track.Children.IndexOf(thumb);
+            track.Children.Insert(index < 0 ? track.Children.Count : index, _canvas);
+        }
+        catch (Exception)
+        {
+            // Another panel still owns the canvas. The segments are decoration: skip them rather than break the caller.
+            return false;
+        }
+
         _track = track;
         _thumb = thumb;
         return true;
+    }
+
+    private void Detach()
+    {
+        var previous = _track;
+        _track = null;
+        _thumb = null;
+        try
+        {
+            (_canvas.Parent as Panel)?.Children.Remove(_canvas);
+            previous?.Children.Remove(_canvas);
+        }
+        catch (Exception)
+        {
+            // The old track is being torn down with its tree and lets go of the canvas on its own.
+            _highlighted = null;
+        }
     }
 
     private bool TryGetScale(out double thumb, out double usable, out double maximum)
