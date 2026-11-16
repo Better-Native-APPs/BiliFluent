@@ -516,4 +516,7 @@
   <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
     <value>{0}, switching</value>
   </data>
+  <data name="LiveRefresh" xml:space="preserve">
+    <value>Refresh and catch up to live</value>
+  </data>
 </root>

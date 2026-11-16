@@ -44,6 +44,9 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(IslandTransportControls), new PropertyMetadata(false, OnIsActiveChanged));
 
+    // The row width at which the words of the live status still leave the middle content a usable width.
+    private const double LiveStatusCaptionMinRowWidth = 580;
+
     private readonly List<double> _speedChangeList = [];
     private readonly List<double> _progressChangeList = [];
     private readonly DispatcherTimer _speedChangeTimer;
@@ -312,6 +315,32 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
     private static bool IsNotBuffering(MpvPlayerState state, bool isLoading)
         => !IsBuffering(state, isLoading);
+
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private static bool IsPlayPauseEnabled(MpvPlayerState state, bool isLoading, bool isLiveReleaseBlocked)
+        => IsNotBuffering(state, isLoading) && !isLiveReleaseBlocked;
+
+    // The row follows the card, never its own content, so this cannot feed back. Below this width the words of
+    // the live status would squeeze the box of the room; the refresh button next to them stays.
+    private void OnButtonRowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var visibility = e.NewSize.Width >= LiveStatusCaptionMinRowWidth ? Visibility.Visible : Visibility.Collapsed;
+        if (LiveStatusCaption.Visibility != visibility) LiveStatusCaption.Visibility = visibility;
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (IsInputBlocked || ViewModel is not { IsLiveReleaseBlocked: false } owner) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            // The player shows what went wrong with the picture; nothing is retried here.
+            Debug.WriteLine($"Live refresh failed: {ex.Message}");
+        }
+    }
 
     private void SubscribeViewModel(PlayerViewModel? viewModel)
     {

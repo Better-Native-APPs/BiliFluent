@@ -391,8 +391,9 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private FluentIcons.Common.Symbol GetFullScreenSymbol(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.FullScreen ? FluentIcons.Common.Symbol.FullScreenMinimize : FluentIcons.Common.Symbol.FullScreenMaximize;
 
-    private bool IsPlayPauseEnabled(MpvPlayerState state)
-        => state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End;
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private bool IsPlayPauseEnabled(MpvPlayerState state, bool isLiveReleaseBlocked)
+        => state is (MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
 
     private string GetPlayPauseTip(bool isPlaying)
         => isPlaying ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Pause) : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Play);
@@ -458,6 +459,20 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         else if (owner.ViewModel.Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
             await ExecuteInputAsync(owner, () => owner.ViewModel.PlayPauseCommand.ExecuteAsync(null));
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (CaptureInput() is not { ViewModel.IsLiveReleaseBlocked: false } owner) return;
+        try
+        {
+            await owner.ViewModel.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            // The player shows what went wrong with the picture; nothing is retried here.
+            System.Diagnostics.Debug.WriteLine($"Live refresh failed: {ex.Message}");
+        }
     }
 
     private void OnProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)

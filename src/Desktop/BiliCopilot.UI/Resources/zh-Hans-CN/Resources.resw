@@ -2184,4 +2184,7 @@
   <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
     <value>{0}，正在切换</value>
   </data>
+  <data name="LiveRefresh" xml:space="preserve">
+    <value>刷新到最新画面</value>
+  </data>
 </root>
