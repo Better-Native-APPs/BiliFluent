@@ -69,6 +69,13 @@ internal static class MpvCallbackError
         try
         {
             // Messages, stacks, URLs and request metadata are deliberately not logged.
+            // A cancelled callback is the caller abandoning the work (closing while a source resolves), not a fault.
+            if (exception is OperationCanceledException)
+            {
+                logger.LogDebug("Mpv | Callback {Callback} cancelled.", callback);
+                return;
+            }
+
             logger.LogError("Mpv | Callback {Callback} failed ({ExceptionType}).", callback, exception.GetType().Name);
         }
         catch (Exception)
