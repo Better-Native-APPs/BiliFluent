@@ -137,7 +137,11 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
                 fileUrl = audioUrl;
             }
 
-            return new MpvMediaSource(fileUrl, id, title, options);
+            return new MpvMediaSource(fileUrl, id, title, options)
+            {
+                // The player reads the streams through its relay, so a node can change while the media plays.
+                Relay = fileUrl.Length > 0 ? CreateRelaySource(userAgent, headers, logger) : null,
+            };
         }
     }
 

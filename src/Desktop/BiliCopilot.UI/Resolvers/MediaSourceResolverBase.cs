@@ -2,9 +2,11 @@
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
+using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel.Player;
 using Richasy.MpvKernel.Player.Models;
+using Richasy.MpvKernel.Relay;
 
 namespace BiliCopilot.UI.Resolvers;
 
@@ -17,6 +19,10 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     private CancellationToken _initializationCancellation;
     private long _initializationGeneration;
     private PlaybackStreamSelection? _streams;
+
+    // Every address of the two streams of the source that was served last, in the order they are tried.
+    private IReadOnlyList<StreamCandidate> _videoCandidates = [];
+    private IReadOnlyList<StreamCandidate> _audioCandidates = [];
 
     // The deadline of a fresh answer already looked expired: the local clock cannot be trusted with it.
     private bool _ignoreDeadline;
@@ -48,6 +54,8 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         _initializationGeneration++;
         _triedStreamUrls.Clear();
         _ignoreDeadline = false;
+        _videoCandidates = [];
+        _audioCandidates = [];
         Volatile.Write(ref _streams, null);
         ResetInitialization();
     }
@@ -68,6 +76,68 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
 
             _triedStreamUrls.Add(candidate.Url);
             CdnHostHealth.Session.ReportFailure(candidate.HostKey, DateTimeOffset.UtcNow);
+        }
+    }
+
+    /// <summary>
+    /// Gives up the address the given stream is read from, as <see cref="RejectCurrentStream"/> does,
+    /// and makes the next address that was not tried yet the current one, without serving a new
+    /// source: for a stream that the relay moves to that address while the media keeps playing.
+    /// Null when no untried address is left; the current one is given up all the same.
+    /// </summary>
+    internal StreamCandidate? MoveToNextStream(PlaybackStreamKind kind)
+    {
+        lock (InitializationSync)
+        {
+            var candidate = kind == PlaybackStreamKind.Video ? _streams?.Video : _streams?.Audio;
+            if (candidate is null)
+            {
+                return null;
+            }
+
+            _triedStreamUrls.Add(candidate.Url);
+            CdnHostHealth.Session.ReportFailure(candidate.HostKey, DateTimeOffset.UtcNow);
+            var next = GetCandidates(kind).FirstOrDefault(item => !_triedStreamUrls.Contains(item.Url));
+            if (next is not null)
+            {
+                SetCurrentStream(kind, next);
+            }
+
+            return next;
+        }
+    }
+
+    /// <summary>
+    /// Records that the relay gave up an address by itself and reads the stream from another one.
+    /// False when the addresses are not those of the source that was served last.
+    /// </summary>
+    /// <param name="kind">The stream.</param>
+    /// <param name="failedUrl">The address that failed.</param>
+    /// <param name="currentUrl">The address the relay reads from now.</param>
+    /// <param name="blame">
+    /// Whether the node is at fault: the address is not picked again for this media, and its host
+    /// is ordered last for a while. Not so for URLs that have expired, which fail on every node.
+    /// </param>
+    internal bool NoteRelayFailover(PlaybackStreamKind kind, string failedUrl, string currentUrl, bool blame)
+    {
+        lock (InitializationSync)
+        {
+            var candidates = GetCandidates(kind);
+            var failed = candidates.FirstOrDefault(item => item.Url == failedUrl);
+            var current = candidates.FirstOrDefault(item => item.Url == currentUrl);
+            if (failed is null || current is null || Volatile.Read(ref _streams) is null)
+            {
+                return false;
+            }
+
+            if (blame)
+            {
+                _triedStreamUrls.Add(failed.Url);
+                CdnHostHealth.Session.ReportFailure(failed.HostKey, DateTimeOffset.UtcNow);
+            }
+
+            SetCurrentStream(kind, current);
+            return true;
         }
     }
 
@@ -104,6 +174,8 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         }
 
         deadline = _ignoreDeadline ? null : deadline;
+        _videoCandidates = videos;
+        _audioCandidates = audios;
         Volatile.Write(ref _streams, new(
             videoCandidate,
             audioCandidate,
@@ -118,9 +190,79 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         // With every address tried, the first one is used again rather than none.
         StreamCandidate? Pick(IReadOnlyList<StreamCandidate> candidates)
             => candidates.FirstOrDefault(candidate => !_triedStreamUrls.Contains(candidate.Url)) ?? candidates.FirstOrDefault();
+    }
 
-        int CountUntried(IReadOnlyList<StreamCandidate> candidates, StreamCandidate? current)
-            => candidates.Count(candidate => !ReferenceEquals(candidate, current) && !_triedStreamUrls.Contains(candidate.Url));
+    /// <summary>
+    /// Describes the streams <see cref="SelectStreams"/> picked for the relay of the player: every
+    /// address of each stream, starting with the picked one, and the headers the player would
+    /// send if it read them itself. Null when the relay cannot read one of the addresses; the
+    /// source is then played directly. Call while holding <see cref="InitializationSync"/>.
+    /// </summary>
+    protected MpvRelaySource? CreateRelaySource(string userAgent, IReadOnlyDictionary<string, string> headers, ILogger logger)
+    {
+        if (Volatile.Read(ref _streams) is not { } streams || (streams.Video is null && streams.Audio is null))
+        {
+            return null;
+        }
+
+        var video = Describe(_videoCandidates, streams.Video);
+        var audio = Describe(_audioCandidates, streams.Audio);
+        if ((streams.Video is not null && video is null) || (streams.Audio is not null && audio is null))
+        {
+            logger.LogInformation("Playback | relay off for this source reason=unsupported-address");
+            return null;
+        }
+
+        var upstreamHeaders = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase) { ["User-Agent"] = userAgent };
+        return new() { Video = video, Audio = audio, Headers = upstreamHeaders };
+
+        static MpvRelayAddresses? Describe(IReadOnlyList<StreamCandidate> candidates, StreamCandidate? current)
+        {
+            var upstreams = new List<RelayUpstream>(candidates.Count);
+            var index = -1;
+            foreach (var candidate in candidates)
+            {
+                if (!RelayUpstream.IsSupported(candidate.Url))
+                {
+                    return null;
+                }
+
+                if (ReferenceEquals(candidate, current))
+                {
+                    index = upstreams.Count;
+                }
+
+                // The label is the kind of node: it is all the relay may log about an address.
+                upstreams.Add(new(candidate.Url, candidate.Category));
+            }
+
+            return index < 0 ? null : new(upstreams, index);
+        }
+    }
+
+    private IReadOnlyList<StreamCandidate> GetCandidates(PlaybackStreamKind kind)
+        => kind == PlaybackStreamKind.Video ? _videoCandidates : _audioCandidates;
+
+    private int CountUntried(IReadOnlyList<StreamCandidate> candidates, StreamCandidate? current)
+        => candidates.Count(candidate => !ReferenceEquals(candidate, current) && !_triedStreamUrls.Contains(candidate.Url));
+
+    // Makes another address of a stream the one in use. Call while holding InitializationSync.
+    private void SetCurrentStream(PlaybackStreamKind kind, StreamCandidate candidate)
+    {
+        if (Volatile.Read(ref _streams) is not { } streams)
+        {
+            return;
+        }
+
+        var video = kind == PlaybackStreamKind.Video ? candidate : streams.Video;
+        var audio = kind == PlaybackStreamKind.Audio ? candidate : streams.Audio;
+        Volatile.Write(ref _streams, streams with
+        {
+            Video = video,
+            Audio = audio,
+            VideoRemaining = CountUntried(_videoCandidates, video),
+            AudioRemaining = CountUntried(_audioCandidates, audio),
+        });
     }
 
     protected abstract void ResetInitialization();
