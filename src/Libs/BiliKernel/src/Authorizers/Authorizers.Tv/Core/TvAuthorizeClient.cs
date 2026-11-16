@@ -91,24 +91,20 @@ internal sealed class TVAuthorizeClient
                     break;
                 }
 
-                if (ke.InnerException is not null && ke.InnerException.Message.Contains("Code"))
-                {
-                    var error = JsonSerializer.Deserialize(ke.InnerException.Message, SourceGenerationContext.Default.BiliResponse);
-                    if (error != null)
-                    {
-                        var qrStatus = error.Code is 86090 or 86039
-                            ? QRCodeStatus.NotConfirm
-                            : error.Code is 86038 or -3 ? QRCodeStatus.Expired : QRCodeStatus.Failed;
+                // The response body keeps the API's lower-case keys, so read the code from it directly.
+                // No readable code means a transport failure: like an unconfirmed code, poll again after a pause.
+                var errorCode = ReadErrorCode(ke);
+                var qrStatus = errorCode is null or 86090 or 86039
+                    ? QRCodeStatus.NotConfirm
+                    : errorCode is 86038 or -3 ? QRCodeStatus.Expired : QRCodeStatus.Failed;
 
-                        if (qrStatus == QRCodeStatus.NotConfirm)
-                        {
-                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            throw new Exception(qrStatus == QRCodeStatus.Expired ? "二维码已过期，请刷新二维码" : "二维码扫描失败", ke.InnerException);
-                        }
-                    }
+                if (qrStatus == QRCodeStatus.NotConfirm)
+                {
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    throw new Exception(qrStatus == QRCodeStatus.Expired ? "二维码已过期，请刷新二维码" : "二维码扫描失败", ke.InnerException);
                 }
             }
             finally
@@ -179,20 +175,24 @@ internal sealed class TVAuthorizeClient
     }
 
     private static bool IsCookieImportPending(KernelException exception)
+        => ReadErrorCode(exception) is 86090 or 86039;
+
+    // BiliHttpClient attaches the raw response body of a non-zero API code as the inner exception message.
+    private static int? ReadErrorCode(KernelException exception)
     {
         if (exception.InnerException is null)
         {
-            return false;
+            return null;
         }
 
         try
         {
             using var document = JsonDocument.Parse(exception.InnerException.Message);
-            return WebLoginProtocol.GetInt(document.RootElement, "code") is 86090 or 86039;
+            return WebLoginProtocol.GetInt(document.RootElement, "code");
         }
         catch (JsonException)
         {
-            return false;
+            return null;
         }
     }
 
