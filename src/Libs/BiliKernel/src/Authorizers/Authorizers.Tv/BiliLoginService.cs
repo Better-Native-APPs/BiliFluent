@@ -176,7 +176,12 @@ public sealed class BiliLoginService : IBiliLoginService
     public Task<BiliLoginResult> SignInWithSmsAsync(BiliLoginSession session, BiliLoginCountry country, string phoneNumber, string smsCode, BiliLoginSmsContext smsContext, CancellationToken cancellationToken = default)
         => UseSessionAsync(session, async attempt =>
         {
-            if (!ValidPhone(country, phoneNumber) || string.IsNullOrWhiteSpace(smsCode))
+            if (!ValidPhone(country, phoneNumber))
+            {
+                return Failed(BiliLoginErrorKind.InvalidPhoneNumber);
+            }
+
+            if (string.IsNullOrWhiteSpace(smsCode))
             {
                 return Failed(BiliLoginErrorKind.InvalidParameters);
             }
