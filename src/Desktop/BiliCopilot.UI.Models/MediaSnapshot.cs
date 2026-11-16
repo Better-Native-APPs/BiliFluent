@@ -31,6 +31,30 @@ public sealed class MediaSnapshot
     }
 
     /// <summary>
+    /// Creates a live room snapshot. Null preferences use the room's initial eligible choice,
+    /// not the on-demand quality preference or playback history.
+    /// </summary>
+    public MediaSnapshot(LiveInformation live, int? preferQuality = null, int? preferEotf = null)
+    {
+        if (live is null) throw new ArgumentNullException(nameof(live));
+        Live = live;
+        Type = BiliMediaType.Live;
+        PreferQuality = preferQuality;
+        PreferEotf = preferEotf;
+    }
+
+    /// <summary>
+    /// The live room to resolve. The resolver verifies its canonical room before binding chat.
+    /// </summary>
+    public LiveInformation? Live { get; }
+
+    /// <summary>
+    /// The requested live transfer function: 0 is SDR, 1 is PQ, and 2 is HLG.
+    /// Null lets the initial selection follow the hosting display.
+    /// </summary>
+    public int? PreferEotf { get; set; }
+
+    /// <summary>
     /// 视频信息.
     /// </summary>
     public VideoInformation? Video { get; }
