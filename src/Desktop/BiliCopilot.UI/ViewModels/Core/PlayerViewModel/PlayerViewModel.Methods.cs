@@ -332,7 +332,6 @@ public sealed partial class PlayerViewModel
         }
 
         RefreshPlaybackDiagnostics(startCurrentPlayback: false);
-        StartNetworkMonitor();
 
         if (_tripleTimer == null)
         {

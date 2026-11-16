@@ -48,7 +48,7 @@ public sealed partial class PlayerViewModel
 
     // Reads the audio choices of the media the source resolver has just loaded.
     private void LoadAudioSelections()
-        => ApplyAudioSelections(CanSelectAudioTrack ? GetResolverAudioSelections(_sourceResolver) : AudioSelections.Empty, keepRows: false);
+        => ApplyAudioSelections(CanSelectAudioTrack ? GetResolverAudioSelections(OnDemandResolver) : AudioSelections.Empty, keepRows: false);
 
     // Episodes of one season are opened with a new snapshot. The audio choices follow to the next episode,
     // like they follow to another part of a video; an episode without them plays its default audio.
@@ -166,7 +166,7 @@ public sealed partial class PlayerViewModel
     {
         if (!CanSelectAudioTrack || language is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
             || !AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage)
-            || _sourceResolver is not VideoMediaSourceResolver)
+            || OnDemandResolver is not VideoMediaSourceResolver resolver)
         {
             return Task.CompletedTask;
         }
@@ -174,7 +174,6 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var position = player.Position;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
         var version = _mediaVersion;
         return RunWithoutPlayerInputAsync(async () =>
         {
@@ -239,7 +238,7 @@ public sealed partial class PlayerViewModel
 
     private Task SelectAudioQualityAsync(AudioQualityItemViewModel quality)
     {
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         if (!CanSelectOnDemandQuality || quality is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
             || !AudioQualities.Any(item => ReferenceEquals(item, quality))
             || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))

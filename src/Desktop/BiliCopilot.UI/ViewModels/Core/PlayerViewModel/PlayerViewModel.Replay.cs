@@ -28,11 +28,9 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var position = player.Position;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         if (resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
-            foreach (var item in Sources) item.IsSelected = item.Equals(source);
-            SelectedSource = source;
             return Task.CompletedTask;
         }
 
@@ -82,7 +80,8 @@ public sealed partial class PlayerViewModel
     // it picked, or the quality chosen by hand.
     private void MarkSelectedSource()
     {
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
+        if (!CanSelectOnDemandQuality || resolver is null) return;
         var playing = GetPlayingFormat(resolver);
         var isAuto = resolver switch
         {

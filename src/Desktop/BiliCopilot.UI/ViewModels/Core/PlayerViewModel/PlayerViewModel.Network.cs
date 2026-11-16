@@ -60,7 +60,7 @@ public sealed partial class PlayerViewModel
     // Starts with the configured client of a media; the sampler is the only part that uses the native handle.
     private void StartNetworkMonitor()
     {
-        if (!CanUseOnDemandNetwork || IsPlaybackClosing || Client is not { IsDisposed: false } client)
+        if (!CanUseOnDemandNetwork || OnDemandResolver is null || IsPlaybackClosing || Client is not { IsDisposed: false } client)
         {
             return;
         }
@@ -133,7 +133,7 @@ public sealed partial class PlayerViewModel
         var version = Volatile.Read(ref _mediaVersion);
         queue.TryEnqueue(() =>
         {
-            if (CanUseOnDemandNetwork && epoch == Volatile.Read(ref _networkEpoch) && IsCurrentPlayback(version))
+            if (CanUseOnDemandNetwork && OnDemandResolver is not null && epoch == Volatile.Read(ref _networkEpoch) && IsCurrentPlayback(version))
             {
                 handler();
             }
@@ -207,9 +207,9 @@ public sealed partial class PlayerViewModel
 
     private void OnNetworkSample(NetworkSample raw)
     {
-        if (!CanUseOnDemandNetwork) return;
+        if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver) return;
         _userPausedSample = raw.UserPaused;
-        var streams = _sourceResolver?.CurrentStreams;
+        var streams = resolver.CurrentStreams;
         var cache = Volatile.Read(ref _cacheState);
         var forwardBytes = Volatile.Read(ref _forwardCacheBytes);
         var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
@@ -257,7 +257,7 @@ public sealed partial class PlayerViewModel
         => streams is null ? 0 : streams.Video is not null ? streams.VideoBandwidth : streams.AudioBandwidth;
 
     private StreamAvailability? GetStreamAvailability()
-        => CanUseOnDemandNetwork && _sourceResolver?.CurrentStreams is { } streams ? GetStreamAvailability(streams) : null;
+        => CanUseOnDemandNetwork && OnDemandResolver?.CurrentStreams is { } streams ? GetStreamAvailability(streams) : null;
 
     private static StreamAvailability GetStreamAvailability(PlaybackStreamSelection streams)
         => new(
@@ -270,7 +270,7 @@ public sealed partial class PlayerViewModel
     // mpv keeps playing without sound when the audio address cannot be opened.
     private async Task ConfirmAudioTrackAsync(long load, long epoch, long version, CancellationToken token)
     {
-        if (!CanUseOnDemandNetwork || !CanSelectAudioTrack) return;
+        if (!CanUseOnDemandNetwork || !CanSelectAudioTrack || OnDemandResolver is null) return;
         try
         {
             if (await HasAudioTrackAsync() != false)
@@ -300,7 +300,7 @@ public sealed partial class PlayerViewModel
         // Null when it cannot be told, or when the source has no separate audio stream to miss.
         async Task<bool?> HasAudioTrackAsync()
         {
-            if (_sourceResolver?.CurrentStreams is not { Video: not null, Audio: not null }
+            if (OnDemandResolver?.CurrentStreams is not { Video: not null, Audio: not null }
                 || Client is not { IsDisposed: false } client)
             {
                 return null;
@@ -313,14 +313,13 @@ public sealed partial class PlayerViewModel
 
     private void ApplyFailoverDecision(CdnFailoverDecision decision, PlaybackCacheSample sample = default)
     {
-        if (!CanUseOnDemandNetwork || decision.Action == CdnFailoverAction.None)
+        if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver || decision.Action == CdnFailoverAction.None)
         {
             return;
         }
 
         var player = Player;
-        var resolver = _sourceResolver;
-        var from = resolver?.CurrentStreams;
+        var from = resolver.CurrentStreams;
         var reason = DescribeFailoverReason(decision.Reason);
         if (decision.Action == CdnFailoverAction.ReportBandwidthLimited)
         {
@@ -355,7 +354,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        if (player is null || resolver is null || from is null)
+        if (player is null || from is null)
         {
             _failover.Abandon();
             ShowDeferredLoadError();
@@ -579,7 +578,7 @@ public sealed partial class PlayerViewModel
     private void OnRelayUpstreamFailed(object? sender, MpvRelayUpstreamFailedEventArgs e)
         => PostNetworkEvent(() =>
         {
-            if (!CanUseOnDemandNetwork || !ReferenceEquals(sender, Player) || Player is not { } player || _sourceResolver is not { } resolver
+            if (!CanUseOnDemandNetwork || !ReferenceEquals(sender, Player) || Player is not { } player || OnDemandResolver is not { } resolver
                 || resolver.CurrentStreams is not { } from)
             {
                 return;
@@ -673,7 +672,7 @@ public sealed partial class PlayerViewModel
     {
         reload = Task.CompletedTask;
         var player = Player;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         var now = Environment.TickCount64;
         if (!CanUseOnDemandNetwork || player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
             || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime
@@ -752,7 +751,7 @@ public sealed partial class PlayerViewModel
     // Errors of a load whose outcome the policy answers for are held back until that outcome is known.
     private bool TryDeferLoadError(MpvError error)
     {
-        if (!CanUseOnDemandNetwork || !_failover.IsAwaitingLoad)
+        if (!CanUseOnDemandNetwork || OnDemandResolver is null || !_failover.IsAwaitingLoad)
         {
             return false;
         }
@@ -815,7 +814,7 @@ public sealed partial class PlayerViewModel
     // The relay validates the certificate of a node exactly as mpv is told to: not in Debug, always in Release.
     private LoopbackMediaRelayOptions? CreateRelayOptions()
     {
-        if (!CanUseOnDemandNetwork) return null;
+        if (!CanUseOnDemandNetwork || OnDemandResolver is null) return null;
 #if DEBUG
         return new() { VerifyTls = false };
 #else

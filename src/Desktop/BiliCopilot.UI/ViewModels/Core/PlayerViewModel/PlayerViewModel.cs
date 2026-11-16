@@ -261,13 +261,19 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 }
                 break;
             case BiliMediaType.Live:
+                _sourceResolver = null;
                 break;
             default:
+                _sourceResolver = null;
                 break;
         }
 
-        _sourceResolver.SetInitializationCancellation(_activeMediaToken);
-        _sourceResolver.WindowHandle = Window!.RenderHwnd;
+        if (OnDemandResolver is { } onDemandResolver)
+        {
+            onDemandResolver.SetInitializationCancellation(_activeMediaToken);
+            onDemandResolver.WindowHandle = Window!.RenderHwnd;
+        }
+        StartNetworkMonitor();
 
         if (previousHistoryResolver != null && Player != null)
         {

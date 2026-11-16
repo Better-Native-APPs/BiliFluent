@@ -34,7 +34,7 @@ public sealed partial class PlayerViewModel
     private Task SelectQualityEntryAsync(SourceItemViewModel source)
     {
         if (!CanSelectOnDemandQuality) return Task.CompletedTask;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         if (source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null
             || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
@@ -106,7 +106,8 @@ public sealed partial class PlayerViewModel
     private void MarkQualityMenu()
     {
         if (!CanSelectOnDemandQuality) return;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
+        if (resolver is null) return;
         var playing = GetPlayingFormat(resolver);
         var isVideoAuto = resolver switch
         {
@@ -146,7 +147,7 @@ public sealed partial class PlayerViewModel
     // before the first load starts.
     private void WatchAutomaticAudio()
     {
-        var client = CanSelectOnDemandQuality ? Client : null;
+        var client = CanSelectOnDemandQuality && OnDemandResolver is not null ? Client : null;
         if (ReferenceEquals(client, _automaticAudioClient))
         {
             return;
@@ -184,9 +185,9 @@ public sealed partial class PlayerViewModel
 
     private async Task VerifyAutomaticAudioAsync(long version, long load)
     {
-        if (!CanSelectOnDemandQuality) return;
+        if (!CanSelectOnDemandQuality || OnDemandResolver is null) return;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         var player = Player;
         var client = Client;
         var token = _activeMediaToken;
