@@ -160,6 +160,18 @@ internal static class PlaybackNetworkPolicy
     /// </summary>
     public static readonly TimeSpan SampleGapReset = TimeSpan.FromSeconds(5);
 
+    /// <summary>Fresh selected-relay delivery, including memory, prevents a no-data verdict.</summary>
+    public static readonly TimeSpan SelectedRelayFreshness = TimeSpan.FromSeconds(2);
+
+    /// <summary>A selected external stream is dry only this close to its last complete delivered fragment.</summary>
+    public const double SelectedRelayLowBufferSeconds = 2;
+
+    /// <summary>An unknown cache needs timeline progress as well as an outstanding, silent relay request.</summary>
+    public const double SelectedRelayStallAdvanceSeconds = 1;
+
+    /// <summary>No selected-relay stall verdict near the finite stream's end.</summary>
+    public static readonly TimeSpan SelectedRelayEndMargin = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// A missing audio track is confirmed after this delay before the audio node is switched.
     /// </summary>

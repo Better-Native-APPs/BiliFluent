@@ -101,7 +101,10 @@ internal readonly record struct PlaybackCacheSample(
     double Position,
     double? AudioPosition,
     double? AudioCacheSeconds,
-    double Duration);
+    double Duration)
+{
+    public PlaybackStreamKind? SelectedRelayStalled { get; init; }
+}
 
 /// <summary>
 /// What is left to fall back on for the source that is loaded.
@@ -278,6 +281,15 @@ internal sealed class CdnFailoverPolicy
         ResetRebuffering();
     }
 
+    /// <summary>A quality/track change starts a fresh rate and cache trend without renewing the failover budget.</summary>
+    public void OnStreamsChanged(TimeSpan now)
+    {
+        _downloadRates.Clear();
+        ResetClocks();
+        SettleAudio(now);
+        _noPredictionBefore = now + PlaybackNetworkPolicy.PredictionWindow;
+    }
+
     /// <summary>
     /// Playback restarted after a load or a seek: data has arrived, and the cache starts over.
     /// </summary>
@@ -351,6 +363,8 @@ internal sealed class CdnFailoverPolicy
 
         // mpv pauses for the cache of the main file only, so that is the stream at fault.
         var main = availability.HasVideo ? PlaybackStreamKind.Video : PlaybackStreamKind.Audio;
+        if (_phase == Phase.Loaded && !sample.Seeking && sample.SelectedRelayStalled is { } stalled)
+            return Decide(stalled == PlaybackStreamKind.Audio ? CdnFailoverReason.AudioStall : CdnFailoverReason.Stall, stalled, availability, now);
         if (_phase == Phase.Loaded && IsRebuffering(now, sample.PausedForCache))
         {
             return Decide(CdnFailoverReason.Rebuffer, main, availability, now);
