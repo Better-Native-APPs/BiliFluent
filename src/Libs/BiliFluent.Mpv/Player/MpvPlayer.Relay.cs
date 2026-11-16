@@ -12,6 +12,11 @@ namespace Richasy.MpvKernel.Player;
 /// </summary>
 public sealed partial class MpvPlayer
 {
+    // Loads mpv may fail without reaching the relay before the relay is given up for good.
+    private const int MaxUnreachableLoads = 2;
+
+    // libcurl, which mpv reads http with, sends requests for the loopback address to these proxies as well.
+    private static readonly string[] ProxyVariables = ["http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY"];
     private readonly Lock _relaySync = new();
     private LoopbackMediaRelay? _relay;
 
@@ -26,6 +31,9 @@ public sealed partial class MpvPlayer
 
     // A load through the relay failed before a byte came through: this media is read directly.
     private bool _relaySkipsMedia;
+
+    // Loads that failed without mpv having sent the relay a single request.
+    private int _relayUnreachableLoads;
 
     /// <summary>
     /// The relay gave up an address of a stream that is playing and moved on by itself.
@@ -268,8 +276,7 @@ public sealed partial class MpvPlayer
             return _relay;
         }
 
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("http_proxy"))
-            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HTTP_PROXY")))
+        if (Array.Exists(ProxyVariables, name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name))))
         {
             // mpv would send its requests for the loopback address to that proxy.
             _relayUnusable = true;
@@ -321,15 +328,25 @@ public sealed partial class MpvPlayer
                 return;
             }
 
-            if (main.Requests == 0)
+            if (main.UpstreamBytes + main.PreloadedBytes > 0 || _relaySkipsMedia)
             {
+                return;
+            }
+
+            _relaySkipsMedia = true;
+            if (main.Requests > 0)
+            {
+                _logger.LogInformation("Playback | relay off for this media reason=no-data");
+            }
+            else if (++_relayUnreachableLoads < MaxUnreachableLoads)
+            {
+                _logger.LogInformation("Playback | relay off for this media reason=unreachable");
+            }
+            else
+            {
+                // mpv cannot reach the loopback port at all, as a local firewall may cause.
                 _relayUnusable = true;
                 _logger.LogWarning("Playback | relay off reason=unreachable");
-            }
-            else if (main.UpstreamBytes + main.PreloadedBytes == 0 && !_relaySkipsMedia)
-            {
-                _relaySkipsMedia = true;
-                _logger.LogInformation("Playback | relay off for this media reason=no-data");
             }
         }
     }

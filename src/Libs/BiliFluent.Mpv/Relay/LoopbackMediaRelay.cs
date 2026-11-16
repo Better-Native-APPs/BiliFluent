@@ -457,6 +457,11 @@ public sealed class LoopbackMediaRelay : IAsyncDisposable
             }
 
             var partial = resolved.Kind == RelayRangeKind.Partial;
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Relay | request stream={Key} method={Method} from={From} to={To} total={Total}", entry.Key, request.Method, resolved.From, resolved.To, total);
+            }
+
             await WriteHeadAsync(
                 client,
                 partial ? 206 : 200,
