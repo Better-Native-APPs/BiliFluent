@@ -87,7 +87,7 @@ public sealed partial class PlayerViewModel
             {
                 BiliMediaType.Video => new VideoConnectorViewModel(this),
                 BiliMediaType.Pgc => new PgcConnectorViewModel(this),
-                BiliMediaType.Live => new LiveConnectorViewModel(_liveRoom!, () => IsLiveReady && !IsConnecting && !IsPlaybackClosing && !IsLiveReleaseBlocked),
+                BiliMediaType.Live => new LiveConnectorViewModel(_liveRoom!, () => IsLiveMedia && !IsConnecting && !_liveMediaPending && !IsPlaybackClosing && !IsLiveReleaseBlocked),
                 _ => default,
             };
 

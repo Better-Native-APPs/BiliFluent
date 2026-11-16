@@ -425,7 +425,7 @@ public sealed partial class PlayerViewModel
     {
         var connector = LiveConnector;
         var binding = _liveRoom?.Binding;
-        if (connector is null || !IsLiveReady || IsPlaybackClosing || IsConnecting || !binding.HasValue)
+        if (connector is null || !IsLiveMedia || IsPlaybackClosing || IsConnecting || _liveMediaPending || !binding.HasValue)
             throw new InvalidOperationException("The live room is not ready to send a message.");
         var generation = _mediaVersion;
         var result = await connector.SendManuallyAsync(binding.Value, text, _liveScope!.Token);
