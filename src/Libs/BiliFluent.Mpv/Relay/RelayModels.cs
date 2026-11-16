@@ -185,7 +185,7 @@ public readonly record struct RelayStreamStatistics(
     /// <summary>The greatest exclusive byte offset delivered to the player, in player-file coordinates.</summary>
     public long ForwardBytes { get; init; }
 
-    /// <summary>The corresponding original-file offset; null before virtual media bytes were delivered.</summary>
+    /// <summary>The corresponding original-file offset; null while delivery remains inside the rewritten head.</summary>
     public long? ForwardUpstreamOffset { get; init; }
 
     /// <summary>UTC time upstream data was last received; null before any upstream body byte arrived.</summary>
