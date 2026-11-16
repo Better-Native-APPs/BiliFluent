@@ -109,8 +109,6 @@ public sealed class BiliLoginService : IBiliLoginService
                 fields["username"] = account.Trim();
                 fields["password"] = encrypted;
                 fields["keep"] = WebLoginProtocol.Keep;
-                fields["source"] = WebLoginProtocol.SmsLoginSource;
-                fields["go_url"] = WebLoginProtocol.SmsReferer.AbsoluteUri;
                 encrypted = string.Empty;
                 attempt.PasswordSubmitted = true;
                 attempt.Captcha = null;
