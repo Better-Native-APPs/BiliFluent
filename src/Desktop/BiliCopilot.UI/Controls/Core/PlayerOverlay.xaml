@@ -330,7 +330,7 @@
             VerticalAlignment="Center"
             RequestedTheme="Dark"
             Spacing="8"
-            Visibility="{x:Bind local:PlayerOverlay.GetRoomEndedVisibility(ViewModel.LiveLoadState, ViewModel.IsConnecting), Mode=OneWay}">
+            Visibility="{x:Bind local:PlayerOverlay.GetRoomEndedVisibility(ViewModel.IsLiveMedia, ViewModel.LiveLoadState, ViewModel.IsConnecting), Mode=OneWay}">
             <TextBlock
                 HorizontalAlignment="Center"
                 IsHitTestVisible="False"

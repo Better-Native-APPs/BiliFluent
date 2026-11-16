@@ -76,8 +76,8 @@ public sealed partial class LiveQualityButton : PlayerControlBase
         set => SetValue(EntryStyleProperty, value);
     }
 
-    // Only a live room publishes live tiers; every other media leaves the list empty.
-    private bool IsAvailable => _loaded && ViewModel is { LiveSources.Count: > 0 };
+    // Only a live room publishes live tiers, and the tiers of a room that was left are not offered to what follows.
+    private bool IsAvailable => _loaded && ViewModel is { IsLiveMedia: true, LiveSources.Count: > 0 };
 
     private bool CanInteract => IsAvailable && IsActive && ViewModel is { IsWindowDeactivated: false,
         IsPlaybackClosing: false, IsConnecting: false, CanSelectLiveQuality: true }
@@ -185,7 +185,7 @@ public sealed partial class LiveQualityButton : PlayerControlBase
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
         if (args.PropertyName is not (null or "" or nameof(PlayerViewModel.SelectedLiveSource)
             or nameof(PlayerViewModel.RequestedLiveSource) or nameof(PlayerViewModel.CanSelectLiveQuality)
-            or nameof(PlayerViewModel.IsLiveStarting) or nameof(PlayerViewModel.MediaGeneration)
+            or nameof(PlayerViewModel.IsLiveStarting) or nameof(PlayerViewModel.IsLiveMedia) or nameof(PlayerViewModel.MediaGeneration)
             or nameof(PlayerViewModel.Player) or nameof(PlayerViewModel.IsWindowDeactivated)
             or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.IsPlaybackClosing)))
         {

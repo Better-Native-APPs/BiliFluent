@@ -60,10 +60,11 @@ public sealed partial class PlayerOverlay
 
     /// <summary>
     /// The stream of a room ended, or its connection dropped, after it had played. While the player is already
-    /// asking for the picture again, the connecting hint stands alone.
+    /// asking for the picture again, the connecting hint stands alone. The state of a room that was left never
+    /// shows over the media that follows it.
     /// </summary>
-    internal static Visibility GetRoomEndedVisibility(LiveMediaLoadState state, bool isConnecting)
-        => state == LiveMediaLoadState.Ended && !isConnecting ? Visibility.Visible : Visibility.Collapsed;
+    internal static Visibility GetRoomEndedVisibility(bool isLiveMedia, LiveMediaLoadState state, bool isConnecting)
+        => isLiveMedia && state == LiveMediaLoadState.Ended && !isConnecting ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>The title over a playback error. A room whose picture cannot be shown says so in plain words.</summary>
     internal static string GetErrorTitle(bool isLiveMedia)
