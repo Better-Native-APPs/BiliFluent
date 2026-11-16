@@ -301,6 +301,12 @@ public sealed class BiliLoginService : IBiliLoginService
             sms.Invalidate();
             attempt.Sms = null;
             using var response = await attempt.SendAsync(HttpMethod.Post, BiliApis.Passport.WebExchangeCookie, exchangeFields, verification.Referer, cancellationToken).ConfigureAwait(false);
+            failure = response.Failure ?? WebLoginProtocol.ReadFailure(response.Root);
+            if (failure is not null)
+            {
+                return BiliLoginResult.Failed(WebFallback(failure), WebLoginProtocol.GetInt(WebLoginProtocol.GetData(response.Root), "status"));
+            }
+
             var result = await FinishLoginAsync(attempt, response, smsLogin: false, urlCookies: false, cancellationToken).ConfigureAwait(false);
             return result.Failure is not null ? BiliLoginResult.Failed(WebFallback(result.Failure), result.ServerStatus) : result;
         }, failure => BiliLoginResult.Failed(WebFallback(failure)), cancellationToken);
