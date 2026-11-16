@@ -3,6 +3,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -13,7 +14,7 @@ using Richasy.BiliKernel.Models.User;
 namespace BiliCopilot.UI.Live.Playback;
 
 /// <summary>
-/// UI-dispatcher admission, serialized media operations, independently owned chat/send tasks.
+/// UI-dispatcher admission and serialized media operations, delegating room/chat ownership.
 /// A session never migrates accounts or rooms. Refresh replaces only its own room generation.
 /// Public commands other than CloseAsync must be called on the supplied dispatcher.
 /// </summary>
@@ -21,22 +22,19 @@ public sealed class LiveSession : ILiveSession
 {
     private readonly ILivePlaybackBackend _backend;
     private readonly Func<LivePlaybackRequest, CancellationToken, Task<LiveSourceResult>> _resolve;
-    private readonly ILiveChatClient _chat;
+    // CompleteCloseAsync waits the room's actual close before confirming either owner's release.
+    #pragma warning disable CA2213
+    private readonly LiveRoomSession _room;
+    #pragma warning restore CA2213
     private readonly Func<LiveAccountStamp> _account;
     private readonly DispatcherQueue _dispatcher;
-    private readonly Guid _id = Guid.NewGuid();
-    private readonly ObservableCollection<LiveChatMessage> _messages = new();
-    // D5: CompleteCloseAsync drains cancellation/media/connect/send/owner disposal/account unregister before disposing this shutdown CTS.
+    // D5: CompleteCloseAsync drains cancellation/media/room close/owner disposal/account unregister before disposing this shutdown CTS.
     #pragma warning disable CA2213
     private readonly CancellationTokenSource _shutdown = new();
     #pragma warning restore CA2213
     private readonly object _closeSync = new();
     private readonly object _inboxSync = new();
-    private readonly Queue<(Scope Scope, LiveChatMessage Message)> _inbox = new();
     private (Scope Scope, LiveBackendStatus Status)? _backendStatus;
-    private (Scope Scope, LiveChatStatus Status)? _chatStatus;
-    private (Scope Scope, LiveAudienceUpdate Update)? _audience;
-    private LiveAudienceMetric? _audienceMetric;
     private bool _inboxPosted;
     private Task _tail = Task.CompletedTask;
     private Task? _refresh;
@@ -51,7 +49,6 @@ public sealed class LiveSession : ILiveSession
     private CancellationTokenRegistration _accountRegistration;
     private long _generation;
     private PlayerFormatInformation? _preferredQuality;
-    private bool _sending;
     private bool _controlPending;
     private bool _releaseBlocked;
 
@@ -66,10 +63,12 @@ public sealed class LiveSession : ILiveSession
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve));
-        _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        Messages = new(_messages);
+        _room = new LiveRoomSession(chat, account, () => _dispatcher.HasThreadAccess,
+            action => _dispatcher.TryEnqueue(() => action()), RecordRoomFailure);
+        _room.PropertyChanged += OnRoomPropertyChanged;
+        _room.MessageReceived += OnRoomMessageReceived;
         SelectQualityCommand = new AsyncRelayCommand<PlayerFormatInformation>(SelectQualityFromCommandAsync,
             quality => CanChangeQuality && quality is not null && Qualities.Contains(quality));
     }
@@ -80,30 +79,27 @@ public sealed class LiveSession : ILiveSession
         return sources.ResolveAsync;
     }
 
-    public LiveBinding? Binding { get; private set; }
-    public string Title { get; private set; } = string.Empty;
-    public string AnchorName { get; private set; } = string.Empty;
-    public Uri? AnchorAvatar { get; private set; }
-    public UserProfile? Anchor { get; private set; }
-    public bool? IsFollowing { get; private set; }
-    public long? AudienceCount { get; private set; }
-    public string AudienceLabel => _audienceMetric == LiveAudienceMetric.OnlineRank ? "高能在线" : "看过";
+    public LiveBinding? Binding => _room.Binding;
+    public string Title => _room.Title;
+    public string AnchorName => _room.AnchorName;
+    public Uri? AnchorAvatar => _room.AnchorAvatar;
+    public UserProfile? Anchor => _room.Anchor;
+    public bool? IsFollowing => _room.IsFollowing;
+    public long? AudienceCount => _room.AudienceCount;
+    public string AudienceLabel => _room.AudienceLabel;
     public IReadOnlyList<PlayerFormatInformation> Qualities { get; private set; } = Array.Empty<PlayerFormatInformation>();
     public PlayerFormatInformation? SelectedQuality { get; private set; }
     public bool CanChangeQuality => !IsClosing && !IsBusy && !_controlPending && !_releaseBlocked
         && Binding is not null && _scope?.Token.IsCancellationRequested == false && Qualities.Count > 1;
     public IAsyncRelayCommand<PlayerFormatInformation> SelectQualityCommand { get; }
     public LivePlaybackState PlaybackState { get; private set; }
-    public LiveChatState ChatState { get; private set; }
+    public LiveChatState ChatState => _room.ChatState;
     public string? PlaybackError { get; private set; }
-    public string? ChatError { get; private set; }
+    public string? ChatError => _room.ChatError;
     public double Volume { get; private set; } = 1;
     public bool IsBusy { get; private set; }
-    public bool CanSend => !IsClosing && !_sending && !IsBusy && Binding is not null
-        && _scope?.Token.IsCancellationRequested == false
-        && ChatState == LiveChatState.Connected && !string.IsNullOrWhiteSpace(_stamp?.AccountId)
-        && _stamp?.Lifetime.IsCancellationRequested == false;
-    public ReadOnlyObservableCollection<LiveChatMessage> Messages { get; }
+    public bool CanSend => !IsClosing && !IsBusy && _room.CanSend;
+    public ReadOnlyObservableCollection<LiveChatMessage> Messages => _room.Messages;
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler<LiveChatMessage>? MessageReceived;
     public bool IsClosing => Volatile.Read(ref _close) is not null;
@@ -117,7 +113,6 @@ public sealed class LiveSession : ILiveSession
         _stamp = _account();
         _stamp.Value.Lifetime.ThrowIfCancellationRequested();
         _live = live;
-        ApplyAnchor(live);
         // Cancellation invalidates admission even before the dispatcher can deliver Closing.
         _accountRegistration = _stamp.Value.Lifetime.Register(() => _ = Observe(CloseAsync()));
         return BeginOpen(cancellationToken);
@@ -161,14 +156,12 @@ public sealed class LiveSession : ILiveSession
         var previous = _scope;
         previous?.Invalidate();
         var scope = new Scope(++_generation, _stamp!.Value, token, _shutdown.Token);
+        try { scope.Room = _room.PrepareRoom(_live!, _stamp.Value, scope.Token); }
+        catch { scope.Dispose(); throw; }
         _scope = scope;
-        Binding = null;
         IsBusy = true;
         PlaybackState = LivePlaybackState.Opening;
-        ChatState = LiveChatState.Idle;
-        PlaybackError = ChatError = null;
-        AudienceCount = null;
-        _audienceMetric = null;
+        PlaybackError = null;
         var operation = Enqueue(async () =>
         {
             // This operation sits AFTER the actual previous resolver/open/control task, not a
@@ -187,11 +180,8 @@ public sealed class LiveSession : ILiveSession
                 if (scope.PreviousRoom is not null && room != scope.PreviousRoom)
                     throw new InvalidOperationException("Live room identity changed during refresh.");
                 failureStage = FailureStage.LivePublishBinding;
-                scope.Binding = new(_id, scope.Generation, room, scope.Account.Generation, scope.Account.AccountId);
-                Binding = scope.Binding;
-                ApplyAnchor(result.LivePage.Information);
                 Subscribe(scope);
-                Notify();
+                _room.BindRoom(scope.Room, room, result.LivePage.Information);
                 failureStage = FailureStage.LiveSetVolume;
                 await _backend.SetVolumeAsync(Volume, scope.Token);
                 EnsureCurrent(scope);
@@ -206,13 +196,12 @@ public sealed class LiveSession : ILiveSession
                 _preferredQuality = SelectedQuality;
                 failureStage = FailureStage.LivePublishPlaying;
                 PlaybackState = LivePlaybackState.Playing;
-                ChatState = LiveChatState.Connecting;
-                scope.Connect = ConnectAsync(scope); // The session owns this task until StopScope/Close.
+                _ = _room.ConnectAsync(scope.Room); // The room owns the actual task until StopScope/Close.
             }
             catch (OperationCanceledException ex)
             {
                 SafeFailureContext.TryWrite(failureStage, ex, () => this.Get<ILogger<LiveSession>>());
-                if (OwnsPublication(scope)) { PlaybackState = LivePlaybackState.Idle; ChatState = LiveChatState.Closed; }
+                if (OwnsPublication(scope)) { PlaybackState = LivePlaybackState.Idle; _room.MarkOpenCancelled(scope.Room); }
                 await CleanupFailedOpenAsync(scope);
                 throw new OperationCanceledException("Live open was cancelled.");
             }
@@ -225,30 +214,14 @@ public sealed class LiveSession : ILiveSession
             }
             finally
             {
-                if (OwnsPublication(scope)) { IsBusy = false; if (scope.Invalidated) Binding = null; Notify(); }
+                if (OwnsPublication(scope)) { IsBusy = false; _room.ClearStoppedBinding(scope.Room); Notify(); }
             }
         }, previous?.Binding?.RoomId);
         if (isRefresh) _refresh = operation;
         // Publish the real media tail (and refresh coalescer) before any UI observer can reenter.
-        try { _messages.Clear(); } catch { RecordFailure(LiveFailureCategory.CollectionSubscriber); }
         ClearInbox();
-        Notify();
+        _room.PublishRoomReset(scope.Room);
         return operation;
-    }
-
-    private void ApplyAnchor(LiveInformation information)
-    {
-        Title = information.Identifier.Title ?? string.Empty;
-        var user = information.User ?? _live?.User;
-        Anchor = user;
-        AnchorName = user?.Name ?? string.Empty;
-        AnchorAvatar = user?.Avatar?.Uri;
-        IsFollowing = information.Relation switch
-        {
-            UserRelationStatus.Following or UserRelationStatus.Friends or UserRelationStatus.SpeciallyFollowed => true,
-            UserRelationStatus.Unfollow or UserRelationStatus.BeFollowed or UserRelationStatus.Blocked => false,
-            _ => null,
-        };
     }
 
     private static long CanonicalRoom(LiveSourceResult result)
@@ -263,24 +236,6 @@ public sealed class LiveSession : ILiveSession
 
     private static bool TryRoom(string? text, out long room)
         => long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out room) && room > 0;
-
-    private async Task ConnectAsync(Scope scope)
-    {
-        try
-        {
-            EnsureCurrent(scope);
-            await _chat.ConnectAsync(scope.Binding!.Value, scope.Token);
-            EnsureCurrent(scope);
-            ChatState = LiveChatState.Connected; // Facade returns only after positive op-8 acknowledgement.
-            ChatError = null;
-        }
-        catch (OperationCanceledException) { if (IsCurrent(scope)) ChatState = LiveChatState.Closed; }
-        catch
-        {
-            if (IsCurrent(scope)) { ChatState = LiveChatState.Unavailable; ChatError = "Live chat is unavailable."; }
-        }
-        finally { if (IsCurrent(scope)) Notify(); }
-    }
 
     public Task PlayAsync(CancellationToken cancellationToken)
     {
@@ -340,37 +295,7 @@ public sealed class LiveSession : ILiveSession
         if (cancellationToken.IsCancellationRequested || IsClosing || !CanSend || _scope is not { } scope
             || !MatchesAccount() || scope.Binding != binding || Binding != binding || string.IsNullOrWhiteSpace(text))
             return Task.FromResult(new LiveSendResult(binding, LiveSendOutcome.NotSent, null, "Message was not sent."));
-        _sending = true; // Publish before calling the facade; no asynchronous admission gap.
-        var linked = CancellationTokenSource.CreateLinkedTokenSource(scope.Token, cancellationToken);
-        Task<LiveSendResult> actual;
-        try { actual = _chat.SendManuallyAsync(binding, text, linked.Token); }
-        catch { actual = Task.FromResult(new LiveSendResult(binding, LiveSendOutcome.Unknown, null, "Message delivery is unknown. Do not resend automatically.")); }
-        var completion = FinishSendAsync(scope, binding, actual, linked);
-        scope.Send = Observe(completion);
-        Notify();
-        return completion;
-    }
-
-    private async Task<LiveSendResult> FinishSendAsync(Scope scope, LiveBinding binding,
-        Task<LiveSendResult> actual, CancellationTokenSource linked)
-    {
-        try
-        {
-            // Preserve an eventual known result for this attempt, even after its UI scope expires.
-            // T4-02: The actual send attempt is independently owned; its eventual result remains observed after UI scope expiry.
-            #pragma warning disable VSTHRD003
-            var result = await actual;
-            #pragma warning restore VSTHRD003
-            return result.Binding == binding ? result
-                : new(binding, LiveSendOutcome.Unknown, null, "Message delivery is unknown.");
-        }
-        catch { return new(binding, LiveSendOutcome.Unknown, null, "Message delivery is unknown. Do not resend automatically."); }
-        finally
-        {
-            linked.Dispose();
-            _sending = false;
-            if (IsCurrent(scope)) Notify();
-        }
+        return _room.SendManuallyAsync(binding, text, cancellationToken);
     }
 
     private async Task CleanupFailedOpenAsync(Scope scope)
@@ -395,15 +320,8 @@ public sealed class LiveSession : ILiveSession
             await scope.Cancellation;
             #pragma warning restore VSTHRD003
         } catch { RecordFailure(LiveFailureCategory.CancellationCallback); }
-        // T4-04: The scope owns an independently started connect operation; it must finish before scope/backend release.
-        #pragma warning disable VSTHRD003
-        await Observe(scope.Connect);
-        #pragma warning restore VSTHRD003
-        // T4-05: The scope owns the actual send operation; cancellation does not replace its real completion before release.
-        #pragma warning disable VSTHRD003
-        await Observe(scope.Send);
-        #pragma warning restore VSTHRD003
-        try { await _chat.DisconnectAsync(); } catch { failed = true; RecordFailure(LiveFailureCategory.ChatRelease); }
+        // The room joins actual connection/send tasks and disconnect before the backend is stopped.
+        try { await _room.StopAsync(scope.Room); } catch { failed = true; }
         try { await _backend.StopAsync(CancellationToken.None); } catch { failed = true; RecordFailure(LiveFailureCategory.BackendRelease); }
         scope.Dispose();
         if (failed)
@@ -433,13 +351,10 @@ public sealed class LiveSession : ILiveSession
         try
         {
             CheckUi();
-            Binding = null;
             IsBusy = true;
             PlaybackState = LivePlaybackState.Closing;
-            ChatState = LiveChatState.Closed;
-            try { _messages.Clear(); } catch { RecordFailure(LiveFailureCategory.CollectionSubscriber); }
             ClearInbox();
-            Notify();
+            _room.RequestClose();
             _scope?.Invalidate();
             try {
                 // T4-06: Shutdown cancellation starts before close joins it; account callbacks never synchronously wait for this close consumer.
@@ -460,18 +375,10 @@ public sealed class LiveSession : ILiveSession
                     await scope.Cancellation;
                     #pragma warning restore VSTHRD003
                 } catch { RecordFailure(LiveFailureCategory.CancellationCallback); }
-                // T4-09: Terminal close retains and joins the independently owned connect task before releasing chat/backend owners.
-                #pragma warning disable VSTHRD003
-                await Observe(scope.Connect);
-                #pragma warning restore VSTHRD003
-                // T4-10: Terminal close joins the actual send task before release; advisory cancellation cannot stand in for its result.
-                #pragma warning disable VSTHRD003
-                await Observe(scope.Send);
-                #pragma warning restore VSTHRD003
             }
             var chatReleased = false;
             var backendReleased = false;
-            try { await _chat.DisposeAsync(); chatReleased = true; } catch { RecordFailure(LiveFailureCategory.ChatRelease); }
+            try { await _room.CloseAsync(); chatReleased = _room.ReleaseConfirmed; } catch { RecordFailure(LiveFailureCategory.ChatRelease); }
             try { await _backend.DisposeAsync(); backendReleased = true; } catch { RecordFailure(LiveFailureCategory.BackendRelease); }
             // Its callback requests/observes CloseAsync; it never waits synchronously for Close.
             // Drain it even after an owner fails, and before disposing tokens or confirming release.
@@ -558,69 +465,30 @@ public sealed class LiveSession : ILiveSession
         {
             lock (_inboxSync) { _backendStatus = (scope, status); PostInboxLocked(); }
         };
-        scope.ChatHandler = (_, status) =>
-        {
-            if (scope.Binding != status.Binding) return;
-            lock (_inboxSync) { _chatStatus = (scope, status); PostInboxLocked(); }
-        };
-        scope.MessageHandler = (_, message) =>
-        {
-            if (scope.Binding != message.Binding) return;
-            lock (_inboxSync)
-            {
-                if (_inbox.Count < 256) _inbox.Enqueue((scope, message));
-                PostInboxLocked();
-            }
-        };
         _backend.StatusChanged += scope.BackendHandler;
-        _chat.StatusChanged += scope.ChatHandler;
-        _chat.MessageReceived += scope.MessageHandler;
-        if (_chat is ILiveAudienceSource audience)
-        {
-            scope.AudienceHandler = (_, update) =>
-            {
-                if (scope.Binding != update.Binding) return;
-                lock (_inboxSync)
-                {
-                    if (_audience?.Update.Metric == LiveAudienceMetric.Watched && update.Metric != LiveAudienceMetric.Watched) return;
-                    _audience = (scope, update);
-                    PostInboxLocked();
-                }
-            };
-            audience.AudienceChanged += scope.AudienceHandler;
-        }
     }
     private void Unsubscribe(Scope scope)
     {
         // Observer detachment cannot skip independent owner drains/disposals.
         try { _backend.StatusChanged -= scope.BackendHandler; } catch { RecordFailure(LiveFailureCategory.StatusSubscriber); }
-        try { _chat.StatusChanged -= scope.ChatHandler; } catch { RecordFailure(LiveFailureCategory.StatusSubscriber); }
-        try { _chat.MessageReceived -= scope.MessageHandler; } catch { RecordFailure(LiveFailureCategory.MessageSubscriber); }
-        try { if (_chat is ILiveAudienceSource audience) audience.AudienceChanged -= scope.AudienceHandler; }
-        catch { RecordFailure(LiveFailureCategory.StatusSubscriber); }
     }
     private void PostInboxLocked()
     {
         if (_inboxPosted || IsClosing) return;
         _inboxPosted = true;
-        if (!_dispatcher.TryEnqueue(DrainInbox)) { _inboxPosted = false; _inbox.Clear(); _backendStatus = null; _chatStatus = null; _audience = null; }
+        if (!_dispatcher.TryEnqueue(DrainInbox)) { _inboxPosted = false; _backendStatus = null; }
     }
     private void ClearInbox()
     {
-        lock (_inboxSync) { _inbox.Clear(); _backendStatus = null; _chatStatus = null; _audience = null; }
+        lock (_inboxSync) { _backendStatus = null; }
     }
     private void DrainInbox()
     {
-        (Scope Scope, LiveChatMessage Message)[] messages;
         (Scope Scope, LiveBackendStatus Status)? backend;
-        (Scope Scope, LiveChatStatus Status)? chat;
-        (Scope Scope, LiveAudienceUpdate Update)? audience;
         lock (_inboxSync)
         {
-            messages = _inbox.ToArray(); _inbox.Clear();
-            backend = _backendStatus; chat = _chatStatus;
-            audience = _audience; _audience = null;
-            _backendStatus = null; _chatStatus = null; _inboxPosted = false;
+            backend = _backendStatus;
+            _backendStatus = null; _inboxPosted = false;
         }
         if (IsClosing || !MatchesAccount()) return;
         if (backend is { } b && IsCurrent(b.Scope))
@@ -636,28 +504,13 @@ public sealed class LiveSession : ILiveSession
             if (b.Status.State == LiveBackendState.Failed) PlaybackError = "Live playback failed. Refresh to resolve a new stream.";
             if (double.IsFinite(b.Status.Volume)) Volume = Math.Clamp(b.Status.Volume, 0, 1);
         }
-        if (chat is { } c && IsCurrent(c.Scope) && Binding == c.Status.Binding)
-        {
-            ChatState = c.Status.State;
-            ChatError = c.Status.SafeError is null ? null : "Live chat is unavailable.";
-        }
-        if (audience is { } a && IsCurrent(a.Scope) && Binding == a.Update.Binding
-            && (_audienceMetric != LiveAudienceMetric.Watched || a.Update.Metric == LiveAudienceMetric.Watched))
-        {
-            AudienceCount = a.Update.Count;
-            _audienceMetric = a.Update.Metric;
-        }
         Notify();
-        foreach (var item in messages)
-        {
-            if (!IsCurrent(item.Scope) || Binding != item.Message.Binding || !MatchesAccount()) continue;
-            try { if (_messages.Count == 200) _messages.RemoveAt(0); } catch { RecordFailure(LiveFailureCategory.CollectionSubscriber); }
-            if (!IsCurrent(item.Scope) || Binding != item.Message.Binding) continue;
-            try { _messages.Add(item.Message); } catch { RecordFailure(LiveFailureCategory.CollectionSubscriber); }
-            // A collection observer may synchronously refresh/close the room.
-            if (IsCurrent(item.Scope) && Binding == item.Message.Binding)
-                PublishMessage(item.Scope, item.Message);
-        }
+    }
+    private void OnRoomPropertyChanged(object? sender, PropertyChangedEventArgs args) => Notify();
+    private void OnRoomMessageReceived(object? sender, LiveChatMessage message)
+    {
+        if (_scope is { } scope && IsCurrent(scope) && Binding == message.Binding && MatchesAccount())
+            PublishMessage(scope, message);
     }
     private void PublishMessage(Scope scope, LiveChatMessage message)
     {
@@ -690,7 +543,11 @@ public sealed class LiveSession : ILiveSession
 
     private void RecordFailure(LiveFailureCategory category)
         => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveSession>>(),
-            logger => logger.LogWarning("Live session operation failed: {Category}", category));
+             logger => logger.LogWarning("Live session operation failed: {Category}", category));
+
+    private void RecordRoomFailure(string category)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveSession>>(),
+            logger => logger.LogWarning("Live room operation failed: {Category}", category));
 
     private sealed class Scope : IDisposable
     {
@@ -705,18 +562,14 @@ public sealed class LiveSession : ILiveSession
         public long Generation { get; }
         public LiveAccountStamp Account { get; }
         public CancellationToken Token { get; }
-        public LiveBinding? Binding { get; set; }
+        public LiveRoomScope Room { get; set; } = null!;
+        public LiveBinding? Binding => Room.Binding;
         public long? PreviousRoom { get; set; }
         public bool Invalidated { get; private set; }
         public bool Stopped { get; set; }
         public Task Cancellation { get; private set; } = Task.CompletedTask;
-        public Task Connect { get; set; } = Task.CompletedTask;
-        public Task Send { get; set; } = Task.CompletedTask;
         public Task? Stop { get; set; }
         public EventHandler<LiveBackendStatus>? BackendHandler { get; set; }
-        public EventHandler<LiveChatStatus>? ChatHandler { get; set; }
-        public EventHandler<LiveChatMessage>? MessageHandler { get; set; }
-        public EventHandler<LiveAudienceUpdate>? AudienceHandler { get; set; }
         public void Invalidate()
         {
             if (Invalidated) return;
