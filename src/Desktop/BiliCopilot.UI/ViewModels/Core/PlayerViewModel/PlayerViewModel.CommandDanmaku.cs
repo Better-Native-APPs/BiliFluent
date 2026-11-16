@@ -84,7 +84,7 @@ public sealed partial class PlayerViewModel
     private void InitializeCommandDanmaku()
     {
         var version = _mediaVersion;
-        if (!IsCurrentPlayback(version) || _commandDanmakuLoadVersion == version
+        if (!CanUseInteractiveDanmaku || !IsCurrentPlayback(version) || _commandDanmakuLoadVersion == version
             || !TryGetCommandDanmakuMedia(out var aid, out var cid)) return;
         _commandDanmakuLoadVersion = version;
         var connector = Connector as VideoConnectorViewModel;
@@ -94,6 +94,7 @@ public sealed partial class PlayerViewModel
     private async Task LoadCommandDanmakuAsync(long version, CancellationToken token, string aid, string cid,
         VideoConnectorViewModel? connector)
     {
+        if (!CanUseInteractiveDanmaku) return;
         try
         {
             var service = this.Get<IDanmakuService>();
@@ -149,7 +150,7 @@ public sealed partial class PlayerViewModel
     // Called on the existing UI-thread position path. No queries, LINQ, parsing, or timers here.
     private void UpdateCommandDanmakuPosition(double position, bool force = false)
     {
-        if (!IsCommandDanmakuEnabled || IsConnecting || !IsCurrentPlayback(_commandDanmakuLoadVersion)
+        if (!CanUseInteractiveDanmaku || !IsCommandDanmakuEnabled || IsConnecting || !IsCurrentPlayback(_commandDanmakuLoadVersion)
             || Player?.IsPlaybackInitialized != true)
         {
             if (ActiveCommandDanmakus.Count > 0) ClearActiveCommandDanmakus();
@@ -199,7 +200,7 @@ public sealed partial class PlayerViewModel
     }
 
     internal bool IsCurrentCommandDanmakuItem(CommandDanmakuItemViewModel item)
-        => IsCurrentPlayback(item.MediaGeneration) && !IsConnecting
+        => CanUseInteractiveDanmaku && IsCurrentPlayback(item.MediaGeneration) && !IsConnecting
             && item.Index >= 0 && item.Index < _commandDanmakuItems.Length
             && ReferenceEquals(_commandDanmakuItems[item.Index], item);
 

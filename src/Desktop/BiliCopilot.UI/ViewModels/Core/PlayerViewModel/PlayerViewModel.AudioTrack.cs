@@ -48,13 +48,13 @@ public sealed partial class PlayerViewModel
 
     // Reads the audio choices of the media the source resolver has just loaded.
     private void LoadAudioSelections()
-        => ApplyAudioSelections(GetResolverAudioSelections(_sourceResolver), keepRows: false);
+        => ApplyAudioSelections(CanSelectAudioTrack ? GetResolverAudioSelections(OnDemandResolver) : AudioSelections.Empty, keepRows: false);
 
     // Episodes of one season are opened with a new snapshot. The audio choices follow to the next episode,
     // like they follow to another part of a video; an episode without them plays its default audio.
     private void CarryAudioSelectionToEpisode(MediaSnapshot next)
     {
-        if (_snapshot is { Type: BiliMediaType.Pgc } current && next is { Type: BiliMediaType.Pgc, Episode: not null })
+        if (CanSelectAudioTrack && _snapshot is { Type: BiliMediaType.Pgc } current && next is { Type: BiliMediaType.Pgc, Episode: not null })
         {
             next.PreferAudioLanguageId ??= current.PreferAudioLanguageId;
             next.PreferAudioQualityId ??= current.PreferAudioQualityId;
@@ -164,9 +164,9 @@ public sealed partial class PlayerViewModel
 
     private Task SelectAudioLanguageAsync(AudioLanguageItemViewModel language)
     {
-        if (language is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
+        if (!CanSelectAudioTrack || language is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
             || !AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage)
-            || _sourceResolver is not VideoMediaSourceResolver)
+            || OnDemandResolver is not VideoMediaSourceResolver resolver)
         {
             return Task.CompletedTask;
         }
@@ -174,11 +174,10 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var position = player.Position;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
         var version = _mediaVersion;
         return RunWithoutPlayerInputAsync(async () =>
         {
-            if (!AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage))
+            if (!CanSelectAudioTrack || !AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage))
             {
                 return;
             }
@@ -239,8 +238,8 @@ public sealed partial class PlayerViewModel
 
     private Task SelectAudioQualityAsync(AudioQualityItemViewModel quality)
     {
-        var resolver = _sourceResolver;
-        if (quality is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
+        var resolver = OnDemandResolver;
+        if (!CanSelectOnDemandQuality || quality is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
             || !AudioQualities.Any(item => ReferenceEquals(item, quality))
             || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
@@ -266,7 +265,7 @@ public sealed partial class PlayerViewModel
 
         return RunWithoutPlayerInputAsync(async () =>
         {
-            if (!AudioQualities.Any(item => ReferenceEquals(item, quality)) || !ReferenceEquals(resolver, _sourceResolver))
+            if (!CanSelectOnDemandQuality || !AudioQualities.Any(item => ReferenceEquals(item, quality)) || !ReferenceEquals(resolver, _sourceResolver))
             {
                 return;
             }

@@ -3,7 +3,6 @@
 using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
-using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Dispatching;
@@ -22,7 +21,6 @@ namespace BiliCopilot.UI.ViewModels.Core;
 public sealed partial class PlayerViewModel
 {
     private MediaSnapshot _snapshot;
-    private MediaSourceResolverBase? _sourceResolver;
     private IMpvMediaHistoryResolver? _historyResolver;
     private bool _uiElementSetted;
     private bool _isDanmakuInitialized;
@@ -107,7 +105,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// Whether the quality menu has a choice to offer: more than one video quality, or more than one audio quality.
     /// </summary>
-    public bool IsQualityMenuAvailable => IsSourceSelectable || HasMultipleAudioQualities;
+    public bool IsQualityMenuAvailable => CanSelectOnDemandQuality && (IsSourceSelectable || HasMultipleAudioQualities);
 
     [ObservableProperty]
     public partial bool IsSubtitleEmpty { get; set; }

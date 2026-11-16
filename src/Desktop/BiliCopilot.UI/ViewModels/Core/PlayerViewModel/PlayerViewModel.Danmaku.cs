@@ -24,11 +24,11 @@ public sealed partial class PlayerViewModel
     private CancellationTokenSource? _danmakuLoadingCancellation;
 #pragma warning restore CA2213
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanLoadOnDemandDanmaku))]
     private Task InitializeDanmakuAsync()
     {
         var version = _mediaVersion;
-        if (!IsCurrentPlayback(version)) return Task.CompletedTask;
+        if (!CanLoadOnDemandDanmaku || !IsCurrentPlayback(version)) return Task.CompletedTask;
         if (_danmakuCacheVersion != version)
         {
             // CancelAsync marks the token cancelled synchronously; only callbacks run later.
@@ -157,7 +157,7 @@ public sealed partial class PlayerViewModel
         }
 
         bool IsCurrentDanmaku()
-            => IsCurrentPlayback(version) && ReferenceEquals(_danmakuSegments, segments)
+            => CanLoadOnDemandDanmaku && IsCurrentPlayback(version) && ReferenceEquals(_danmakuSegments, segments)
                 && ReferenceEquals(_danmakuLoadingCancellation, cancellation) && IsDanmakuEnabled && Danmaku.IsShowDanmaku;
 
         async Task<bool> PublishDanmakuAsync()
@@ -216,10 +216,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanLoadOnDemandDanmaku))]
     private async Task ReloadDanmakuAsync()
     {
-        if (Player is null || Window is null || Window.IsClosed || !Player.IsPlaybackInitialized || Danmaku is null)
+        if (!CanLoadOnDemandDanmaku || Player is null || Window is null || Window.IsClosed || !Player.IsPlaybackInitialized || Danmaku is null)
         {
             return;
         }
@@ -324,6 +324,7 @@ public sealed partial class PlayerViewModel
     private bool TryGetDanmakuCid(out string cid)
     {
         cid = string.Empty;
+        if (!CanLoadOnDemandDanmaku) return false;
         if (_snapshot?.Type == Models.Constants.BiliMediaType.Video && Connector is VideoConnectorViewModel { _part: { } part })
         {
             cid = part.Identifier.Id;

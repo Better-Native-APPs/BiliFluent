@@ -33,7 +33,8 @@ public sealed partial class PlayerViewModel
     // So a media that follows a video quality chosen by hand plays that quality with the best audio.
     private Task SelectQualityEntryAsync(SourceItemViewModel source)
     {
-        var resolver = _sourceResolver;
+        if (!CanSelectOnDemandQuality) return Task.CompletedTask;
+        var resolver = OnDemandResolver;
         if (source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null
             || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
@@ -104,7 +105,9 @@ public sealed partial class PlayerViewModel
     // or "Auto (1080P · Hi-Res lossless)" when it picked Dolby or Hi-Res.
     private void MarkQualityMenu()
     {
-        var resolver = _sourceResolver;
+        if (!CanSelectOnDemandQuality) return;
+        var resolver = OnDemandResolver;
+        if (resolver is null) return;
         var playing = GetPlayingFormat(resolver);
         var isVideoAuto = resolver switch
         {
@@ -144,7 +147,7 @@ public sealed partial class PlayerViewModel
     // before the first load starts.
     private void WatchAutomaticAudio()
     {
-        var client = Client;
+        var client = CanSelectOnDemandQuality && OnDemandResolver is not null ? Client : null;
         if (ReferenceEquals(client, _automaticAudioClient))
         {
             return;
@@ -182,8 +185,9 @@ public sealed partial class PlayerViewModel
 
     private async Task VerifyAutomaticAudioAsync(long version, long load)
     {
+        if (!CanSelectOnDemandQuality || OnDemandResolver is null) return;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
+        var resolver = OnDemandResolver;
         var player = Player;
         var client = Client;
         var token = _activeMediaToken;
