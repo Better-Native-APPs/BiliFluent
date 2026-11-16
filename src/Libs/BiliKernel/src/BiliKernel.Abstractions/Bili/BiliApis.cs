@@ -25,6 +25,36 @@ public static class BiliApis
         /// </summary>
         public const string PasswordEncrypt = _passBase + "/x/passport-login/web/key";
 
+        /// <summary>Gets the Web Passport captcha parameters.</summary>
+        public const string WebCaptcha = _passBase + "/x/passport-login/captcha";
+
+        /// <summary>Submits a Web Passport password login.</summary>
+        public const string WebPasswordLogin = _passBase + "/x/passport-login/web/login";
+
+        /// <summary>Gets common and other SMS countries.</summary>
+        public const string WebSmsCountries = _passBase + "/web/generic/country/list";
+
+        /// <summary>Sends a Web Passport login SMS.</summary>
+        public const string WebSmsSend = _passBase + "/x/passport-login/web/sms/send";
+
+        /// <summary>Submits a Web Passport SMS login.</summary>
+        public const string WebSmsLogin = _passBase + "/x/passport-login/web/login/sms";
+
+        /// <summary>Gets security-center captcha parameters.</summary>
+        public const string VerificationCaptcha = _passBase + "/x/safecenter/captcha/pre";
+
+        /// <summary>Sends a security-center secondary-verification SMS.</summary>
+        public const string VerificationSmsSend = _passBase + "/x/safecenter/common/sms/send";
+
+        /// <summary>Verifies the bound phone's secondary-verification SMS.</summary>
+        public const string VerificationSmsVerify = _passBase + "/x/safecenter/login/tel/verify";
+
+        /// <summary>Verifies an SMS for the security-center variant without a request id.</summary>
+        public const string VerificationSmsVerifyWithoutRequestId = _passBase + "/x/safecenter/sec/verify";
+
+        /// <summary>Exchanges a verified security-center code for Web cookies.</summary>
+        public const string WebExchangeCookie = _passBase + "/x/passport-login/web/exchange_cookie";
+
         /// <summary>
         /// 登录.
         /// </summary>
