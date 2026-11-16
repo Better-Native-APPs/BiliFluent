@@ -19,6 +19,9 @@ namespace BiliCopilot.UI.Controls.Core;
 internal sealed class ChapterTrackLayer
 {
     private const double GapWidth = 2;
+
+    // The segment under the pointer stands a little taller than the track, as if it were lifted.
+    private const double HighlightGrowth = 1;
     private const double FallbackThumbWidth = 18;
     private const double FallbackTrackHeight = 4;
 
@@ -38,8 +41,8 @@ internal sealed class ChapterTrackLayer
         _highlight = new Rectangle
         {
             Style = highlightStyle,
-            RadiusX = 1,
-            RadiusY = 1,
+            RadiusX = 2,
+            RadiusY = 2,
             Opacity = 0,
             OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(120) },
         };
@@ -220,8 +223,9 @@ internal sealed class ChapterTrackLayer
         }
 
         _highlight.Width = right - left;
-        _highlight.Height = _canvas.ActualHeight > 0 ? _canvas.ActualHeight : FallbackTrackHeight;
+        _highlight.Height = (_canvas.ActualHeight > 0 ? _canvas.ActualHeight : FallbackTrackHeight) + (HighlightGrowth * 2);
         Canvas.SetLeft(_highlight, left);
+        Canvas.SetTop(_highlight, -HighlightGrowth);
         _highlight.Opacity = 1;
     }
 }

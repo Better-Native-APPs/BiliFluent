@@ -433,6 +433,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             subscription.Element.Visibility == Visibility.Visible && subscription.Element.Opacity > 0);
         var becameVisible = visible && !_isProgressVisible;
         _isProgressVisible = visible;
+        if (!visible) _chapterPreview?.Reset();
         if (becameVisible) SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
     }
 

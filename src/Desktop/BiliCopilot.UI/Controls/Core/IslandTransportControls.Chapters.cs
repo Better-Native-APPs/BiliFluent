@@ -13,8 +13,8 @@ namespace BiliCopilot.UI.Controls.Core;
 public sealed partial class IslandTransportControls
 {
     // Below these card widths the chapter title, then the whole chapter entry, give their room back.
-    private const double ChapterTitleMinWidth = 720;
-    private const double ChapterEntryMinWidth = 520;
+    private const double ChapterTitleMinWidth = 740;
+    private const double ChapterEntryMinWidth = 560;
 
     private ChapterTrackLayer? _chapterTrack;
     private ChapterPreview? _chapterPreview;

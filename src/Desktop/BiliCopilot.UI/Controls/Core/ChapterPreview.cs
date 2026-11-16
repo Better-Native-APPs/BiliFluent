@@ -22,6 +22,7 @@ internal sealed class ChapterPreview
     private readonly ChapterPreviewTip _tip;
     private readonly Func<bool> _canShow;
     private ChapterTrackLayer? _shownTrack;
+    private Point _anchor;
     private bool _pointerOver;
     private bool _pressed;
 
@@ -48,6 +49,12 @@ internal sealed class ChapterPreview
         slider.AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnPointerLost), true);
         slider.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnPointerLost), true);
         slider.ValueChanged += OnValueChanged;
+
+        // The bubble is measured for real only once it is on screen, and again whenever its text changes.
+        tip.SizeChanged += (_, _) =>
+        {
+            if (_popup.IsOpen) Place();
+        };
     }
 
     /// <summary>
@@ -68,9 +75,16 @@ internal sealed class ChapterPreview
         _shownTrack = track;
         track.Highlight(chapter);
 
+        _anchor = anchor;
+        Place();
+        if (!_popup.IsOpen) _popup.IsOpen = true;
+    }
+
+    private void Place()
+    {
         _tip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = _tip.DesiredSize;
-        var x = anchor.X - (size.Width / 2);
+        var x = _anchor.X - (size.Width / 2);
         if (_popup.XamlRoot is { } root)
         {
             try
@@ -87,9 +101,10 @@ internal sealed class ChapterPreview
             }
         }
 
-        _popup.HorizontalOffset = Math.Round(x);
-        _popup.VerticalOffset = Math.Round(anchor.Y - size.Height - TrackSpacing);
-        if (!_popup.IsOpen) _popup.IsOpen = true;
+        var left = Math.Round(x);
+        var top = Math.Round(_anchor.Y - size.Height - TrackSpacing);
+        if (_popup.HorizontalOffset != left) _popup.HorizontalOffset = left;
+        if (_popup.VerticalOffset != top) _popup.VerticalOffset = top;
     }
 
     /// <summary>Hides the bubble and the segment mark, keeping the pointer state.</summary>
