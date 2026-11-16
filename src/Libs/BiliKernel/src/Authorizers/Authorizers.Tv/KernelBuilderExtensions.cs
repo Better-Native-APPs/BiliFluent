@@ -20,4 +20,11 @@ public static class KernelBuilderExtensions
         builder.AddSingleton<IAuthenticationService, TVAuthenticationService>();
         return builder;
     }
+
+    /// <summary>Adds the native Web Passport login service alongside the existing authenticator.</summary>
+    public static IServiceCollection AddBiliLoginService(this IServiceCollection builder)
+    {
+        builder.AddSingleton<IBiliLoginService, BiliLoginService>();
+        return builder;
+    }
 }
