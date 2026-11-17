@@ -1,6 +1,7 @@
 ﻿using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Richasy.WinUIKernel.Share.ViewModels;
@@ -156,19 +157,23 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
             return;
         }
 
-        var fonts = await this.Get<IFontToolkit>().GetFontsAsync();
-        foreach (var item in fonts)
+        IReadOnlyList<SystemFont> fonts;
+        try
         {
-            Fonts.Add(item);
+            fonts = await DanmakuFontCatalog.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<DanmakuRenderViewModel>>().LogError(ex, "Failed to load danmaku fonts; the selected font is unchanged.");
+            return;
         }
 
-        var localFont = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily);
-        if (!Fonts.Select(p => p.LocalName).Contains(localFont))
+        // Resume on the UI context and publish only the completed snapshot.
+        Fonts = fonts;
+        if (DanmakuFontCatalog.Find(fonts, DanmakuFontFamily) is null)
         {
-            localFont = DefaultDanmakuFontFamily;
+            DanmakuFontFamily = DefaultDanmakuFontFamily;
         }
-
-        DanmakuFontFamily = localFont;
     }
 
     partial void OnIsShowDanmakuChanged(bool value)
@@ -197,7 +202,16 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuSpeed, value);
 
     partial void OnDanmakuFontFamilyChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, value);
+    {
+        try
+        {
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, value);
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<DanmakuRenderViewModel>>().LogError(ex, "Failed to save the danmaku font preference.");
+        }
+    }
 
     partial void OnIsTopEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.IsTopDanmakuEnabled, value);
