@@ -12,6 +12,9 @@ namespace BiliCopilot.UI.Controls.Player.StoreIsland;
 /// 岛式传输条右侧的画质（清晰度）按钮。由 Store 源 <c>VideoPlayerFormatButton</c> 迁移而来，
 /// 数据源映射到当前 <see cref="PlayerViewModel.Sources"/> / <see cref="PlayerViewModel.SelectedSource"/>；
 /// 媒体带杜比或 Hi-Res 音频时，下方另列 <see cref="PlayerViewModel.AudioQualities"/>。
+/// A live room is served by the same button: the list then holds the tiers of the room
+/// (<see cref="PlayerViewModel.QualityMenuSources"/> / <see cref="PlayerViewModel.QualityMenuSelection"/>,
+/// which are the two members above for any other media).
 /// </summary>
 public sealed partial class IslandFormatButton : PlayerControlBase
 {
@@ -35,7 +38,7 @@ public sealed partial class IslandFormatButton : PlayerControlBase
     }
 
     private bool CanInteract => _loaded && IsActive && ViewModel is { IsWindowDeactivated: false,
-        IsPlaybackClosing: false, IsConnecting: false, IsQualityMenuAvailable: true }
+        IsPlaybackClosing: false, IsConnecting: false, HasQualityMenu: true }
         && ViewModel.Player?.IsPlaybackInitialized == true;
 
     /// <summary>
@@ -97,7 +100,10 @@ public sealed partial class IslandFormatButton : PlayerControlBase
     private void OnOwnerChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!ReferenceEquals(sender, _subscribedViewModel)) return;
+        // The list of an open menu belongs to one media; the same list reported again changes nothing.
         if (args.PropertyName is nameof(PlayerViewModel.MediaGeneration) or nameof(PlayerViewModel.Sources)
+            || (args.PropertyName is nameof(PlayerViewModel.QualityMenuSources)
+                && !ReferenceEquals(FormatView?.ItemsSource, _subscribedViewModel?.QualityMenuSources))
             || !CanInteract) CancelPendingInput();
         Synchronize();
     }
@@ -110,9 +116,9 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         {
             IsEnabled = CanInteract;
             var vm = _loaded ? ViewModel : null;
-            FormatView.ItemsSource = vm?.Sources;
+            FormatView.ItemsSource = vm?.QualityMenuSources;
             AudioQualityView.ItemsSource = vm?.AudioQualities;
-            Select(FormatView, vm is null ? -1 : vm.Sources.IndexOf(vm.SelectedSource!));
+            Select(FormatView, vm is null ? -1 : vm.QualityMenuSources.IndexOf(vm.QualityMenuSelection!));
             Select(AudioQualityView, vm is null ? -1 : vm.AudioQualities.IndexOf(vm.SelectedAudioQuality!));
         }
         finally { _synchronizing = false; }
@@ -159,9 +165,9 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         // While the quality is automatic, the audio quality that plays can be chosen too: that keeps it.
         CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command;
         if (item is SourceItemViewModel { IsEnabled: true } format
-            && ReferenceEquals(FormatView.ItemsSource, ViewModel.Sources)
-            && ViewModel.Sources.Any(entry => ReferenceEquals(entry, format))
-            && !ReferenceEquals(format, ViewModel.SelectedSource))
+            && ReferenceEquals(FormatView.ItemsSource, ViewModel.QualityMenuSources)
+            && ViewModel.QualityMenuSources.Any(entry => ReferenceEquals(entry, format))
+            && !ReferenceEquals(format, ViewModel.QualityMenuSelection))
             command = format.ActiveCommand;
         else if (item is AudioQualityItemViewModel { IsEnabled: true } quality
             && ReferenceEquals(AudioQualityView.ItemsSource, ViewModel.AudioQualities)
@@ -182,6 +188,9 @@ public sealed partial class IslandFormatButton : PlayerControlBase
         finally
         {
             if (ReferenceEquals(_activating, item)) _activating = null;
+
+            // A pick that changed nothing leaves the list showing what plays, not what was clicked.
+            Synchronize();
         }
     }
 }

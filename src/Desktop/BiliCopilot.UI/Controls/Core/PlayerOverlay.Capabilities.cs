@@ -46,6 +46,20 @@ public sealed partial class PlayerOverlay
     internal static double GetVolumeCeiling(double maxVolume)
         => maxVolume > 0 ? maxVolume : DefaultVolumeCeiling;
 
+    /// <summary>
+    /// The quality menu notes an HDR tier at the end of its row when the name of the tier does not say so, so that
+    /// two tiers of one name can be told apart. Only the tiers of a live room carry a transfer function; the
+    /// entries of an on-demand media always report none and never show the note.
+    /// </summary>
+    internal static Visibility GetHdrNoteVisibility(int eotf, string? name)
+        => eotf > 0 && name?.Contains("HDR", StringComparison.OrdinalIgnoreCase) != true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    /// <summary>A row of the quality menu as it is read out: the note of <see cref="GetHdrNoteVisibility"/> is part of the name.</summary>
+    internal static string GetSourceItemName(int eotf, string? name)
+        => GetHdrNoteVisibility(eotf, name) == Visibility.Visible ? $"{name} HDR" : name ?? string.Empty;
+
     /// <summary>The danmaku of a room is drawn while its picture plays, not while it loads, pauses or has ended.</summary>
     internal static bool IsRoomPlaying(LiveMediaLoadState state)
         => state == LiveMediaLoadState.Ready;

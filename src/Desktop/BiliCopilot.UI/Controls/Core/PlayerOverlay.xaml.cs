@@ -1419,7 +1419,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (!_loaded || ViewModel?.IsControlsVisible != true || ViewModel.IsWindowDeactivated
             || GetCurrentSourceFlyout() is not { } flyout
             || selectedSource?.IsEnabled != true
-            || !ViewModel.Sources.Any(item => ReferenceEquals(item, selectedSource))) return;
+            || !ViewModel.QualityMenuSources.Any(item => ReferenceEquals(item, selectedSource))) return;
         selectedSource?.ActiveCommand.Execute(default);
         flyout.Hide();
     }
