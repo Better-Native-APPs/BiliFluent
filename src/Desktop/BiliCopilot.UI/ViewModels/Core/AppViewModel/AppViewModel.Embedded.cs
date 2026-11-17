@@ -223,7 +223,7 @@ public sealed partial class AppViewModel
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (pendingLive || current is not null && IsSharedLivePlayer(current))
             _ = LiveApplication.RegisterNavigationLiveClose(done.Task); // Captured VM/open; publish before close/cancel callbacks.
-        var close = LiveRouteCoordinator.Invoke(() => BeginEmbeddedCloseAsync(current, request));
+        var close = LiveRouteCoordinator.Invoke(() => LiveCloseDiagnostics.Invoke("navigation", () => BeginEmbeddedCloseAsync(current, request)));
         var pendingClose = LiveRouteCoordinator.Invoke(pending);
         _ = CompleteEmbeddedNavigationCloseAsync(done, close, pendingClose);
         return done.Task;
@@ -235,7 +235,7 @@ public sealed partial class AppViewModel
         ++_embeddedOpenVersion;
         // Replacement already owns its request cancellation. Closing a predecessor must not
         // invalidate the successor or acquire a second application permit.
-        return BeginEmbeddedCloseAsync(EmbeddedPlayer, _embeddedOpenCancellation);
+        return LiveCloseDiagnostics.Invoke("replace", () => BeginEmbeddedCloseAsync(EmbeddedPlayer, _embeddedOpenCancellation));
     }
 
     private static async Task CompleteEmbeddedNavigationCloseAsync(TaskCompletionSource done, Task close, Task pendingClose)
