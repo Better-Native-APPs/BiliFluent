@@ -13,31 +13,102 @@
     xmlns:viewmodels="using:BiliCopilot.UI.ViewModels.View"
     mc:Ignorable="d">
 
-    <Grid>
+    <Grid x:Name="RootGrid">
+        <VisualStateManager.VisualStateGroups>
+            <!--  Two columns need 712 or more (344 form + 2 x 32 gutters + 1 divider + 300 QR column, rounded up).  -->
+            <VisualStateGroup x:Name="ColumnStates">
+                <VisualState x:Name="WideState" />
+                <VisualState x:Name="NarrowFormState">
+                    <VisualState.Setters>
+                        <Setter Target="DividerColumn.Width" Value="0" />
+                        <Setter Target="QRColumn.Width" Value="0" />
+                        <Setter Target="BodyDivider.Visibility" Value="Collapsed" />
+                        <Setter Target="QRHeader.Visibility" Value="Collapsed" />
+                        <Setter Target="QRBody.Visibility" Value="Collapsed" />
+                        <Setter Target="QREntryButton.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowQRState">
+                    <VisualState.Setters>
+                        <Setter Target="DividerColumn.Width" Value="0" />
+                        <Setter Target="QRColumn.Width" Value="0" />
+                        <Setter Target="BodyDivider.Visibility" Value="Collapsed" />
+                        <Setter Target="FormHeader.Visibility" Value="Collapsed" />
+                        <Setter Target="FormBody.Visibility" Value="Collapsed" />
+                        <Setter Target="QRHeader.(Grid.Column)" Value="0" />
+                        <Setter Target="QRBody.(Grid.Column)" Value="0" />
+                        <Setter Target="QRBackButton.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <!--  A window too short for everything gives up the footer and most of the space above the content.  -->
+            <VisualStateGroup x:Name="HeightStates">
+                <VisualState x:Name="RegularState" />
+                <VisualState x:Name="ShortState">
+                    <VisualState.Setters>
+                        <Setter Target="TopSpaceRow.Height" Value="16" />
+                        <Setter Target="FooterBar.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="300" />
-            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <!--  The window's title bar takes the pointer here, so nothing interactive may scroll under it.  -->
+                <RowDefinition Height="32" />
+                <RowDefinition />
+            </Grid.RowDefinitions>
 
-            <!--  The app's own sign-in form: password or SMS, then phone verification when the account asks for it.  -->
+            <Border
+                x:Name="BodyDivider"
+                Grid.RowSpan="2"
+                Width="1"
+                Margin="0,0,300,0"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
             <ScrollViewer
-                Padding="0,36,0,0"
+                x:Name="BodyScroller"
+                Grid.Row="1"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Disabled"
                 VerticalScrollBarVisibility="Auto">
-                <StackPanel
-                    MaxWidth="344"
-                    Margin="32,4,32,16"
-                    VerticalAlignment="Center"
-                    Spacing="12">
-                    <Grid ColumnSpacing="12">
+                <!--
+                    This grid has to stay a plain stretched element: a ScrollViewer positions a child that has a
+                    MaxWidth by its desired width, not its real one, which pushed the form under the edge of its
+                    column. Widths and centering belong to the elements inside.
+
+                    Both columns share the header row and the content row, so the two sides start and end on the
+                    same lines whatever the language does to the text. The space above is fixed and the row below
+                    takes the rest: a message that makes the form taller grows downwards and nothing above it moves.
+                -->
+                <Grid x:Name="BodyGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition x:Name="DividerColumn" Width="1" />
+                        <ColumnDefinition x:Name="QRColumn" Width="300" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition x:Name="TopSpaceRow" Height="40" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition MinHeight="16" />
+                    </Grid.RowDefinitions>
+
+                    <!--  The app's own sign-in form: password or SMS, then phone verification when the account asks for it.  -->
+                    <Grid
+                        x:Name="FormHeader"
+                        Grid.Row="1"
+                        MaxWidth="344"
+                        Margin="32,0"
+                        VerticalAlignment="Top"
+                        ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition />
@@ -63,244 +134,365 @@
                         </StackPanel>
                     </Grid>
 
-                    <!--  Step 1: account and password, or phone number and SMS code  -->
-                    <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.IsCredentialStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <SelectorBar
-                            x:Name="ModeSelector"
-                            Margin="-12,0,0,0"
-                            AutomationProperties.Name="{ext:Locale Name=SignInModeSelectorName}"
-                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                            SelectionChanged="OnModeSelectorSelectionChanged">
-                            <SelectorBarItem
-                                x:Name="PasswordModeItem"
-                                IsSelected="True"
-                                Text="{ext:Locale Name=SignInPasswordTab}" />
-                            <SelectorBarItem x:Name="SmsModeItem" Text="{ext:Locale Name=SignInSmsTab}" />
-                        </SelectorBar>
+                    <Grid
+                        x:Name="FormBody"
+                        Grid.Row="2"
+                        MaxWidth="344"
+                        Margin="32,12,32,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <!--  Room for a one-line message, so showing one moves nothing.  -->
+                            <RowDefinition MinHeight="64" />
+                            <RowDefinition Height="Auto" MinHeight="32" />
+                        </Grid.RowDefinitions>
 
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.IsPasswordFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <TextBox
-                                x:Name="AccountBox"
-                                AutomationProperties.Name="{ext:Locale Name=SignInAccountName}"
-                                InputScope="EmailNameOrAddress"
-                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                IsSpellCheckEnabled="False"
-                                IsTextPredictionEnabled="False"
-                                KeyDown="OnAccountBoxKeyDown"
-                                MaxLength="128"
-                                PlaceholderText="{ext:Locale Name=SignInAccountPlaceholder}"
-                                Text="{x:Bind ViewModel.Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            <PasswordBox
-                                x:Name="PasswordInput"
-                                AutomationProperties.Name="{ext:Locale Name=SignInPasswordPlaceholder}"
-                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                KeyDown="OnPasswordInputKeyDown"
-                                MaxLength="128"
-                                Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
-                                PlaceholderText="{ext:Locale Name=SignInPasswordPlaceholder}" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.IsSmsFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition />
-                                </Grid.ColumnDefinitions>
-                                <ComboBox
-                                    x:Name="CountryBox"
-                                    Width="148"
-                                    AutomationProperties.Name="{ext:Locale Name=SignInCountryName}"
-                                    DropDownOpened="OnCountryBoxDropDownOpened"
-                                    IsEnabled="{x:Bind ViewModel.CanSelectCountry, Mode=OneWay}"
-                                    ItemsSource="{x:Bind ViewModel.Countries}"
-                                    PlaceholderText="{x:Bind ViewModel.CountryPlaceholder, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.SelectedCountry, Mode=OneWay}"
-                                    SelectionChanged="OnCountryBoxSelectionChanged">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="viewmodels:StartupCountryItem">
-                                            <Grid ColumnSpacing="8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{x:Bind DialingCode}" />
-                                                <TextBlock
-                                                    Grid.Column="1"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Text="{x:Bind Name}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBox
-                                    x:Name="PhoneBox"
-                                    Grid.Column="1"
-                                    AutomationProperties.Name="{ext:Locale Name=SignInPhonePlaceholder}"
-                                    InputScope="TelephoneNumber"
+                        <!--
+                            Both steps and both sign-in methods fill the same 124 (selector 44, then two rows of 32
+                            with 8 around them) and end on the same line, so switching between them moves nothing.
+                        -->
+                        <Grid MinHeight="124">
+                            <!--  Step 1: account and password, or phone number and SMS code  -->
+                            <Grid Visibility="{x:Bind ViewModel.IsCredentialStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition />
+                                </Grid.RowDefinitions>
+                                <SelectorBar
+                                    x:Name="ModeSelector"
+                                    Margin="-12,0,0,0"
+                                    AutomationProperties.Name="{ext:Locale Name=SignInModeSelectorName}"
                                     IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                    IsSpellCheckEnabled="False"
-                                    IsTextPredictionEnabled="False"
-                                    KeyDown="OnPhoneBoxKeyDown"
-                                    MaxLength="24"
-                                    PlaceholderText="{ext:Locale Name=SignInPhonePlaceholder}"
-                                    Text="{x:Bind ViewModel.PhoneNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                            </Grid>
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox
-                                    x:Name="SmsCodeBox"
-                                    AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                    InputScope="Number"
-                                    IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                    IsSpellCheckEnabled="False"
-                                    IsTextPredictionEnabled="False"
-                                    KeyDown="OnSmsCodeBoxKeyDown"
-                                    MaxLength="8"
-                                    PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                    Text="{x:Bind ViewModel.SmsCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                <Button
-                                    x:Name="SendSmsCodeButton"
-                                    Grid.Column="1"
-                                    MinWidth="112"
-                                    VerticalAlignment="Stretch"
-                                    Click="OnSendSmsCodeButtonClick"
-                                    Content="{x:Bind ViewModel.SendSmsCodeText, Mode=OneWay}"
-                                    IsEnabled="{x:Bind ViewModel.CanSendSmsCode, Mode=OneWay}" />
-                            </Grid>
-                        </StackPanel>
-                    </StackPanel>
+                                    SelectionChanged="OnModeSelectorSelectionChanged">
+                                    <SelectorBarItem
+                                        x:Name="PasswordModeItem"
+                                        IsSelected="True"
+                                        Text="{ext:Locale Name=SignInPasswordTab}" />
+                                    <SelectorBarItem x:Name="SmsModeItem" Text="{ext:Locale Name=SignInSmsTab}" />
+                                </SelectorBar>
 
-                    <!--  Step 2: the account wants an SMS check before it lets this device in  -->
-                    <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                            Text="{ext:Locale Name=SignInVerificationTitle}" />
-                        <TextBlock
-                            x:Name="VerificationDescriptionBlock"
-                            Margin="0,0,0,4"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{ext:Locale Name=SignInVerificationDescription}"
-                            TextWrapping="Wrap" />
-                        <Grid ColumnSpacing="8">
+                                <StackPanel
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    VerticalAlignment="Bottom"
+                                    Spacing="8"
+                                    Visibility="{x:Bind ViewModel.IsPasswordFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBox
+                                        x:Name="AccountBox"
+                                        AutomationProperties.Name="{ext:Locale Name=SignInAccountName}"
+                                        InputScope="EmailNameOrAddress"
+                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                        IsSpellCheckEnabled="False"
+                                        IsTextPredictionEnabled="False"
+                                        KeyDown="OnAccountBoxKeyDown"
+                                        MaxLength="128"
+                                        PlaceholderText="{ext:Locale Name=SignInAccountPlaceholder}"
+                                        Text="{x:Bind ViewModel.Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <PasswordBox
+                                        x:Name="PasswordInput"
+                                        AutomationProperties.Name="{ext:Locale Name=SignInPasswordPlaceholder}"
+                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                        KeyDown="OnPasswordInputKeyDown"
+                                        MaxLength="128"
+                                        Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
+                                        PlaceholderText="{ext:Locale Name=SignInPasswordPlaceholder}" />
+                                </StackPanel>
+
+                                <StackPanel
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    VerticalAlignment="Bottom"
+                                    Spacing="8"
+                                    Visibility="{x:Bind ViewModel.IsSmsFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox
+                                            x:Name="CountryBox"
+                                            Width="148"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInCountryName}"
+                                            DropDownOpened="OnCountryBoxDropDownOpened"
+                                            IsEnabled="{x:Bind ViewModel.CanSelectCountry, Mode=OneWay}"
+                                            ItemsSource="{x:Bind ViewModel.Countries}"
+                                            PlaceholderText="{x:Bind ViewModel.CountryPlaceholder, Mode=OneWay}"
+                                            SelectedItem="{x:Bind ViewModel.SelectedCountry, Mode=OneWay}"
+                                            SelectionChanged="OnCountryBoxSelectionChanged">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="viewmodels:StartupCountryItem">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{x:Bind DialingCode}" />
+                                                        <TextBlock
+                                                            Grid.Column="1"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{x:Bind Name}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <TextBox
+                                            x:Name="PhoneBox"
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInPhonePlaceholder}"
+                                            InputScope="TelephoneNumber"
+                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                            IsSpellCheckEnabled="False"
+                                            IsTextPredictionEnabled="False"
+                                            KeyDown="OnPhoneBoxKeyDown"
+                                            MaxLength="24"
+                                            PlaceholderText="{ext:Locale Name=SignInPhonePlaceholder}"
+                                            Text="{x:Bind ViewModel.PhoneNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox
+                                            x:Name="SmsCodeBox"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                            InputScope="Number"
+                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                            IsSpellCheckEnabled="False"
+                                            IsTextPredictionEnabled="False"
+                                            KeyDown="OnSmsCodeBoxKeyDown"
+                                            MaxLength="8"
+                                            PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                            Text="{x:Bind ViewModel.SmsCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Button
+                                            x:Name="SendSmsCodeButton"
+                                            Grid.Column="1"
+                                            MinWidth="112"
+                                            VerticalAlignment="Stretch"
+                                            Click="OnSendSmsCodeButtonClick"
+                                            Content="{x:Bind ViewModel.SendSmsCodeText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanSendSmsCode, Mode=OneWay}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <!--  Step 2: the account wants an SMS check before it lets this device in. The code row sits where the second field was.  -->
+                            <Grid Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock
+                                    Margin="0,12,0,0"
+                                    AutomationProperties.HeadingLevel="Level2"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    Text="{ext:Locale Name=SignInVerificationTitle}"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
+                                    x:Name="VerificationDescriptionBlock"
+                                    Grid.Row="1"
+                                    Margin="0,4,0,12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Text="{ext:Locale Name=SignInVerificationDescription}"
+                                    TextWrapping="Wrap" />
+                                <Grid Grid.Row="3" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox
+                                        x:Name="VerificationCodeBox"
+                                        AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                        InputScope="Number"
+                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                        IsSpellCheckEnabled="False"
+                                        IsTextPredictionEnabled="False"
+                                        KeyDown="OnVerificationCodeBoxKeyDown"
+                                        MaxLength="8"
+                                        PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                        Text="{x:Bind ViewModel.VerificationCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button
+                                        x:Name="SendVerificationCodeButton"
+                                        Grid.Column="1"
+                                        MinWidth="112"
+                                        VerticalAlignment="Stretch"
+                                        Click="OnSendVerificationCodeButtonClick"
+                                        Content="{x:Bind ViewModel.SendVerificationCodeText, Mode=OneWay}"
+                                        IsEnabled="{x:Bind ViewModel.CanSendVerificationCode, Mode=OneWay}" />
+                                </Grid>
+                            </Grid>
+                        </Grid>
+
+                        <Grid
+                            Grid.Row="1"
+                            Margin="0,16,0,0"
+                            ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox
-                                x:Name="VerificationCodeBox"
-                                AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                InputScope="Number"
-                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                IsSpellCheckEnabled="False"
-                                IsTextPredictionEnabled="False"
-                                KeyDown="OnVerificationCodeBoxKeyDown"
-                                MaxLength="8"
-                                PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                Text="{x:Bind ViewModel.VerificationCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                             <Button
-                                x:Name="SendVerificationCodeButton"
+                                x:Name="PasswordSignInButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnPasswordSignInButtonClick"
+                                Content="{ext:Locale Name=SignInButton}"
+                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Visibility="{x:Bind ViewModel.IsPasswordFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <Button
+                                x:Name="SmsSignInButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnSmsSignInButtonClick"
+                                Content="{ext:Locale Name=SignInButton}"
+                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Visibility="{x:Bind ViewModel.IsSmsFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <Button
+                                x:Name="VerificationSubmitButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnVerificationSubmitButtonClick"
+                                Content="{ext:Locale Name=SignInVerificationSubmit}"
+                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <Button
+                                x:Name="CancelSignInButton"
                                 Grid.Column="1"
-                                MinWidth="112"
-                                VerticalAlignment="Stretch"
-                                Click="OnSendVerificationCodeButtonClick"
-                                Content="{x:Bind ViewModel.SendVerificationCodeText, Mode=OneWay}"
-                                IsEnabled="{x:Bind ViewModel.CanSendVerificationCode, Mode=OneWay}" />
+                                MinWidth="80"
+                                Click="OnCancelSignInButtonClick"
+                                Content="{ext:Locale Name=SignInCancel}"
+                                Visibility="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                         </Grid>
-                    </StackPanel>
 
-                    <!--  What is happening right now, or what went wrong  -->
-                    <Grid
-                        x:Name="SignInStatusPanel"
-                        MinHeight="32"
-                        ColumnSpacing="12"
-                        Visibility="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition />
-                        </Grid.ColumnDefinitions>
-                        <ProgressRing
-                            Width="20"
-                            Height="20"
-                            VerticalAlignment="Center"
-                            AutomationProperties.AccessibilityView="Raw"
-                            IsActive="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay}" />
-                        <TextBlock
-                            x:Name="SignInStatusBlock"
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{x:Bind ViewModel.SignInStatus, Mode=OneWay}"
-                            TextWrapping="Wrap" />
-                    </Grid>
-                    <InfoBar
-                        x:Name="SignInMessageBar"
-                        IsClosable="False"
-                        IsOpen="{x:Bind ViewModel.IsSignInMessageOpen, Mode=OneWay}"
-                        Message="{x:Bind ViewModel.SignInMessage, Mode=OneWay}"
-                        Severity="{x:Bind ViewModel.SignInMessageSeverity, Mode=OneWay}">
-                        <InfoBar.ActionButton>
+                        <!--  Only in the single-column layout, where the QR code is one step away instead of alongside.  -->
+                        <Button
+                            x:Name="QREntryButton"
+                            Grid.Row="2"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Stretch"
+                            Click="OnQREntryButtonClick"
+                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ic:SymbolIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="16"
+                                    Symbol="QrCode" />
+                                <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=SignInQRCodeTitle}" />
+                            </StackPanel>
+                        </Button>
+
+                        <!--
+                            What is happening right now, or what went wrong. It sits below the button, so the fields
+                            and the button never move; a longer message only pushes the links underneath it down.
+                        -->
+                        <Grid
+                            Grid.Row="3"
+                            Margin="0,12,0,4"
+                            VerticalAlignment="Top">
+                            <!--  Same height and text position as a one-line message  -->
+                            <Grid
+                                x:Name="SignInStatusPanel"
+                                MinHeight="48"
+                                Padding="14,0,0,0"
+                                ColumnSpacing="12"
+                                Visibility="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <ProgressRing
+                                    Width="20"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    IsActive="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay}" />
+                                <TextBlock
+                                    x:Name="SignInStatusBlock"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Text="{x:Bind ViewModel.SignInStatus, Mode=OneWay}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                            <InfoBar
+                                x:Name="SignInMessageBar"
+                                IsClosable="False"
+                                IsOpen="{x:Bind ViewModel.IsSignInMessageOpen, Mode=OneWay}"
+                                Message="{x:Bind ViewModel.SignInMessage, Mode=OneWay}"
+                                Severity="{x:Bind ViewModel.SignInMessageSeverity, Mode=OneWay}">
+                                <InfoBar.ActionButton>
+                                    <HyperlinkButton
+                                        Click="OnSignInMessageActionClick"
+                                        Content="{x:Bind ViewModel.SignInMessageActionText, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.HasSignInMessageAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                        </Grid>
+
+                        <!--  Ways out: back to the first step, or the web page as a last resort. The negative margin lines the link text up with the form.  -->
+                        <Grid
+                            x:Name="SignInLinksPanel"
+                            Grid.Row="4"
+                            Margin="-12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
                             <HyperlinkButton
-                                Click="OnSignInMessageActionClick"
-                                Content="{x:Bind ViewModel.SignInMessageActionText, Mode=OneWay}"
-                                Visibility="{x:Bind ViewModel.HasSignInMessageAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        </InfoBar.ActionButton>
-                    </InfoBar>
-
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Button
-                            x:Name="PasswordSignInButton"
-                            HorizontalAlignment="Stretch"
-                            Click="OnPasswordSignInButtonClick"
-                            Content="{ext:Locale Name=SignInButton}"
-                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Visibility="{x:Bind ViewModel.IsPasswordFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <Button
-                            x:Name="SmsSignInButton"
-                            HorizontalAlignment="Stretch"
-                            Click="OnSmsSignInButtonClick"
-                            Content="{ext:Locale Name=SignInButton}"
-                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Visibility="{x:Bind ViewModel.IsSmsFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <Button
-                            x:Name="VerificationSubmitButton"
-                            HorizontalAlignment="Stretch"
-                            Click="OnVerificationSubmitButtonClick"
-                            Content="{ext:Locale Name=SignInVerificationSubmit}"
-                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <Button
-                            x:Name="CancelSignInButton"
-                            Grid.Column="1"
-                            MinWidth="80"
-                            Click="OnCancelSignInButtonClick"
-                            Content="{ext:Locale Name=SignInCancel}"
-                            Visibility="{x:Bind ViewModel.IsSignInBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                x:Name="LeaveVerificationButton"
+                                Click="OnLeaveVerificationButtonClick"
+                                Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <ic:SymbolIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Symbol="ChevronLeft" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Text="{ext:Locale Name=SignInBack}" />
+                                </StackPanel>
+                            </HyperlinkButton>
+                            <TextBlock
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{ext:Locale Name=SignInTroubleTip}"
+                                Visibility="{x:Bind ViewModel.IsCredentialStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <HyperlinkButton
+                                x:Name="WebSignInButton"
+                                Grid.Column="1"
+                                HorizontalAlignment="Left"
+                                Click="OnWebSignInButtonClick">
+                                <TextBlock
+                                    FontSize="12"
+                                    Text="{ext:Locale Name=SignInWebFallback}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </HyperlinkButton>
+                        </Grid>
                     </Grid>
 
-                    <!--  Ways out: back to the first step, or the web page as a last resort  -->
-                    <Grid Margin="-12,-4,-12,0" ColumnSpacing="4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition />
-                        </Grid.ColumnDefinitions>
+                    <!--  QR code sign-in keeps running next to the form. Title and hint are as tall as the app name block (40).  -->
+                    <StackPanel
+                        x:Name="QRHeader"
+                        Grid.Row="1"
+                        Grid.Column="2"
+                        MaxWidth="240"
+                        Margin="30,0"
+                        VerticalAlignment="Top">
                         <HyperlinkButton
-                            x:Name="LeaveVerificationButton"
-                            Click="OnLeaveVerificationButtonClick"
-                            Visibility="{x:Bind ViewModel.IsVerificationStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            x:Name="QRBackButton"
+                            Margin="-12,0,0,8"
+                            Click="OnQRBackButtonClick"
+                            Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <ic:SymbolIcon
                                     VerticalAlignment="Center"
@@ -313,73 +505,80 @@
                             </StackPanel>
                         </HyperlinkButton>
                         <TextBlock
-                            Margin="12,0,0,0"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            HorizontalAlignment="Center"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            Text="{ext:Locale Name=SignInQRCodeTitle}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            x:Name="TipBlock"
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{ext:Locale Name=SignInTroubleTip}"
-                            TextTrimming="CharacterEllipsis"
-                            Visibility="{x:Bind ViewModel.IsCredentialStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <HyperlinkButton
-                            x:Name="WebSignInButton"
-                            Grid.Column="1"
-                            HorizontalAlignment="Left"
-                            Click="OnWebSignInButtonClick">
-                            <TextBlock FontSize="12" Text="{ext:Locale Name=SignInWebFallback}" />
-                        </HyperlinkButton>
-                    </Grid>
-                </StackPanel>
-            </ScrollViewer>
+                            Text="{ext:Locale Name=QRLoginTip}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
 
-            <Border
-                Grid.Column="1"
-                Width="1"
-                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
-            <!--  QR code sign-in keeps running next to the form  -->
-            <ScrollViewer
-                Grid.Column="2"
-                Padding="0,36,0,0"
-                HorizontalScrollBarVisibility="Disabled"
-                HorizontalScrollMode="Disabled"
-                VerticalScrollBarVisibility="Auto">
-                <StackPanel
-                    Margin="24,4,24,12"
-                    VerticalAlignment="Center"
-                    Spacing="8">
-                    <TextBlock
+                    <StackPanel
+                        x:Name="QRBody"
+                        Grid.Row="2"
+                        Grid.Column="2"
+                        Width="240"
+                        Margin="30,12,30,0"
                         HorizontalAlignment="Center"
-                        AutomationProperties.HeadingLevel="Level2"
-                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{ext:Locale Name=SignInQRCodeTitle}"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        x:Name="TipBlock"
-                        Margin="0,0,0,4"
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="{ext:Locale Name=QRLoginTip}"
-                        TextAlignment="Center"
-                        TextWrapping="Wrap" />
-                    <Grid
-                        x:Name="QRLoginContainer"
-                        Width="220"
-                        HorizontalAlignment="Center"
-                        RowSpacing="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid CornerRadius="{StaticResource ControlCornerRadius}">
-                            <Image
-                                x:Name="QRCodeImage"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                AutomationProperties.Name="{ext:Locale Name=SignInQRCodeImageName}"
-                                Stretch="Uniform"
-                                Visibility="{x:Bind ViewModel.IsQRCodeLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                        VerticalAlignment="Top">
+                        <Grid
+                            x:Name="QRLoginContainer"
+                            Width="240"
+                            Height="240">
+                            <Grid CornerRadius="{StaticResource ControlCornerRadius}">
+                                <Image
+                                    x:Name="QRCodeImage"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    AutomationProperties.Name="{ext:Locale Name=SignInQRCodeImageName}"
+                                    Stretch="Uniform"
+                                    Visibility="{x:Bind ViewModel.IsQRCodeLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                                    <animations:Implicit.ShowAnimations>
+                                        <animations:OpacityAnimation
+                                            From="0.0"
+                                            To="1.0"
+                                            Duration="0:0:0.4" />
+                                    </animations:Implicit.ShowAnimations>
+                                    <animations:Implicit.HideAnimations>
+                                        <animations:OpacityAnimation
+                                            From="1.0"
+                                            To="0.0"
+                                            Duration="0:0:0.4" />
+                                    </animations:Implicit.HideAnimations>
+                                </Image>
+                            </Grid>
+                            <Grid
+                                x:Name="QRMaskContainer"
+                                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                CornerRadius="{ThemeResource ControlCornerRadius}"
+                                Visibility="{x:Bind ViewModel.ErrorTip, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                                    <ic:SymbolIcon
+                                        HorizontalAlignment="Center"
+                                        FontSize="28"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Symbol="Warning" />
+                                    <TextBlock
+                                        x:Name="QRTipBlock"
+                                        MaxWidth="208"
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource BodyTextBlockStyle}"
+                                        Text="{ext:Locale Name=SignInQRCodeUnavailable}"
+                                        TextAlignment="Center"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
                                 <animations:Implicit.ShowAnimations>
                                     <animations:OpacityAnimation
                                         From="0.0"
@@ -392,66 +591,31 @@
                                         To="0.0"
                                         Duration="0:0:0.4" />
                                 </animations:Implicit.HideAnimations>
-                            </Image>
-                        </Grid>
-                        <Grid
-                            x:Name="QRMaskContainer"
-                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                            CornerRadius="{ThemeResource ControlCornerRadius}"
-                            Visibility="{x:Bind ViewModel.ErrorTip, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
-                            <StackPanel
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Spacing="8">
-                                <ic:SymbolIcon
-                                    HorizontalAlignment="Center"
-                                    FontSize="28"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Symbol="Warning" />
-                                <TextBlock
-                                    x:Name="QRTipBlock"
-                                    MaxWidth="188"
-                                    HorizontalAlignment="Center"
-                                    Style="{StaticResource BodyTextBlockStyle}"
-                                    Text="{ext:Locale Name=SignInQRCodeUnavailable}"
-                                    TextAlignment="Center"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <animations:Implicit.ShowAnimations>
-                                <animations:OpacityAnimation
-                                    From="0.0"
-                                    To="1.0"
-                                    Duration="0:0:0.4" />
-                            </animations:Implicit.ShowAnimations>
-                            <animations:Implicit.HideAnimations>
-                                <animations:OpacityAnimation
-                                    From="1.0"
-                                    To="0.0"
-                                    Duration="0:0:0.4" />
-                            </animations:Implicit.HideAnimations>
-                        </Grid>
+                            </Grid>
 
-                        <base:Shimmer
-                            x:Name="QRLoadingShimmer"
-                            Width="220"
-                            Height="220"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center"
-                            CornerRadius="{StaticResource ControlCornerRadius}"
-                            IsActive="{x:Bind ViewModel.IsQRCodeLoading, Mode=OneWay}" />
+                            <base:Shimmer
+                                x:Name="QRLoadingShimmer"
+                                Width="240"
+                                Height="240"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                IsActive="{x:Bind ViewModel.IsQRCodeLoading, Mode=OneWay}" />
+                        </Grid>
                         <HyperlinkButton
                             x:Name="RefreshQRButton"
-                            Grid.Row="1"
-                            HorizontalAlignment="Stretch"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Center"
                             Click="OnRefreshQRButtonClick"
                             Content="{ext:Locale Name=SignInRefreshQRCode}"
                             IsEnabled="{x:Bind ViewModel.IsQRCodeLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}" />
-                    </Grid>
-                </StackPanel>
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
         </Grid>
 
         <Grid
+            x:Name="FooterBar"
             Grid.Row="1"
             Padding="28,16"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -465,7 +629,8 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Center"
                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                Style="{StaticResource CaptionTextBlockStyle}">
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis">
                 <Run Text="{ext:Locale Name=Version}" />
                 <Run Text=":" />
                 <Run Text="{x:Bind ViewModel.Version, Mode=OneWay}" />

@@ -16,6 +16,14 @@ namespace BiliCopilot.UI.Forms;
 /// </summary>
 public sealed partial class StartupWindow : WindowEx
 {
+    // Sizes are in effective pixels and cover the whole window. The default gives the two-column sign-in page
+    // room for a message that wraps below the form; the page scrolls when something still does not fit, and it
+    // copes with anything down to the smallest size.
+    private const double DefaultWidth = 760;
+    private const double DefaultHeight = 560;
+    private const double SmallestWidth = 360;
+    private const double SmallestHeight = 300;
+
     private bool _isFirstActivated = true;
 
     /// <summary>
@@ -29,8 +37,12 @@ public sealed partial class StartupWindow : WindowEx
         IsResizable = false;
         AppWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
 
-        Width = 760;
-        Height = 500;
+        // A compact overlay has no resize border, so the size chosen here is the one the page keeps.
+        MinWidth = SmallestWidth;
+        MinHeight = SmallestHeight;
+        var (width, height) = GetInitialSize();
+        Width = width;
+        Height = height;
 
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
 
@@ -43,6 +55,22 @@ public sealed partial class StartupWindow : WindowEx
 
         Activated += OnActivated;
         Closed += OnClosed;
+    }
+
+    // The default size, or as much of it as the work area of this display has room for (small or heavily
+    // scaled screens). The page switches to a single column when it gets less width than two columns need.
+    private (double Width, double Height) GetInitialSize()
+    {
+        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest)?.WorkArea;
+        var scale = this.GetDpiForWindow() / 96d;
+        if (area is not { } bounds || scale <= 0)
+        {
+            return (DefaultWidth, DefaultHeight);
+        }
+
+        return (
+            Math.Clamp(bounds.Width / scale, SmallestWidth, DefaultWidth),
+            Math.Clamp(bounds.Height / scale, SmallestHeight, DefaultHeight));
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
