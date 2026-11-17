@@ -9,20 +9,23 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <!--
+        Every conversation row has the same height, set by the avatar: 36 plus 8 above and below. The name takes
+        one line (20) and the preview takes one line (16), which together match the avatar. The preview keeps its
+        line when it is empty, and line breaks in the message are flattened before display.
+        These are minimum sizes, so a larger system text size makes all rows grow together instead of clipping.
+        The 6px padding leaves 4px of slack inside the 52px minimum, so a fallback font or the unread badge that
+        is a pixel taller does not change the row height.
+    -->
     <Grid
-        Padding="0,8"
-        ColumnSpacing="12"
-        RowSpacing="4">
+        MinHeight="52"
+        Padding="0,6"
+        ColumnSpacing="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
         <Button
-            Grid.RowSpan="2"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Command="{x:Bind ViewModel.ShowUserSpaceCommand, Mode=OneWay}"
@@ -41,50 +44,56 @@
             </Grid>
         </Button>
 
-        <Grid
-            Grid.Column="1"
-            HorizontalAlignment="Stretch"
-            ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-                x:Name="UserNameBlock"
-                Text="{x:Bind ViewModel.UserName, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis"
-                TextWrapping="NoWrap">
-                <ToolTipService.ToolTip>
-                    <ToolTip Content="{x:Bind ViewModel.UserName, Mode=OneWay}" IsEnabled="{x:Bind UserNameBlock.IsTextTrimmed, Mode=OneWay}" />
-                </ToolTipService.ToolTip>
-            </TextBlock>
-            <TextBlock
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                Style="{StaticResource CaptionTextBlockStyle}"
-                Text="{x:Bind ViewModel.LastMessageTime, Mode=OneWay}" />
-        </Grid>
+        <Grid Grid.Column="1" VerticalAlignment="Center">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" MinHeight="20" />
+                <RowDefinition Height="Auto" MinHeight="16" />
+            </Grid.RowDefinitions>
+            <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="UserNameBlock"
+                    VerticalAlignment="Center"
+                    MaxLines="1"
+                    Text="{x:Bind ViewModel.UserName, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap">
+                    <ToolTipService.ToolTip>
+                        <ToolTip Content="{x:Bind ViewModel.UserName, Mode=OneWay}" IsEnabled="{x:Bind UserNameBlock.IsTextTrimmed, Mode=OneWay}" />
+                    </ToolTipService.ToolTip>
+                </TextBlock>
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    MaxLines="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind ViewModel.LastMessageTime, Mode=OneWay}"
+                    TextWrapping="NoWrap" />
+            </Grid>
 
-        <Grid
-            Grid.Row="1"
-            Grid.Column="1"
-            ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-                FontSize="12"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                Text="{x:Bind ViewModel.LastMessage, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis"
-                TextWrapping="NoWrap" />
-            <InfoBadge
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Value="{x:Bind ViewModel.UnreadCount, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.UnreadCount, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+            <Grid Grid.Row="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    MaxLines="1"
+                    Text="{x:Bind local:ChatSessionSideItem.ToSingleLine(ViewModel.LastMessage), Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <InfoBadge
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Value="{x:Bind ViewModel.UnreadCount, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.UnreadCount, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+            </Grid>
         </Grid>
     </Grid>
 </local:ChatMessageControlBase>
