@@ -23,9 +23,9 @@ public sealed partial class StartupPage : StartupPageBase
     // The form at its full width (344) with a 32 gutter on each side, the divider and the QR column (300).
     private const double TwoColumnMinWidth = 712;
 
-    // Title bar zone (32), space above (40), the content at its tallest resting height (348), space below (16)
+    // Title bar zone (32), space above (40), the content at its tallest resting height (364), space below (16)
     // and the footer (69), rounded up.
-    private const double RegularMinHeight = 506;
+    private const double RegularMinHeight = 522;
 
     // Digits typed on the country list within this time of each other are read as one dialing code.
     private const long CountrySearchTimeout = 1000;
@@ -35,6 +35,9 @@ public sealed partial class StartupPage : StartupPageBase
 
     private string _countrySearch = string.Empty;
     private long _countrySearchTime;
+
+    // The field an input method is putting text together in. Its text is left alone until that is done.
+    private TextBox? _composingBox;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StartupPage"/> class.
@@ -83,6 +86,71 @@ public sealed partial class StartupPage : StartupPageBase
             isImportant ? AutomationNotificationProcessing.ImportantMostRecent : AutomationNotificationProcessing.MostRecent,
             text,
             NoticeActivity);
+    }
+
+    // Full-width digits are what an input method in full-width mode types; they mean the plain ones.
+    private static char ToDigit(char ch)
+        => ch switch
+        {
+            >= '0' and <= '9' => ch,
+            >= '\uFF10' and <= '\uFF19' => (char)(ch - '\uFF10' + '0'),
+            _ => '\0',
+        };
+
+    // Runs on every change of the text, typed, pasted or dropped, before it is shown. Whatever does not belong
+    // in the box is taken out again, which leaves the caret where the user had it.
+    private static void RestrictText(TextBox box, Func<char, char> convert, int maxLength, string? prefix = null)
+    {
+        var text = box.Text;
+        var caret = Math.Min(box.SelectionStart, text.Length);
+        var kept = new System.Text.StringBuilder(text.Length);
+        var keptCaret = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (i == caret)
+            {
+                keptCaret = kept.Length;
+            }
+
+            var ch = convert(text[i]);
+            if (ch != '\0')
+            {
+                kept.Append(ch);
+            }
+        }
+
+        if (caret == text.Length)
+        {
+            keptCaret = kept.Length;
+        }
+
+        var result = kept.ToString();
+
+        // A number copied in its international form starts with the code that the region box already shows.
+        if (prefix is { Length: > 0 } && text.TrimStart().StartsWith('+') && result.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            result = result[prefix.Length..];
+            keptCaret = Math.Max(0, keptCaret - prefix.Length);
+        }
+
+        if (result.Length > maxLength)
+        {
+            // What was just put in ends at the caret. Too much of it goes from there, so what the box held
+            // before stays as it was: a full box takes nothing more, and a long paste loses its end.
+            var cut = Math.Min(result.Length - maxLength, keptCaret);
+            result = result.Remove(keptCaret - cut, cut);
+            keptCaret -= cut;
+            if (result.Length > maxLength)
+            {
+                result = result[..maxLength];
+            }
+        }
+
+        if (!string.Equals(result, text, StringComparison.Ordinal))
+        {
+            box.Text = result;
+            box.SelectionStart = keptCaret;
+        }
     }
 
     private void DetachViewModel()
@@ -166,6 +234,20 @@ public sealed partial class StartupPage : StartupPageBase
         else if (e.PropertyName == nameof(ViewModel.ErrorTip) && !string.IsNullOrEmpty(ViewModel.ErrorTip))
         {
             Announce(AppNameBlock, QRTipBlock.Text, isImportant: true);
+        }
+        else
+        {
+            // What is wrong with a field appears under it without the focus going there.
+            var fieldError = e.PropertyName switch
+            {
+                nameof(ViewModel.AccountError) => ViewModel.AccountError,
+                nameof(ViewModel.PasswordError) => ViewModel.PasswordError,
+                nameof(ViewModel.PhoneNumberError) => ViewModel.PhoneNumberError,
+                nameof(ViewModel.SmsCodeError) => ViewModel.SmsCodeError,
+                nameof(ViewModel.VerificationCodeError) => ViewModel.VerificationCodeError,
+                _ => string.Empty,
+            };
+            Announce(AppNameBlock, fieldError, isImportant: true);
         }
     }
 
@@ -272,6 +354,53 @@ public sealed partial class StartupPage : StartupPageBase
 
     private StartupCountryItem? FindCountry(string dialingDigits)
         => ViewModel.Countries.FirstOrDefault(p => p.DialingDigits.StartsWith(dialingDigits, StringComparison.Ordinal));
+
+    // Keep a field to what it can hold: no spaces in an account (the official page takes them out as well),
+    // digits only in a phone number and in a code.
+    private void RestrictField(TextBox box)
+    {
+        // Changing the text under an input method breaks what it is putting together.
+        if (ReferenceEquals(box, _composingBox) && box.FocusState != FocusState.Unfocused)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(box, AccountBox))
+        {
+            RestrictText(box, ch => char.IsWhiteSpace(ch) ? '\0' : ch, box.MaxLength);
+        }
+        else if (ReferenceEquals(box, PhoneBox))
+        {
+            RestrictText(box, ToDigit, StartupPageViewModel.PhoneNumberMaxLength, ViewModel.SelectedCountry?.DialingDigits);
+        }
+        else
+        {
+            RestrictText(box, ToDigit, StartupPageViewModel.SmsCodeMaxLength);
+        }
+    }
+
+    private void OnFieldTextChanging(TextBox sender, TextBoxTextChangingEventArgs args)
+        => RestrictField(sender);
+
+    private void OnFieldCompositionStarted(TextBox sender, TextCompositionStartedEventArgs args)
+        => _composingBox = sender;
+
+    private void OnFieldCompositionEnded(TextBox sender, TextCompositionEndedEventArgs args)
+    {
+        _composingBox = null;
+
+        // What was put together may only reach the text after this.
+        DispatcherQueue.TryEnqueue(() => RestrictField(sender));
+    }
+
+    private void OnAccountBoxLostFocus(object sender, RoutedEventArgs e)
+        => ViewModel.CheckFieldOnLeave(StartupSignInField.Account);
+
+    private void OnPhoneBoxLostFocus(object sender, RoutedEventArgs e)
+        => ViewModel.CheckFieldOnLeave(StartupSignInField.PhoneNumber);
+
+    private void OnSmsCodeBoxLostFocus(object sender, RoutedEventArgs e)
+        => ViewModel.CheckFieldOnLeave(StartupSignInField.SmsCode);
 
     private void OnAccountBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {

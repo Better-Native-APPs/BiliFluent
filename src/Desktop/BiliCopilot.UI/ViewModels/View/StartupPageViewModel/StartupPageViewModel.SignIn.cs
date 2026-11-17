@@ -35,6 +35,7 @@ public sealed partial class StartupPageViewModel
         PhoneNumber = string.Empty;
         SmsCode = string.Empty;
         VerificationCode = string.Empty;
+        ClearFieldErrors();
     }
 
     /// <summary>
@@ -96,17 +97,8 @@ public sealed partial class StartupPageViewModel
 
         var account = Account.Trim();
         var password = Password;
-        if (account.Length == 0)
+        if (!CheckPasswordForm())
         {
-            ShowSignInMessage(StringNames.SignInAccountRequired, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.Account);
-            return;
-        }
-
-        if (password.Length == 0)
-        {
-            ShowSignInMessage(StringNames.SignInPasswordRequired, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.Password);
             return;
         }
 
@@ -345,10 +337,8 @@ public sealed partial class StartupPageViewModel
             return;
         }
 
-        if (code.Length == 0)
+        if (!ReportFieldError(StartupSignInField.SmsCode, CheckSmsCode(code)))
         {
-            ShowSignInMessage(StringNames.SignInSmsCodeRequired, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.SmsCode);
             return;
         }
 
@@ -468,10 +458,8 @@ public sealed partial class StartupPageViewModel
         }
 
         var code = VerificationCode.Trim();
-        if (code.Length == 0)
+        if (!ReportFieldError(StartupSignInField.VerificationCode, CheckVerificationCode(code)))
         {
-            ShowSignInMessage(StringNames.SignInSmsCodeRequired, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.VerificationCode);
             return;
         }
 
@@ -581,6 +569,7 @@ public sealed partial class StartupPageViewModel
         ClearSignInMessage();
         Password = string.Empty;
         SmsCode = string.Empty;
+        ClearFieldErrors();
         if (value && _isPageActive)
         {
             LoadCountriesCommand.Execute(default);
@@ -819,23 +808,8 @@ public sealed partial class StartupPageViewModel
 
     private bool TryReadPhoneNumber(out string phoneNumber)
     {
-        // Spaces and dashes are how people group digits; the service wants digits only.
-        phoneNumber = new string(PhoneNumber.Where(ch => !char.IsWhiteSpace(ch) && ch != '-').ToArray());
-        if (phoneNumber.Length == 0)
-        {
-            ShowSignInMessage(StringNames.SignInPhoneRequired, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.PhoneNumber);
-            return false;
-        }
-
-        if (phoneNumber.Length > 20 || !phoneNumber.All(char.IsAsciiDigit))
-        {
-            ShowSignInMessage(StringNames.SignInErrorInvalidPhoneNumber, InfoBarSeverity.Warning);
-            SignInFocusRequested?.Invoke(this, StartupSignInField.PhoneNumber);
-            return false;
-        }
-
-        return true;
+        phoneNumber = CleanPhoneNumber(PhoneNumber);
+        return ReportFieldError(StartupSignInField.PhoneNumber, CheckPhoneNumber(phoneNumber, SelectedCountry));
     }
 
     private void StartCooldown(ref long deadline)
