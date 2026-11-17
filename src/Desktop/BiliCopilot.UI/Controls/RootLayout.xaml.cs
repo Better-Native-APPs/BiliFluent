@@ -273,7 +273,8 @@ public sealed partial class RootLayout : RootLayoutBase
         var navigation = _navigationOwner;
         _navigationChanged = (source, args) =>
         {
-            if (ReferenceEquals(source, navigation) && args.PropertyName is nameof(NavigationViewModel.IsOverlayOpen) or nameof(NavigationViewModel.IsTopNavBarShown))
+            if (ReferenceEquals(source, navigation) && args.PropertyName is nameof(NavigationViewModel.IsOverlayOpen)
+                or nameof(NavigationViewModel.IsTopNavBarShown) or nameof(NavigationViewModel.CanGoBack))
                 QueueScopeUpdate(scope, () =>
                 {
                     if (ReferenceEquals(navigation, ViewModel)) ApplyTitleBarChrome();
@@ -428,9 +429,8 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private void UpdateChromeBackButtonVisibility()
     {
-        ChromeBackButton.Visibility = ViewModel.IsOverlayOpen || _embeddedViewModel is not null
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ChromeBackButton.Visibility = Visibility.Visible;
+        ChromeBackButton.IsEnabled = ViewModel.CanGoBack;
         _chromeRegions.Request();
     }
 
@@ -734,26 +734,9 @@ public sealed partial class RootLayout : RootLayoutBase
         context?.NavigateCommand.Execute(default);
     }
 
-    private async void OnBackRequested(object sender, RoutedEventArgs e)
+    private void OnBackRequested(object sender, RoutedEventArgs e)
     {
         if (!_stateLoaded || !IsLoaded) return;
-        var owner = _embeddedViewModel;
-        // 主标题栏只在常规呈现下可见；若旧状态仍停在非常规呈现，返回只恢复默认呈现，不关闭播放.
-        if (owner is not null && owner.Presentation != PlayerPresentationMode.Normal)
-        {
-            var command = owner.BackToDefaultModeCommand;
-            if (!command.CanExecute(default)) return;
-            var scope = _scopeEpoch;
-            try { await command.ExecuteAsync(default); }
-            catch (Exception ex)
-            {
-                this.Get<ILogger<RootLayout>>().LogError(ex, "返回默认播放呈现失败");
-                if (IsCurrentScope(scope) && ReferenceEquals(owner, _embeddedViewModel))
-                    _appViewModel.ShowTipCommand.Execute((ex.Message, InfoType.Error));
-            }
-            return;
-        }
-
         ViewModel.Back();
     }
 

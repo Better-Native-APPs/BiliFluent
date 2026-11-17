@@ -9,6 +9,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.Graphics;
@@ -36,6 +37,9 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     private bool _handlersUnregistered;
     private bool _windowStatsSaved;
     private bool _isTerminalClosePermitted;
+    private InputKeyboardSource? _keyboardSource;
+    private UIElement? _embeddedNavigationRoot;
+    private PlayerViewModel? _embeddedNavigationOwner;
 
     internal bool IsCurrentEmbeddedHost(MainPlayerHost host, PlayerViewModel? expectedOwner = null)
     {
@@ -106,6 +110,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
         _windowStatsTimer.Tick += OnWindowStatsTimerTick;
         RootLayout.SetEmbeddedPlayerRenderingSuspensionFactory(SuspendEmbeddedPlayerRendering);
         RootLayout.ActiveTitleBarChanged += OnActiveTitleBarChanged;
+        RootLayout.PreviewKeyDown += OnNavigationKeyDown;
         ApplyActiveTitleBar();
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
         this.SetIcon("Assets/logo.ico");
@@ -198,6 +203,10 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
         _windowStatsTimer.Stop();
         _windowStatsTimer.Tick -= OnWindowStatsTimerTick;
         this.Get<AppViewModel>().PlaybackActivityChanged -= OnPlaybackActivityChanged;
+        RootLayout.PreviewKeyDown -= OnNavigationKeyDown;
+        if (_keyboardSource is not null) _keyboardSource.KeyUp -= OnWindowKeyUp;
+        _keyboardSource = null;
+        if (_embeddedNavigationOwner is { } player) DetachEmbeddedNavigationInput(player);
         SetEfficiencyMode(false);
         Activated -= OnActivated;
         Closed -= OnClosed;
@@ -438,23 +447,108 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+        => HandleNavigationPointer((UIElement)sender, e);
+
+    private void HandleNavigationPointer(UIElement root, PointerRoutedEventArgs e)
     {
-        var point = e.GetCurrentPoint((UIElement)sender);
+        var point = e.GetCurrentPoint(root);
         if (point.Properties.IsXButton1Pressed || point.Properties.IsXButton2Pressed)
         {
             e.Handled = true;
             var app = this.Get<AppViewModel>();
-            if (RootLayout.ViewModel.IsOverlayOpen || app.HasEmbeddedWork || app.HasLiveWork)
+            var navigation = RootLayout.ViewModel;
+            if (navigation.CanGoBack || navigation.CanGoForward || !navigation.LastNavigationTask.IsCompleted
+                || app.HasEmbeddedWork || app.HasLiveWork)
             {
-                RootLayout.ViewModel.Back();
+                if (point.Properties.IsXButton1Pressed) navigation.Back();
+                else navigation.Forward();
             }
         }
+    }
+
+    // The shared player is a separate island; its events never bubble through RootLayout.
+    internal void AttachEmbeddedNavigationInput(PlayerViewModel player)
+    {
+        if (player.Window is not MainPlayerHost host || !IsCurrentEmbeddedHost(host, player)
+            || host.XamlRoot?.Content is not UIElement root) return;
+        if (ReferenceEquals(_embeddedNavigationOwner, player) && ReferenceEquals(_embeddedNavigationRoot, root)) return;
+        if (_embeddedNavigationOwner is { } previous) DetachEmbeddedNavigationInput(previous);
+        _embeddedNavigationOwner = player;
+        _embeddedNavigationRoot = root;
+        root.PreviewKeyDown += OnEmbeddedNavigationKeyDown;
+        root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnEmbeddedNavigationPointerPressed), true);
+    }
+
+    internal void DetachEmbeddedNavigationInput(PlayerViewModel expectedPlayer)
+    {
+        if (!ReferenceEquals(_embeddedNavigationOwner, expectedPlayer)) return;
+        if (_embeddedNavigationRoot is { } root)
+        {
+            root.PreviewKeyDown -= OnEmbeddedNavigationKeyDown;
+            root.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnEmbeddedNavigationPointerPressed));
+        }
+        _embeddedNavigationOwner = null;
+        _embeddedNavigationRoot = null;
+    }
+
+    private bool IsEmbeddedNavigationCurrent(object sender)
+        => ReferenceEquals(sender, _embeddedNavigationRoot) && _embeddedNavigationOwner is { Window: MainPlayerHost host } player
+            && IsCurrentEmbeddedHost(host, player);
+
+    private void OnEmbeddedNavigationPointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationPointer((UIElement)sender, args);
+    }
+
+    private void OnEmbeddedNavigationKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationKey((UIElement)sender, args, _embeddedNavigationOwner);
+    }
+
+    private void OnNavigationKeyDown(object sender, KeyRoutedEventArgs args)
+        => HandleNavigationKey(RootLayout, args);
+
+    private void HandleNavigationKey(UIElement root, KeyRoutedEventArgs args, PlayerViewModel? player = null)
+    {
+        if (args.Handled || _isTerminalClosePermitted) return;
+        var key = args.Key;
+        var back = key == Windows.System.VirtualKey.Left && AppToolkit.IsOnlyAltPressed()
+            || key == Windows.System.VirtualKey.GoBack && AppToolkit.NotModifierKeyPressed();
+        var forward = key == Windows.System.VirtualKey.Right && AppToolkit.IsOnlyAltPressed()
+            || key == Windows.System.VirtualKey.GoForward && AppToolkit.NotModifierKeyPressed();
+        if (!back && !forward && AppToolkit.NotModifierKeyPressed()
+            && key is Windows.System.VirtualKey.Back or Windows.System.VirtualKey.Escape)
+        {
+            // Editing and popup dismissal keep their existing local key behavior.
+            if (IsNavigationEditing(args.OriginalSource, root) || player?.IsPopupVisible == true
+                || player?.IsSubtitleSettingsVisible == true
+                || root.XamlRoot is { } xamlRoot && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Count > 0) return;
+            back = true;
+        }
+        if (!back && !forward) return;
+        args.Handled = true;
+        if (args.KeyStatus.WasKeyDown) return;
+        if (back) RootLayout.ViewModel.Back();
+        else RootLayout.ViewModel.Forward();
+    }
+
+    private static bool IsNavigationEditing(object source, UIElement root)
+    {
+        for (var current = source as DependencyObject; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is TextBox or PasswordBox or RichEditBox or ContentDialog) return true;
+            if (ReferenceEquals(current, root)) break;
+        }
+        return false;
     }
 
     private void OnRootLayoutLoaded(object sender, RoutedEventArgs e)
     {
         var keyboardSource = InputKeyboardSource.GetForIsland(RootLayout.XamlRoot?.ContentIsland);
-        keyboardSource.KeyUp += OnWindowKeyUp;
+        if (ReferenceEquals(_keyboardSource, keyboardSource)) return;
+        if (_keyboardSource is not null) _keyboardSource.KeyUp -= OnWindowKeyUp;
+        _keyboardSource = keyboardSource;
+        _keyboardSource.KeyUp += OnWindowKeyUp;
     }
 
     private bool IsCursorInWindow()

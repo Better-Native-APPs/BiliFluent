@@ -181,15 +181,10 @@
                         AccessKey="B"
                         AutomationProperties.Name="{ext:Locale Name=Back}"
                         Click="OnBackRequested"
+                        IsEnabled="False"
                         SizeChanged="OnChromePartSizeChanged"
                         Style="{StaticResource RootChromeBackButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Back}"
-                        Visibility="Collapsed">
-                        <Button.KeyboardAccelerators>
-                            <!--  Same accelerator as the replaced bar (Backspace while the back button is shown).  -->
-                            <KeyboardAccelerator Key="Back" />
-                        </Button.KeyboardAccelerators>
-                    </Button>
+                        ToolTipService.ToolTip="{ext:Locale Name=Back}" />
 
                     <Viewbox
                         Grid.Column="1"

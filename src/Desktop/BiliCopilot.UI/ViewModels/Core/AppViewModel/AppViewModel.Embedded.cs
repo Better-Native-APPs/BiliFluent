@@ -31,16 +31,29 @@ public sealed partial class AppViewModel
         // UI-confined capture precedes ApplicationPlayback.RunAsync's first yield/await.
         LiveLaunchAccount? account = snapshot.Type == BiliMediaType.Live ? bridge.CaptureLaunchAccount() : null;
         var navigationVersion = _sharedNavigationVersion;
-        return OwnApplicationPlaybackAsync(token =>
+        Task OpenAsync()
         {
-            token.ThrowIfCancellationRequested();
-            if (navigationVersion != _sharedNavigationVersion)
-                return Task.CompletedTask; // Navigation won before a route/native owner existed.
-            return account is { } liveAccount
-                ? bridge.OpenLiveAsync((admission, routeToken) => OpenMainPlayerCoreAsync(snapshot, routeToken, admission, liveAccount), liveAccount, token)
-                : bridge.OpenVideoAsync((admission, routeToken) => OpenMainPlayerCoreAsync(snapshot, routeToken, admission), token);
-        });
+            return OwnApplicationPlaybackAsync(token =>
+            {
+                token.ThrowIfCancellationRequested();
+                if (navigationVersion != _sharedNavigationVersion)
+                    return Task.CompletedTask; // Navigation won before a route/native owner existed.
+                return account is { } liveAccount
+                    ? bridge.OpenLiveAsync((admission, routeToken) => OpenMainPlayerCoreAsync(snapshot, routeToken, admission, liveAccount), liveAccount, token)
+                    : bridge.OpenVideoAsync((admission, routeToken) => OpenMainPlayerCoreAsync(snapshot, routeToken, admission), token);
+            });
+        }
+
+        Task? navigation = null;
+        QueueMainPlayerNavigation(snapshot, OpenAsync, ref navigation);
+        return navigation ?? OpenAsync();
     }
+
+    partial void QueueMainPlayerNavigation(MediaSnapshot snapshot, Func<Task> open, ref Task? navigation);
+    partial void OnMainPlayerCreated(PlayerViewModel player, MediaSnapshot snapshot);
+    partial void OnMainPlayerHostAttached(PlayerViewModel player);
+    partial void OnMainPlayerClosing(PlayerViewModel? player);
+    partial void OnMainPlayerReleased(PlayerViewModel player);
 
     private async Task OpenMainPlayerCoreAsync(MediaSnapshot snapshot, CancellationToken admissionToken,
         LiveRouteCoordinator.Admission admission, LiveLaunchAccount? account = null)
@@ -98,6 +111,7 @@ public sealed partial class AppViewModel
             _embeddedPlayerOpeningCancellation = request;
             try
             {
+                OnMainPlayerCreated(vm, snapshot);
                 void CheckOpening()
                 {
                     request.Token.ThrowIfCancellationRequested();
@@ -116,6 +130,7 @@ public sealed partial class AppViewModel
                 var host = new MainPlayerHost(main, slot);
                 await vm.AttachHostAsync(host, request.Token);
                 CheckOpening();
+                OnMainPlayerHostAttached(vm);
                 await vm.SetPresentationAsync(mode);
                 CheckOpening();
                 if (account is { } liveAccount)
@@ -252,6 +267,7 @@ public sealed partial class AppViewModel
 
     private Task BeginEmbeddedCloseAsync(PlayerViewModel? current, CancellationTokenSource? request)
     {
+        OnMainPlayerClosing(current);
         void CancelOpening() => CancelEmbeddedOpening(request);
         Exception? cancellationError = null;
         // An already-published close has observed its original opening CTS. A later request
@@ -311,6 +327,7 @@ public sealed partial class AppViewModel
     {
         if (ReferenceEquals(EmbeddedPlayer, vm))
         {
+            OnMainPlayerReleased(vm);
             Windows.OfType<MainWindow>().FirstOrDefault()?.ClearEmbeddedPlayer(vm);
             EmbeddedPlayer = null;
         }
