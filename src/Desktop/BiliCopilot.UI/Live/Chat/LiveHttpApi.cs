@@ -12,11 +12,15 @@ internal sealed class LiveHttpApi : IDisposable
 {
     private static readonly Uri SendEndpoint = new("https://api.live.bilibili.com/msg/send");
     private readonly HttpClient _client;
+    private readonly HttpMessageHandler _handler;
+    private bool _clientReleased;
+    private bool _handlerReleased;
 
     internal LiveHttpApi(HttpMessageHandler handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
-        _client = new HttpClient(handler, disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
+        _handler = handler;
+        _client = new HttpClient(handler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     internal static HttpMessageHandler CreateSecureHandler() => new HttpClientHandler
@@ -245,7 +249,11 @@ internal sealed class LiveHttpApi : IDisposable
     internal static LiveSendResult Unknown(LiveBinding binding) =>
         new(binding, LiveSendOutcome.Unknown, null, "Delivery is unknown. The message will not be retried.");
     private static LiveChatFailure Unavailable() => new("Live chat credentials or discovery are unavailable.", false, true);
-    public void Dispose() => _client.Dispose();
+    public void Dispose()
+    {
+        if (!_clientReleased) { _client.Dispose(); _clientReleased = true; }
+        if (!_handlerReleased) { _handler.Dispose(); _handlerReleased = true; }
+    }
 }
 
 internal sealed class LiveDiscovery

@@ -64,6 +64,8 @@ internal sealed class LiveChatSocket : ILiveChatSocket
 {
     private readonly ClientWebSocket _socket;
     private readonly HttpMessageInvoker _invoker;
+    private bool _socketReleased;
+    private bool _invokerReleased;
 
     internal LiveChatSocket()
     {
@@ -86,7 +88,13 @@ internal sealed class LiveChatSocket : ILiveChatSocket
     public void Abort() => _socket.Abort();
     public void Dispose()
     {
-        try { _socket.Dispose(); }
-        finally { _invoker.Dispose(); }
+        try
+        {
+            if (!_socketReleased) { _socket.Dispose(); _socketReleased = true; }
+        }
+        finally
+        {
+            if (!_invokerReleased) { _invoker.Dispose(); _invokerReleased = true; }
+        }
     }
 }

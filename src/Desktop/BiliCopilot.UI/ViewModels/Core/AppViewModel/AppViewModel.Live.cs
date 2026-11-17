@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.SponsorBlock.Application;
 using BiliCopilot.UI.SponsorBlock.Integration;
 using BiliCopilot.UI.Toolkits;
@@ -130,7 +131,7 @@ public sealed partial class AppViewModel
     {
         try
         {
-            const string message = "直播或播放切换未完成。请检查当前窗口；如关闭未完成，应用会保留相关资源，不会强行退出。";
+            var message = ResourceToolkit.GetLocalizedString(StringNames.LivePlaybackTransitionIncomplete);
             var main = Windows.OfType<MainWindow>().FirstOrDefault();
             // Failure visibility only. A successful Live launch does not hide/resize unrelated windows.
             if (main is not null)

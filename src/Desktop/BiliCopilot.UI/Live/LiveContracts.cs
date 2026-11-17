@@ -82,6 +82,7 @@ public interface ILiveRoomSession : INotifyPropertyChanged, IAsyncDisposable
     void RequestClose();
     Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
     Task CloseAsync();
+    Task RetryCloseAsync() => CloseAsync();
 }
 
 public interface ILiveSession : INotifyPropertyChanged, IAsyncDisposable

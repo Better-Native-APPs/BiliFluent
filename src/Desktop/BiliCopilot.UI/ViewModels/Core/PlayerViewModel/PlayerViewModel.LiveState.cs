@@ -120,19 +120,38 @@ internal sealed class LiveRefreshGate
     }
 }
 
-// A failed real release is terminal. Repeated callers cannot turn a native Dispose no-op into proof.
+// A failed release retains its owners. Explicit retries skip confirmed steps and join real tasks.
 internal sealed class LiveReleaseBarrier
 {
     private Task? _release;
     private Func<Task>[]? _owners;
+    private bool[]? _completed;
     internal bool ReleaseConfirmed { get; private set; }
+    internal bool HasStarted => _release is not null;
     internal bool IsBlocked => _release is { IsFaulted: true };
     internal int RetainedOwnerCount => _owners?.Length ?? 0;
     internal Task ReleaseAsync(params Func<Task>[] owners)
     {
+#pragma warning disable VSTHRD003 // This barrier published the same real release completion before callbacks; callers hold no owner-close gate.
         if (_release is not null) return _release;
+#pragma warning restore VSTHRD003
+        _owners = owners.ToArray();
+        _completed = new bool[owners.Length];
+        return StartRelease();
+    }
+
+    internal Task RetryAsync()
+    {
+        if (_release is not { IsFaulted: true })
+            return _release ?? Task.FromException(new InvalidOperationException("Live release has not started."));
+        return StartRelease();
+    }
+
+    private Task StartRelease()
+    {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _owners = owners;
+        var owners = _owners!;
+        var completed = _completed!;
         _release = completion.Task;
         _ = CompleteAsync();
         return _release;
@@ -140,8 +159,12 @@ internal sealed class LiveReleaseBarrier
         {
             await Task.Yield();
             Exception? failure = null;
-            foreach (var release in owners)
-                try { await release(); } catch (Exception error) { failure ??= error; }
+            for (var index = 0; index < owners.Length; index++)
+            {
+                if (completed[index]) continue;
+                try { await owners[index](); completed[index] = true; }
+                catch (Exception error) { failure ??= error; }
+            }
             if (failure is not null)
                 completion.SetException(BiliCopilot.UI.Live.Application.LiveCloseDiagnostics.Wrap(
                     "Live media release is incomplete. Owned resources are retained.", failure));

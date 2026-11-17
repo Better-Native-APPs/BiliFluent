@@ -1,6 +1,7 @@
 #nullable enable
 
 using BiliCopilot.UI.Toolkits;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace BiliCopilot.UI.Live.Application;
@@ -22,12 +23,18 @@ internal sealed class LiveRouteCoordinator
     private Task _navigationLiveClose = Task.CompletedTask;
     private Task? _shutdown;
     private Task? _shutdownWorker;
+    private readonly List<NavigationClose> _navigationCloses = [];
+    private readonly Func<TimeSpan, CancellationToken, Task> _retryDelay;
+    private Task? _liveCloseRetry;
+    private long _recoveryVersion;
 
-    internal LiveRouteCoordinator(Action checkAccess, Func<Task> closeEmbedded, Action reportFailure)
+    internal LiveRouteCoordinator(Action checkAccess, Func<Task> closeEmbedded, Action reportFailure,
+        Func<TimeSpan, CancellationToken, Task>? retryDelay = null)
     {
         _checkAccess = checkAccess;
         _closeEmbedded = closeEmbedded;
         _owners = new SharedPlaybackOwnerRegistry(checkAccess, reportFailure);
+        _retryDelay = retryDelay ?? Task.Delay;
     }
 
     internal bool HasWork => _owners.HasWork || _requests.Count != 0 || _releaseUnconfirmed
@@ -50,7 +57,10 @@ internal sealed class LiveRouteCoordinator
         // Never replace an unfinished or failed release with a later successful/no-op close.
         _navigationLiveClose = _navigationLiveClose.IsCompletedSuccessfully
             ? close : Task.WhenAll(_navigationLiveClose, close);
-        _ = ObserveNavigationLiveCloseAsync(_navigationLiveClose);
+        _navigationCloses.RemoveAll(entry => entry.Actual.IsCompletedSuccessfully);
+        var entry = new NavigationClose(close, _owners.LiveOwners.ToArray());
+        _navigationCloses.Add(entry);
+        _ = ObserveNavigationLiveCloseAsync(entry);
         return _navigationLiveClose;
     }
 
@@ -63,17 +73,18 @@ internal sealed class LiveRouteCoordinator
         #pragma warning restore VSTHRD003
     }
 
-    private async Task ObserveNavigationLiveCloseAsync(Task close)
+    private async Task ObserveNavigationLiveCloseAsync(NavigationClose entry)
     {
         try
         {
             // This observer never owns a route lease; the real close cannot depend on it.
             #pragma warning disable VSTHRD003
-            await close;
+            await entry.Actual;
             #pragma warning restore VSTHRD003
         }
         catch (Exception error)
         {
+            if (entry.Recovered) return;
             _releaseUnconfirmed = true;
             SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveRouteCoordinator>>(),
                 logger =>
@@ -98,10 +109,12 @@ internal sealed class LiveRouteCoordinator
     {
         _checkAccess();
         token.ThrowIfCancellationRequested();
-        if (IsBlocked) throw Failure();
+        if (IsBlocked && (_stopping || !_owners.CanRetryLiveClose && _liveCloseRetry is not { IsCompleted: false })) throw Failure();
         var previous = _latest;
         var navigation = _navigationLiveClose; // Capture before a close/cancel callback can register this request's Back.
         var request = new Request(token, isLive);
+        request.RecoveryVersion = _recoveryVersion;
+        request.RecoveryBatch = _liveCloseRetry is { IsCompleted: false } ? _liveCloseRetry : null;
         _latest = request;
         _requests.Add(request); // Publish before cancellation callbacks or owner methods can reenter.
         request.Cancellation = previous is not null && !previous.Done.Task.IsCompleted
@@ -147,6 +160,24 @@ internal sealed class LiveRouteCoordinator
 #pragma warning disable VSTHRD003 // The captured predecessor worker has no dependency on this successor.
                 await previous.Worker;
 #pragma warning restore VSTHRD003
+            }
+            if (request.RecoveryBatch is { } batch)
+            {
+#pragma warning disable VSTHRD003 // Joins the already published release batch, never starts a second batch for a concurrent request.
+                await batch;
+#pragma warning restore VSTHRD003
+                failed = false;
+            }
+            else if ((failed || _releaseUnconfirmed) && _owners.CanRetryLiveClose)
+            {
+                request.Stop.Token.ThrowIfCancellationRequested();
+                await RetryLiveOwnersAsync();
+                failed = false;
+            }
+            else if (failed && request.RecoveryVersion != _recoveryVersion && !_owners.HasWork && !_releaseUnconfirmed)
+            {
+                // The predecessor's shared retry confirmed the owner behind this captured failed close.
+                failed = false;
             }
             if (failed || _releaseUnconfirmed) throw Failure();
             CheckRequest(request);
@@ -208,13 +239,84 @@ internal sealed class LiveRouteCoordinator
     {
         await _gate.WaitAsync(request.Stop.Token);
         var permit = new Lease(_gate);
-        return new Admission(permit, (owner, close, released) =>
+        return new Admission(permit, (owner, close, released, retryClose) =>
         {
             CheckRequest(request);
             if (request.Owner is not null) throw Failure();
-            _owners.Retain(owner, request.IsLive, permit, close, released);
+            _owners.Retain(owner, request.IsLive, permit, close, released, retryClose);
             request.Owner = owner;
         });
+    }
+
+    private Task RetryLiveOwnersAsync()
+    {
+        if (_liveCloseRetry is { IsCompleted: false }) return _liveCloseRetry;
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _liveCloseRetry = done.Task; // Publish before any release callback can issue another opening.
+        var owners = _owners.FailedLiveOwners.ToHashSet(ReferenceEqualityComparer.Instance);
+        _ = CompleteLiveRetryAsync(done, owners);
+        return done.Task;
+    }
+
+    private async Task CompleteLiveRetryAsync(TaskCompletionSource done, HashSet<object> owners)
+    {
+        await Task.Yield();
+        Exception? failure = null;
+        for (var attempt = 1; attempt <= LiveCloseRetryPolicy.MaximumAttempts; attempt++)
+        {
+            if (attempt > 1)
+                await _retryDelay(TimeSpan.FromMilliseconds(LiveCloseRetryPolicy.IntervalMilliseconds), CancellationToken.None);
+            var startedAt = Stopwatch.GetTimestamp();
+            try
+            {
+                await LiveCloseDiagnostics.Invoke("retry", _owners.RetryLiveCloseAllAsync);
+                if (_owners.HasWork) throw Failure();
+                foreach (var entry in _navigationCloses)
+                    if (entry.Owners.Length > 0 && entry.Owners.All(owners.Contains)) entry.Recovered = true;
+                var navigation = _navigationCloses.Select(entry => entry.Recovered ? JoinRecoveredNavigationAsync(entry) : entry.Actual).ToArray();
+                _navigationLiveClose = navigation.Length switch { 0 => Task.CompletedTask, 1 => navigation[0], _ => Task.WhenAll(navigation) };
+                _navigationCloses.RemoveAll(entry => entry.Actual.IsCompletedSuccessfully || entry.Recovered && entry.Actual.IsCompleted);
+                _releaseUnconfirmed = _navigationCloses.Any(entry => !entry.Recovered && entry.Actual.IsFaulted);
+                _recoveryVersion++;
+                LogLiveRetry(attempt, null, Stopwatch.GetElapsedTime(startedAt));
+                done.TrySetResult();
+                return;
+            }
+            catch (Exception error)
+            {
+                failure = error;
+                LogLiveRetry(attempt, error, Stopwatch.GetElapsedTime(startedAt));
+            }
+        }
+        _releaseUnconfirmed = true;
+        done.TrySetException(LiveCloseDiagnostics.Wrap(Failure().Message, failure!));
+    }
+
+    private static async Task JoinRecoveredNavigationAsync(NavigationClose entry)
+    {
+#pragma warning disable VSTHRD003 // This close still really completes; only its confirmed owner's historical failure is superseded.
+        try { await entry.Actual; }
+#pragma warning restore VSTHRD003
+        catch { /* Its retained owner was released by the separate, real retry completion. */ }
+    }
+
+    private void LogLiveRetry(int attempt, Exception? error, TimeSpan elapsed)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveRouteCoordinator>>(), logger =>
+        {
+            var level = error is null ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+            {
+                var failure = error is null ? null : LiveCloseDiagnostics.GetFailure(error);
+                logger.Log(level, "Live | close-retry attempt={Attempt} result={Result:l} failed-step={Step:l} error={Error:l} ms={Milliseconds}",
+                    attempt, error is null ? "ok" : "failed", failure?.Step ?? "none", failure?.Error ?? "none", (long)elapsed.TotalMilliseconds);
+            }
+        });
+
+    private sealed class NavigationClose(Task actual, object[] owners)
+    {
+        internal readonly Task Actual = actual; // Retains the caller's already issued real close, not a task-producing accessor.
+        internal object[] Owners => owners;
+        internal bool Recovered;
     }
 
     private void CheckRequest(Request request)
@@ -305,18 +407,20 @@ internal sealed class LiveRouteCoordinator
         internal Task OwnerClose = Task.CompletedTask;
         internal Task EmbeddedClose = Task.CompletedTask;
         internal Task? Worker;
+        internal long RecoveryVersion;
+        internal Task? RecoveryBatch;
     }
 
-    internal sealed class Admission(IDisposable permit, Action<object, Func<Task>, Action> retain) : IDisposable
+    internal sealed class Admission(IDisposable permit, Action<object, Func<Task>, Action, Func<Task>?> retain) : IDisposable
     {
         private bool _retained;
         private bool _disposed;
 
-        internal void Retain(object owner, Func<Task> close, Action released)
+        internal void Retain(object owner, Func<Task> close, Action released, Func<Task>? retryClose = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_retained) throw Failure();
-            retain(owner, close, released);
+            retain(owner, close, released, retryClose);
             _retained = true;
         }
 
@@ -349,12 +453,15 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
     internal bool IsBlocked => _releaseFailed;
     internal IEnumerable<object> LiveOwners => _owners.Values.Where(owner => owner.IsLive).Select(owner => owner.Key);
     internal bool IsLiveOwner(object key) => _owners.TryGetValue(key, out var owner) && owner.IsLive;
+    internal IEnumerable<object> FailedLiveOwners => _owners.Values.Where(owner => owner.IsLive && owner.HasFailedClose).Select(owner => owner.Key);
+    // Navigation can observe the player's failure before the registry close was ever issued.
+    internal bool CanRetryLiveClose => LiveOwners.Any() && !_owners.Values.Any(owner => !owner.IsLive && owner.HasFailedClose);
 
-    internal void Retain(object key, bool isLive, IDisposable permit, Func<Task> close, Action released)
+    internal void Retain(object key, bool isLive, IDisposable permit, Func<Task> close, Action released, Func<Task>? retryClose = null)
     {
         checkAccess();
         if (IsBlocked || _owners.ContainsKey(key)) throw Failure();
-        _owners.Add(key, new Owner(this, key, isLive, permit, close, released));
+        _owners.Add(key, new Owner(this, key, isLive, permit, close, released, retryClose));
     }
 
     internal Task CloseAsync(object key)
@@ -378,6 +485,14 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
         checkAccess();
         var owners = _owners.Values.ToArray();
         var closes = owners.Select(owner => owner.CloseAsync()).ToArray();
+        return DrainAsync(owners, closes);
+    }
+
+    internal Task RetryLiveCloseAllAsync()
+    {
+        checkAccess();
+        var owners = _owners.Values.Where(owner => owner.IsLive && owner.HasFailedClose).ToArray();
+        var closes = owners.Select(owner => owner.CloseAsync(retry: true)).ToArray();
         return DrainAsync(owners, closes);
     }
 
@@ -407,24 +522,28 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
         => new("Player close is incomplete. Shared ownership is retained.");
 
     private sealed class Owner(SharedPlaybackOwnerRegistry registry, object key, bool isLive,
-        IDisposable permit, Func<Task> close, Action released)
+        IDisposable permit, Func<Task> close, Action released, Func<Task>? retryClose)
     {
         private Task? _close;
+        private bool _nativeClosed;
+        private bool _applicationReleased;
+        private bool _permitReleased;
         internal object Key => key;
         internal bool IsLive => isLive;
         internal Task? Worker { get; private set; }
+        internal bool HasFailedClose => _close is { IsFaulted: true };
 
-        internal Task CloseAsync()
+        internal Task CloseAsync(bool retry = false)
         {
-            if (_close is not null) return _close;
+            if (_close is not null && (!retry || !isLive || !HasFailedClose)) return _close;
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _close = done.Task; // Publish before the player close or a release callback can reenter.
-            var actual = LiveRouteCoordinator.Invoke(close);
-            Worker = CompleteCloseAsync(done, actual);
+            var actual = _nativeClosed ? Task.CompletedTask : LiveRouteCoordinator.Invoke(retry ? retryClose ?? close : close);
+            Worker = CompleteCloseAsync(done, actual, retry);
             return done.Task;
         }
 
-        private async Task CompleteCloseAsync(TaskCompletionSource done, Task actual)
+        private async Task CompleteCloseAsync(TaskCompletionSource done, Task actual, bool retry)
         {
             await Task.Yield();
             try
@@ -432,15 +551,25 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
 #pragma warning disable VSTHRD003 // Real native/room/player close owns its own drain; it never waits for this registry continuation.
                 await actual;
 #pragma warning restore VSTHRD003
-                released();
-                permit.Dispose(); // Only confirmed close and completed app bookkeeping release admission.
+                _nativeClosed = true;
+                if (!_applicationReleased)
+                {
+                    try { released(); _applicationReleased = true; }
+                    catch (Exception error) { LiveCloseDiagnostics.Record(error, "registry-application-release"); throw; }
+                }
+                if (!_permitReleased)
+                {
+                    try { permit.Dispose(); _permitReleased = true; }
+                    catch (Exception error) { LiveCloseDiagnostics.Record(error, "registry-permit-release"); throw; }
+                }
                 registry._owners.Remove(key);
+                registry._releaseFailed = registry._owners.Values.Any(owner => owner.HasFailedClose);
                 done.TrySetResult();
             }
             catch (Exception error)
             {
                 registry._releaseFailed = true;
-                try { registry._reportFailure(); } catch { /* Feedback cannot release an owner. */ }
+                try { if (!retry) registry._reportFailure(); } catch { /* Feedback cannot release an owner. */ }
                 done.TrySetException(LiveCloseDiagnostics.Wrap(Failure().Message, error)); // Cached failure: a later close no-op cannot clear ownership.
             }
         }

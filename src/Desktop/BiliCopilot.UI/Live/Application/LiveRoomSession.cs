@@ -37,6 +37,11 @@ public sealed class LiveRoomSession : ILiveRoomSession
     private bool _inboxPosted;
     private Task? _close;
     private Task _cancelShutdown = Task.CompletedTask;
+    private bool _shutdownCancellationStarted;
+    private bool _shutdownCancellationObserved;
+    private bool _closeInvalidated;
+    private bool _chatReleased;
+    private readonly HashSet<LiveRoomScope> _drainedScopes = [];
     private LiveRoomScope? _scope;
     private LiveInformation? _live;
     private long _generation;
@@ -259,7 +264,11 @@ public sealed class LiveRoomSession : ILiveRoomSession
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _close = completion.Task;
             Volatile.Write(ref _closeRequested, 1);
-            _cancelShutdown = _shutdown.CancelAsync();
+            if (!_shutdownCancellationStarted)
+            {
+                _cancelShutdown = _shutdown.CancelAsync();
+                _shutdownCancellationStarted = true;
+            }
             if (!_tryEnqueue(() => _ = CompleteCloseAsync(completion)))
             {
                 _ = Observe(_cancelShutdown, "room-cancel-shutdown", shutdown: _shutdown.Token);
@@ -269,18 +278,36 @@ public sealed class LiveRoomSession : ILiveRoomSession
         }
     }
 
+    public Task RetryCloseAsync()
+    {
+        lock (_closeSync)
+        {
+            if (_close is { IsFaulted: true }) _close = null;
+            return CloseAsync();
+        }
+    }
+
     private async Task CompleteCloseAsync(TaskCompletionSource completion)
     {
         try
         {
-            await CloseStepAsync("room-request-close", () => { RequestClose(); return Task.CompletedTask; });
+            if (!_closeInvalidated)
+            {
+                await CloseStepAsync("room-request-close", () => { RequestClose(); return Task.CompletedTask; });
+                _closeInvalidated = true;
+            }
             // Cancellation callbacks only request/observe close, never wait on this consumer.
             #pragma warning disable VSTHRD003
-            await Observe(_cancelShutdown, "room-cancel-shutdown", closeStep: true, shutdown: _shutdown.Token);
+            if (!_shutdownCancellationObserved)
+            {
+                await Observe(_cancelShutdown, "room-cancel-shutdown", closeStep: true, shutdown: _shutdown.Token);
+                _shutdownCancellationObserved = true;
+            }
             #pragma warning restore VSTHRD003
             var scopes = _ownedScopes.ToArray();
             foreach (var scope in scopes)
             {
+                if (_drainedScopes.Contains(scope)) continue;
                 await CloseStepAsync("room-generation-invalidate", () => { scope.Invalidate(); return Task.CompletedTask; });
                 await CloseStepAsync("room-generation-unsubscribe", () => { Unsubscribe(scope); return Task.CompletedTask; });
                 await DrainScopeAsync(scope);
@@ -288,8 +315,16 @@ public sealed class LiveRoomSession : ILiveRoomSession
                 #pragma warning disable VSTHRD003
                 if (scope.Stop is not null) await Observe(scope.Stop, "room-generation-stop", closeStep: true, shutdown: scope.Token);
                 #pragma warning restore VSTHRD003
+                _drainedScopes.Add(scope);
             }
-            try { await CloseStepAsync("room-chat-dispose", () => _chat.DisposeAsync().AsTask()); }
+            try
+            {
+                if (!_chatReleased)
+                {
+                    await CloseStepAsync("room-chat-dispose", () => _chat.DisposeAsync().AsTask());
+                    _chatReleased = true;
+                }
+            }
             catch (Exception error)
             {
                 _releaseBlocked = true;
@@ -301,6 +336,8 @@ public sealed class LiveRoomSession : ILiveRoomSession
             _ownedScopes.Clear();
             await CloseStepAsync("room-shutdown-lifetime", () => { _shutdown.Dispose(); return Task.CompletedTask; });
             ReleaseConfirmed = true;
+            _releaseBlocked = false;
+            _drainedScopes.Clear();
             Notify();
             completion.TrySetResult();
         }
