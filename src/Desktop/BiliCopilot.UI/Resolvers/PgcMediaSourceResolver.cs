@@ -15,12 +15,13 @@ using Richasy.MpvKernel.Player.Models;
 
 namespace BiliCopilot.UI.Resolvers;
 
-internal sealed partial class PgcMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<PgcMediaSourceResolver> logger) : MediaSourceResolverBase
+internal sealed partial class PgcMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<PgcMediaSourceResolver> logger) : MediaSourceResolverBase, IAdaptiveQualityResolver
 {
     private MediaSnapshot _snapshot;
     private EpisodeInformation _episode;
     private Task? _initTask;
     private DashMediaInformation? _playbackInfo;
+    private AdaptiveQualityDecision? _adaptiveStartDecision;
 
     public void Initialize(MediaSnapshot snapshot, EpisodeInformation episode)
     {
@@ -28,6 +29,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         {
             InvalidateInitialization();
             ResetPlayingSelection();
+            _adaptiveStartDecision = null;
             _snapshot = snapshot;
             _episode = episode;
         }
@@ -73,17 +75,28 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         => PlayingSelection?.Format ?? ResolveFormat(VideoMediaSourceResolver.GetManualQuality(_snapshot));
 
     private PlayerFormatInformation? ResolveFormat(int? preferQuality)
+        => VideoQualityPreference.Pick(GetPlayableFormats(), preferQuality ?? 0,
+            SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
+
+    private IEnumerable<PlayerFormatInformation> GetPlayableFormats()
     {
         if (_playbackInfo?.Formats is not { } formats)
         {
-            return default;
+            return [];
         }
 
         var availableFormats = formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default)).Where(p => p.IsEnabled).ToList();
-        return VideoQualityPreference.Pick(
-            VideoMediaSourceResolver.KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos),
-            preferQuality ?? 0,
-            SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
+        return VideoMediaSourceResolver.KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos);
+    }
+
+    IReadOnlyList<AdaptiveQualityCandidate> IAdaptiveQualityResolver.GetAdaptiveCandidates()
+    {
+        lock (InitializationSync) return AdaptiveQualitySelection.BuildCandidates(GetPlayableFormats(), GetVideoSegment);
+    }
+
+    AdaptiveQualityDecision? IAdaptiveQualityResolver.AdaptiveStartDecision
+    {
+        get { lock (InitializationSync) return _adaptiveStartDecision; }
     }
 
     /// <summary>
@@ -238,25 +251,42 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
 
     private OnDemandPlaybackSelection CreateSelection(OnDemandSelectionRequest request, IReadOnlyDictionary<string, string> headers)
     {
-        var videoSegments = _playbackInfo.Videos;
         var audioSegments = _playbackInfo.Audios;
+        var maxAudioQuality = audioSegments?.Max(p => Convert.ToInt32(p.Id));
+        // Automatic audio keeps its existing ordering and never participates in quality adaptation.
+        var audioQuality = GetSelectedAudioQuality(request);
+        var aSeg = audioQuality?.Segment
+            ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
         var selectedFormat = ResolveFormat(request.ResolvedVideoQuality ?? request.Preferences.VideoQuality);
+        if (AdaptiveQualitySelection.IsEnabled(request, SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto)))
+        {
+            var formats = GetPlayableFormats().ToList();
+            var candidates = AdaptiveQualitySelection.BuildCandidates(formats, GetVideoSegment);
+            var policy = new AdaptiveQualityPolicy(AdaptiveBandwidthHistory.Session);
+            var decision = policy.SelectStart(TimeSpan.FromMilliseconds(Environment.TickCount64), candidates, aSeg?.Bandwidth ?? 0,
+                SettingsToolkit.ReadLocalSetting(SettingNames.PlayerSpeed, 1d));
+            _adaptiveStartDecision = decision with { FromQuality = PlayingSelection?.Format.Quality ?? 0 };
+            AdaptiveQualityDiagnostics.LogDecision(logger, _adaptiveStartDecision.Value);
+            selectedFormat = AdaptiveQualitySelection.PickStartFormat(formats, decision);
+        }
+
         if (selectedFormat is null)
         {
             throw new InvalidCastException("无法获取到有效的播放地址");
         }
 
-        var maxAudioQuality = audioSegments?.Max(p => Convert.ToInt32(p.Id));
-        var preferCodec = AppToolkit.GetPreferCodecId();
-        var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
-            ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
-        // The quality the user picked, or the automatic choice when nothing (available) is picked.
-        var audioQuality = GetSelectedAudioQuality(request);
-        var aSeg = audioQuality?.Segment
-            ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
-
+        var vSeg = GetVideoSegment(selectedFormat.Quality);
         return DescribeSelection(selectedFormat, GetResolvedAudioSelections(request), request.Preferences,
             vSeg, aSeg, audioQuality?.Kind ?? AudioQualityKind.Standard, headers);
+    }
+
+    private DashSegmentInformation? GetVideoSegment(int selectedQuality)
+    {
+        var videoSegments = _playbackInfo?.Videos;
+        var preferCodec = AppToolkit.GetPreferCodecId();
+        var quality = selectedQuality.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return videoSegments?.FirstOrDefault(p => p.Id == quality && p.Codecs.Contains(preferCodec, StringComparison.Ordinal))
+            ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
     }
 
     private OnDemandSelectionPreferences GetPreferences()

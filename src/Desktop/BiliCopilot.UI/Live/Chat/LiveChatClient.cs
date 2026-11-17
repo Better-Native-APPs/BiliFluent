@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.WebSockets;
+using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
@@ -227,13 +228,13 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         {
             // The callback only requests cancellation. Join its actual unregister before Done,
             // so DrainAsync cannot dispose Stop while that callback is still using it.
-            try { await owner.AccountCancellation.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception)
+            try { await CloseStepAsync("chat-account-unregister", () => owner.AccountCancellation.DisposeAsync().AsTask()).ConfigureAwait(false); }
+            catch (Exception error)
             {
                 RecordFailure(LiveFailureCategory.RegistrationRelease);
                 owner.ReleaseFailed = true;
                 lock (_gate) _poisoned = true;
-                terminalFailure = new LiveChatFailure("Live chat cleanup is incomplete.", false);
+                terminalFailure = LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error);
                 // Keep the registration on the retained owner; still publish actual worker completion.
             }
             lock (_gate) owner.IsConnected = false;
@@ -316,22 +317,26 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
                 {
                     using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                     attempt.Closer = CloseOutputAsync(attempt, closeDeadline.Token);
-                    await ObserveAsync(attempt.Closer, LiveFailureCategory.CloseHandshake).ConfigureAwait(false);
+                    await ObserveAsync(attempt.Closer, "chat-close-output", LiveFailureCategory.CloseHandshake, attempt.Stop.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception) { RecordFailure(LiveFailureCategory.CloseHandshake); }
             try { attempt.Socket.Abort(); }
             catch (Exception) { RecordFailure(LiveFailureCategory.SocketAbort); }
-            await ObserveAsync(attempt.Connector).ConfigureAwait(false);
-            await ObserveAsync(attempt.AuthWriter).ConfigureAwait(false);
-            await ObserveAsync(attempt.Receiver).ConfigureAwait(false);
-            await ObserveAsync(attempt.Heartbeat).ConfigureAwait(false);
+            await ObserveAsync(attempt.Connector, "chat-connect", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.AuthWriter, "chat-auth-send", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Receiver, "chat-receive", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Heartbeat, "chat-heartbeat", shutdown: attempt.Stop.Token).ConfigureAwait(false);
             try
             {
-                attempt.Socket.Dispose();
-                owner.Attempt = null;
+                await CloseStepAsync("chat-socket-dispose", () =>
+                {
+                    attempt.Socket.Dispose();
+                    owner.Attempt = null;
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception error)
             {
                 attempt.CloseReason = LiveFailureCategory.ChatRelease.ToString();
                 owner.ReleaseFailed = true;
@@ -339,7 +344,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
                 // Keep owner.Attempt/socket strongly owned and reject all replacement.
                 // A failed release must override an earlier transport failure: replacement is unsafe.
                 #pragma warning disable CA2219
-                throw new LiveChatFailure("Live chat transport could not be released.", false);
+                throw LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat transport could not be released.", false), error);
                 #pragma warning restore CA2219
             }
             finally
@@ -427,6 +432,9 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         }
         catch (Exception exception)
         {
+            var stopped = LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested);
+            ReportOwnedTaskFault("chat-receive", exception, stopped);
+            if (stopped) throw new OperationCanceledException(attempt.Stop.Token);
             var failure = Classify(exception);
             attempt.Auth.TrySetException(failure);
             throw failure;
@@ -449,6 +457,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         }
         catch (Exception exception)
         {
+            ReportOwnedTaskFault("chat-heartbeat", exception, LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested));
             if (!attempt.Stop.IsCancellationRequested)
             {
                 attempt.CloseReason = LiveFailureCategory.Heartbeat.ToString();
@@ -556,8 +565,15 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
             }
             lock (_gate)
             {
+                var startedAt = Stopwatch.GetTimestamp();
                 if (owner?.ReleaseFailed == true)
-                    throw new LiveChatFailure("Live chat transport could not be released.", false);
+                {
+                    var error = new LiveChatFailure("Live chat transport could not be released.", false);
+                    LiveCloseDiagnostics.Record(error, "chat-transport-release-confirmed");
+                    ReportCloseStep("chat-transport-release-confirmed", error, Stopwatch.GetElapsedTime(startedAt));
+                    throw error;
+                }
+                ReportCloseStep("chat-transport-release-confirmed", null, Stopwatch.GetElapsedTime(startedAt));
                 owner?.Stop.Dispose();
                 if (_current == owner)
                     _current = null;
@@ -565,10 +581,10 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
                 _disconnectTask = null;
             }
         }
-        catch (Exception)
+        catch (Exception error)
         {
             lock (_gate) _poisoned = true;
-            completion.TrySetException(new LiveChatFailure("Live chat cleanup is incomplete.", false));
+            completion.TrySetException(LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error));
         }
     }
 
@@ -576,14 +592,14 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
     {
         try
         {
-            await DisconnectAsync().ConfigureAwait(false);
-            _http.Dispose();
+            await CloseStepAsync("chat-disconnect", DisconnectAsync).ConfigureAwait(false);
+            await CloseStepAsync("chat-http-handler-dispose", () => { _http.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
             completion.TrySetResult(true);
         }
-        catch (Exception)
+        catch (Exception error)
         {
             lock (_gate) _poisoned = true;
-            completion.TrySetException(new LiveChatFailure("Live chat cleanup is incomplete.", false));
+            completion.TrySetException(LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error));
         }
     }
 
@@ -742,7 +758,8 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         catch (ObjectDisposedException) { RecordFailure(LiveFailureCategory.CancellationAfterRelease); }
     }
 
-    private async Task ObserveAsync(Task task, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault)
+    private async Task ObserveAsync(Task task, string name, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault,
+        CancellationToken shutdown = default)
     {
         try {
             // T2-09: This observer consumes already-issued owned work; it cannot be the producer of the completion it observes.
@@ -751,8 +768,45 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
             #pragma warning restore VSTHRD003
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception) { RecordFailure(category); }
+        catch (Exception error)
+        {
+            var stopped = LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested);
+            if (!stopped) RecordFailure(category);
+            ReportOwnedTaskFault(name, error, stopped);
+        }
     }
+
+    private void ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown = false)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            var level = expectedShutdown ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+                logger.Log(level, "Live | task-fault name={Name:l} result={Result:l} error={Error:l} inner={Inner:l}",
+                    name, expectedShutdown ? "stopped" : "failed", error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
+        });
+
+    void ILiveChatDiagnosticSink.ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown) => ReportOwnedTaskFault(name, error, expectedShutdown);
+
+    private async Task CloseStepAsync(string name, Func<Task> operation)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? failure = null;
+        try { await operation().ConfigureAwait(false); }
+        catch (Exception error) { failure = error; LiveCloseDiagnostics.Record(error, name); throw; }
+        finally { ReportCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+    }
+
+    void ILiveChatDiagnosticSink.ReportCloseStep(string name, Exception? error, TimeSpan elapsed) => ReportCloseStep(name, error, elapsed);
+
+    private void ReportCloseStep(string name, Exception? error, TimeSpan elapsed)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            var level = error is null ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+                logger.Log(level, "Live | close-step name={Name:l} result={Result:l} error={Error:l} inner={Inner:l} ms={Milliseconds}",
+                    name, error is null ? "ok" : "failed", error?.GetType().Name ?? "none",
+                    error?.InnerException?.GetType().Name ?? "none", (long)elapsed.TotalMilliseconds);
+        });
 
     private void RecordFailure(LiveFailureCategory category)
         => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(),

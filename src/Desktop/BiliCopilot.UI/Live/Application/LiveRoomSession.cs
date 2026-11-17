@@ -175,7 +175,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
         try { actual = _chat.SendManuallyAsync(binding, text, linked.Token); }
         catch { actual = Task.FromResult(new LiveSendResult(binding, LiveSendOutcome.Unknown, null, "Message delivery is unknown. Do not resend automatically.")); }
         var completion = FinishSendAsync(scope, binding, actual, linked);
-        scope.Send = Observe(completion);
+        scope.Send = Observe(completion, "room-send", shutdown: scope.Token);
         Notify();
         return completion;
     }
@@ -220,12 +220,12 @@ public sealed class LiveRoomSession : ILiveRoomSession
             scope.Invalidate();
             Unsubscribe(scope);
             await DrainScopeAsync(scope);
-            try { await _chat.DisconnectAsync(); }
-            catch
+            try { await CloseStepAsync("room-disconnect", () => _chat.DisconnectAsync()); }
+            catch (Exception error)
             {
                 _releaseBlocked = true;
                 RecordFailure("ChatRelease");
-                throw new InvalidOperationException("Live room cleanup is unconfirmed; replacement is blocked.");
+                throw LiveCloseDiagnostics.Wrap("Live room cleanup is unconfirmed; replacement is blocked.", error);
             }
             scope.Stopped = true;
             scope.DisposeLifetime();
@@ -262,7 +262,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
             _cancelShutdown = _shutdown.CancelAsync();
             if (!_tryEnqueue(() => _ = CompleteCloseAsync(completion)))
             {
-                _ = Observe(_cancelShutdown);
+                _ = Observe(_cancelShutdown, "room-cancel-shutdown", shutdown: _shutdown.Token);
                 completion.TrySetException(new InvalidOperationException("Live room dispatcher is unavailable; owned resources are retained."));
             }
             return _close;
@@ -273,40 +273,41 @@ public sealed class LiveRoomSession : ILiveRoomSession
     {
         try
         {
-            RequestClose();
+            await CloseStepAsync("room-request-close", () => { RequestClose(); return Task.CompletedTask; });
             // Cancellation callbacks only request/observe close, never wait on this consumer.
             #pragma warning disable VSTHRD003
-            await Observe(_cancelShutdown);
+            await Observe(_cancelShutdown, "room-cancel-shutdown", closeStep: true, shutdown: _shutdown.Token);
             #pragma warning restore VSTHRD003
             var scopes = _ownedScopes.ToArray();
             foreach (var scope in scopes)
             {
-                scope.Invalidate();
-                Unsubscribe(scope);
+                await CloseStepAsync("room-generation-invalidate", () => { scope.Invalidate(); return Task.CompletedTask; });
+                await CloseStepAsync("room-generation-unsubscribe", () => { Unsubscribe(scope); return Task.CompletedTask; });
                 await DrainScopeAsync(scope);
                 // A retained StopAsync may still own an actual disconnect; its failure cannot be overwritten by a no-op.
                 #pragma warning disable VSTHRD003
-                if (scope.Stop is not null) await Observe(scope.Stop);
+                if (scope.Stop is not null) await Observe(scope.Stop, "room-generation-stop", closeStep: true, shutdown: scope.Token);
                 #pragma warning restore VSTHRD003
             }
-            try { await _chat.DisposeAsync(); }
-            catch
+            try { await CloseStepAsync("room-chat-dispose", () => _chat.DisposeAsync().AsTask()); }
+            catch (Exception error)
             {
                 _releaseBlocked = true;
                 RecordFailure("ChatRelease");
-                throw new InvalidOperationException("Live room release is unconfirmed; its owner must remain retained.");
+                throw LiveCloseDiagnostics.Wrap("Live room release is unconfirmed; its owner must remain retained.", error);
             }
-            foreach (var scope in scopes) scope.DisposeLifetime();
+            foreach (var scope in scopes)
+                await CloseStepAsync("room-generation-lifetime", () => { scope.DisposeLifetime(); return Task.CompletedTask; });
             _ownedScopes.Clear();
-            _shutdown.Dispose();
+            await CloseStepAsync("room-shutdown-lifetime", () => { _shutdown.Dispose(); return Task.CompletedTask; });
             ReleaseConfirmed = true;
             Notify();
             completion.TrySetResult();
         }
-        catch
+        catch (Exception error)
         {
             Notify();
-            completion.TrySetException(new InvalidOperationException("Live room close is incomplete. Owned resources are retained."));
+            completion.TrySetException(LiveCloseDiagnostics.Wrap("Live room close is incomplete. Owned resources are retained.", error));
         }
         finally { ReportRoomStatistics(final: true); }
     }
@@ -317,9 +318,9 @@ public sealed class LiveRoomSession : ILiveRoomSession
     {
         // These tasks were published by their producers before drain; cancellation is not their completion.
         #pragma warning disable VSTHRD003
-        await Observe(scope.Cancellation);
-        if (scope.Connect is not null) await Observe(scope.Connect);
-        await Observe(scope.Send);
+        await Observe(scope.Cancellation, "room-generation-cancel", closeStep: true, shutdown: scope.Token);
+        if (scope.Connect is not null) await Observe(scope.Connect, "room-generation-connect", closeStep: true, shutdown: scope.Token);
+        await Observe(scope.Send, "room-generation-send", closeStep: true, shutdown: scope.Token);
         #pragma warning restore VSTHRD003
     }
 
@@ -501,8 +502,10 @@ public sealed class LiveRoomSession : ILiveRoomSession
         foreach (PropertyChangedEventHandler handler in handlers.GetInvocationList())
             try { handler(this, new PropertyChangedEventArgs(string.Empty)); } catch { RecordFailure("PropertySubscriber"); }
     }
-    private async Task Observe(Task task)
+    private async Task Observe(Task task, string name, bool closeStep = false, CancellationToken shutdown = default)
     {
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? failure = null;
         try
         {
             // Join the independently issued operation, never its own completion or a cancelled waiter.
@@ -510,8 +513,38 @@ public sealed class LiveRoomSession : ILiveRoomSession
             await task;
             #pragma warning restore VSTHRD003
         }
-        catch (OperationCanceledException) { }
-        catch { RecordFailure("OwnedTaskFault"); }
+        catch (OperationCanceledException error)
+        {
+            if (!LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested)) failure = error;
+        }
+        catch (Exception error)
+        {
+            var stopped = LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested);
+            if (!stopped) { failure = error; RecordFailure("OwnedTaskFault"); }
+            try { if (_chat is ILiveChatDiagnosticSink diagnostics) diagnostics.ReportOwnedTaskFault(name, error, stopped); }
+            catch { }
+        }
+        finally { if (closeStep) ReportCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+    }
+
+    private async Task CloseStepAsync(string name, Func<Task> operation)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? failure = null;
+        try { await operation(); }
+        catch (Exception error)
+        {
+            failure = error;
+            LiveCloseDiagnostics.Record(error, name);
+            throw;
+        }
+        finally { ReportCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+    }
+
+    private void ReportCloseStep(string name, Exception? error, TimeSpan elapsed)
+    {
+        try { if (_chat is ILiveChatDiagnosticSink diagnostics) diagnostics.ReportCloseStep(name, error, elapsed); }
+        catch { }
     }
     private void RecordFailure(string category)
     {

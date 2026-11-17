@@ -144,7 +144,7 @@ public sealed partial class PlayerViewModel
 
     private async void OnHostCloseRequested(object? sender, EventArgs args)
     {
-        try { await CloseAsync(); }
+        try { await BiliCopilot.UI.Live.Application.LiveCloseDiagnostics.Invoke("window", CloseAsync); }
         catch (Exception ex) { ReportCloseFailure(ex); }
     }
 

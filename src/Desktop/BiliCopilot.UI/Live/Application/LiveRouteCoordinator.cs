@@ -72,11 +72,19 @@ internal sealed class LiveRouteCoordinator
             await close;
             #pragma warning restore VSTHRD003
         }
-        catch
+        catch (Exception error)
         {
             _releaseUnconfirmed = true;
             SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveRouteCoordinator>>(),
-                logger => logger.LogError("Live navigation close is incomplete; ownership is retained and replacement is blocked."));
+                logger =>
+                {
+                    if (logger.IsEnabled(LogLevel.Error))
+                    {
+                        var failure = LiveCloseDiagnostics.GetFailure(error);
+                        logger.LogError("Live navigation close is incomplete; ownership is retained and replacement is blocked. step={Step:l} error={Error:l}",
+                            failure.Step, failure.Error);
+                    }
+                });
         }
     }
 
@@ -99,7 +107,7 @@ internal sealed class LiveRouteCoordinator
         request.Cancellation = previous is not null && !previous.Done.Task.IsCompleted
             ? Invoke(() => previous.Stop.CancelAsync()) : Task.CompletedTask;
         // Start cancellation immediately, then join both real owner close and any navigation drain.
-        request.OwnerClose = Task.WhenAll(Invoke(_owners.CloseAllAsync), navigation);
+        request.OwnerClose = Task.WhenAll(Invoke(() => LiveCloseDiagnostics.Invoke("replace", _owners.CloseAllAsync)), navigation);
         request.EmbeddedClose = Invoke(_closeEmbedded); // Cancels/drains the actual pending VOD owner.
         request.Worker = RunAsync(request, previous, open);
         // T1-06: Request.Done is published before route callbacks; return the identical owner completion without a synchronous UI wait.
@@ -227,7 +235,7 @@ internal sealed class LiveRouteCoordinator
         var requests = _requests.ToArray();
         var navigation = _navigationLiveClose;
         var cancellations = requests.Select(request => Invoke(() => request.Stop.CancelAsync())).ToArray();
-        var ownerClose = Task.WhenAll(Invoke(_owners.CloseAllAsync), navigation);
+        var ownerClose = Task.WhenAll(Invoke(() => LiveCloseDiagnostics.Invoke("window", _owners.CloseAllAsync)), navigation);
         var embeddedClose = Invoke(_closeEmbedded);
         _shutdownWorker = ShutdownCoreAsync(done, requests, cancellations, ownerClose, embeddedClose);
         return done.Task;
@@ -277,7 +285,7 @@ internal sealed class LiveRouteCoordinator
     internal static Task Invoke(Func<Task> action)
     {
         try { return action(); }
-        catch { return Task.FromException(Failure()); }
+        catch (Exception error) { return Task.FromException(LiveCloseDiagnostics.Wrap(Failure().Message, error)); }
     }
 
     private void WriteCancellationFailure()
@@ -392,7 +400,7 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
             if (owner.Worker is not null) await owner.Worker;
 #pragma warning restore VSTHRD003
         }
-        if (failure is not null) throw Failure();
+        if (failure is not null) throw LiveCloseDiagnostics.Wrap(Failure().Message, failure);
     }
 
     private static InvalidOperationException Failure()
@@ -429,11 +437,11 @@ internal sealed class SharedPlaybackOwnerRegistry(Action checkAccess, Action rep
                 registry._owners.Remove(key);
                 done.TrySetResult();
             }
-            catch
+            catch (Exception error)
             {
                 registry._releaseFailed = true;
                 try { registry._reportFailure(); } catch { /* Feedback cannot release an owner. */ }
-                done.TrySetException(Failure()); // Cached failure: a later close no-op cannot clear ownership.
+                done.TrySetException(LiveCloseDiagnostics.Wrap(Failure().Message, error)); // Cached failure: a later close no-op cannot clear ownership.
             }
         }
     }

@@ -321,6 +321,12 @@ public sealed partial class PlayerViewModel
                 var audioExclusive = SettingsToolkit.ReadLocalSetting(SettingNames.AudioExclusiveEnabled, false);
                 await AwaitInitializationStepAsync(() => Client.SetAudioExclusiveAsync(audioExclusive));
             }
+            else
+            {
+                // 直播不套用点播的解码与缓存偏好，但音量上限仍按用户设置；上限留在 0 时音量滑块、快捷键与手势都调不动.
+                MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
+                await AwaitInitializationStepAsync(() => Client.SetMaxVolumeAsync(Convert.ToInt32(MaxVolume)));
+            }
 
             // Native messages can contain signed live URLs and credentials, including in DEBUG output.
             var logLevel = IsLiveMedia ? MpvLogLevel.None : SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);

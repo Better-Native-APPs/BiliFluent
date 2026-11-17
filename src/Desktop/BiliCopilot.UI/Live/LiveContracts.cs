@@ -51,6 +51,8 @@ public interface ILiveChatClient : IAsyncDisposable
 internal interface ILiveChatDiagnosticSink
 {
     void ReportRoomStatistics(long inboxIn, long inboxDrop, long published, long dispatchFail);
+    void ReportCloseStep(string name, Exception? error, TimeSpan elapsed);
+    void ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown = false);
 }
 
 /// <summary>Room/chat ownership, independent of video playback and window presentation.</summary>
