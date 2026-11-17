@@ -22,6 +22,9 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     private OnDemandPlaybackSelection? _playingSelection;
     private OnDemandPlaybackSelection? _loadingSelection;
     private OnDemandSelectionRequest? _reloadSelection;
+    private long _loadSelectionGeneration;
+    private long _completedSelectionGeneration;
+    private OnDemandSelectionLoad? _activeSelectionLoad;
     private PlaybackStreamSelection? _beforeLoadStreams;
     private IReadOnlyList<StreamCandidate> _beforeLoadVideos = [];
     private IReadOnlyList<StreamCandidate> _beforeLoadAudios = [];
@@ -32,6 +35,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
 
     // The deadline of a fresh answer already looked expired: the local clock cannot be trusted with it.
     private bool _ignoreDeadline;
+    private bool _freshPlayDetail = true;
 
     public IntPtr WindowHandle { get; set; }
 
@@ -59,6 +63,9 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         _playingSelection = null;
         _loadingSelection = null;
         _reloadSelection = null;
+        _loadSelectionGeneration = 0;
+        _completedSelectionGeneration = 0;
+        _activeSelectionLoad = null;
         _beforeLoadStreams = null;
         _beforeLoadVideos = [];
         _beforeLoadAudios = [];
@@ -75,15 +82,17 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
                 CdnHostHealth.Session, now, _triedStreamUrls.Contains);
         return new(format, audioSelections, preferences,
             Describe(video, format, AudioQualityKind.Standard, format.Description),
-            Describe(audio, null, audioKind, audioSelections.QualityId));
+            Describe(audio, null, audioKind, "BiliFluent audio"));
     }
 
     protected (string? Video, string? Audio) StageSelection(OnDemandPlaybackSelection selection)
     {
+        CheckFreshDeadline(selection);
         _beforeLoadStreams = _streams;
         _beforeLoadVideos = _videoCandidates;
         _beforeLoadAudios = _audioCandidates;
         _loadingSelection = selection;
+        _loadSelectionGeneration++;
         SetSelectionStreams(selection);
         return (_streams?.Video?.Url, _streams?.Audio?.Url);
     }
@@ -91,14 +100,36 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     internal bool CompleteSelectionLoad()
     {
         lock (InitializationSync)
+            return CompleteSelectionLoad(_activeSelectionLoad ?? (_loadingSelection is { } loading ? new OnDemandSelectionLoad(_loadSelectionGeneration, loading) : null));
+    }
+
+    internal void ArmSelectionLoad()
+    {
+        lock (InitializationSync)
+            _activeSelectionLoad = _loadingSelection is { } loading ? new(_loadSelectionGeneration, loading) : null;
+    }
+
+    internal OnDemandSelectionLoad? CaptureSelectionLoad()
+    {
+        lock (InitializationSync) return _activeSelectionLoad;
+    }
+
+    internal bool CompleteSelectionLoad(OnDemandSelectionLoad? load)
+    {
+        lock (InitializationSync)
         {
-            if (_loadingSelection is not { } selection) return false;
-            Volatile.Write(ref _playingSelection, selection);
-            _loadingSelection = null;
-            _reloadSelection = null;
-            _beforeLoadStreams = null;
-            _beforeLoadVideos = [];
-            _beforeLoadAudios = [];
+            if (load is not { } loaded || loaded.Generation <= _completedSelectionGeneration) return false;
+            Volatile.Write(ref _playingSelection, loaded.Selection);
+            _completedSelectionGeneration = loaded.Generation;
+            if (loaded.Generation == _loadSelectionGeneration)
+            {
+                _loadingSelection = null;
+                _reloadSelection = null;
+                _beforeLoadStreams = null;
+                _beforeLoadVideos = [];
+                _beforeLoadAudios = [];
+            }
+
             return true;
         }
     }
@@ -125,6 +156,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         {
             var current = _playingSelection;
             if (current is null) return;
+            CheckFreshDeadline(selection);
             var next = kind == PlaybackStreamKind.Video
                 ? selection with { Video = selection.Video?.WithCurrentUrl(statistics?.Current.Url) }
                 : selection with { Audio = selection.Audio?.WithCurrentUrl(statistics?.Current.Url) };
@@ -148,14 +180,25 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         _audioCandidates = selection.Audio?.Candidates ?? [];
         var video = selection.Video?.CurrentCandidate;
         var audio = selection.Audio?.CurrentCandidate;
-        var now = DateTimeOffset.UtcNow;
-        var videoDeadline = CdnHost.GetDeadline(video?.Url);
-        var audioDeadline = CdnHost.GetDeadline(audio?.Url);
-        var deadline = videoDeadline is null || audioDeadline < videoDeadline ? audioDeadline : videoDeadline;
-        if (_streams is null && deadline - now < PlaybackNetworkPolicy.MinimumUrlLifetime) _ignoreDeadline = true;
         Volatile.Write(ref _streams, new(video, audio, CountUntried(_videoCandidates, video), CountUntried(_audioCandidates, audio),
             selection.Format.Quality, selection.Video?.Segment.Bandwidth ?? 0, selection.Audio?.Segment.Bandwidth ?? 0,
-            _ignoreDeadline ? null : deadline));
+            GetCurrentDeadline(video, audio)));
+    }
+
+    private void CheckFreshDeadline(OnDemandPlaybackSelection selection)
+    {
+        if (!_freshPlayDetail) return;
+        _freshPlayDetail = false;
+        var deadline = GetCurrentDeadline(selection.Video?.CurrentCandidate, selection.Audio?.CurrentCandidate);
+        if (deadline - DateTimeOffset.UtcNow < PlaybackNetworkPolicy.MinimumUrlLifetime) _ignoreDeadline = true;
+    }
+
+    private DateTimeOffset? GetCurrentDeadline(StreamCandidate? video, StreamCandidate? audio)
+    {
+        if (_ignoreDeadline) return null;
+        var videoDeadline = CdnHost.GetDeadline(video?.Url);
+        var audioDeadline = CdnHost.GetDeadline(audio?.Url);
+        return videoDeadline is null || audioDeadline < videoDeadline ? audioDeadline : videoDeadline;
     }
 
     /// <summary>
@@ -177,6 +220,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         _initializationGeneration++;
         _triedStreamUrls.Clear();
         _ignoreDeadline = false;
+        _freshPlayDetail = true;
         if (!keepPlayingStreams)
         {
             _videoCandidates = [];
@@ -388,6 +432,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
             Audio = audio,
             VideoRemaining = CountUntried(_videoCandidates, video),
             AudioRemaining = CountUntried(_audioCandidates, audio),
+            Deadline = GetCurrentDeadline(video, audio),
         });
         if (_playingSelection is { } selection)
         {

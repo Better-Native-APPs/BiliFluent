@@ -19,7 +19,6 @@ internal sealed class SelectedRelayWatchdog
     private long _deliveredBytes;
     private bool _canEstimate;
     private TimeSpan? _waitingSince;
-    private double _waitingPosition;
 
     public void Reset()
     {
@@ -45,7 +44,7 @@ internal sealed class SelectedRelayWatchdog
         if (reset) Reset();
         _key = stream.RelayKey;
         _lastSample = now;
-        var offset = statistics.ForwardUpstreamOffset;
+        var offset = statistics.ForwardUpstreamOffset ?? (stream.OffsetMap is null ? statistics.ForwardBytes : (long?)null);
         var delivered = statistics.UpstreamBytes + statistics.PreloadedBytes;
         var latestByte = statistics.LastDeliveredAt;
         if (statistics.LastByteReceivedAt is { } received && (latestByte is null || received > latestByte)) latestByte = received;
@@ -73,13 +72,12 @@ internal sealed class SelectedRelayWatchdog
         else if (_waitingSince is null)
         {
             _waitingSince = now;
-            _waitingPosition = playback.Position;
         }
 
-        // Unknown/non-contiguous cache needs the longer timeout and an advancing timeline, not a byte peak.
+        // Unknown/non-contiguous cache needs the longer timeout, never safety inferred from a byte peak.
+        // A frozen audio timeline does not rule out starvation of both external streams.
         var timeout = cacheSeconds is null ? PlaybackNetworkPolicy.SlowWaitTimeout : PlaybackNetworkPolicy.StallTimeout;
-        var stalled = _waitingSince is { } since && now - since >= timeout
-            && (cacheSeconds is not null || playback.Position - _waitingPosition >= PlaybackNetworkPolicy.SelectedRelayStallAdvanceSeconds);
+        var stalled = _waitingSince is { } since && now - since >= timeout;
         return new(stalled, cacheSeconds, statistics.ForwardBytes, statistics.BytesPerSecond,
             cacheSeconds is null || statistics.ActiveRequests == 0);
     }

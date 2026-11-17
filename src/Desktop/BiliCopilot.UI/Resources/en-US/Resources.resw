@@ -81,6 +81,9 @@
   <data name="AudioQualitySwitchFailed" xml:space="preserve">
     <value>This audio quality can't be played right now. The previous one is back.</value>
   </data>
+  <data name="SeamlessSwitchingTemplate" xml:space="preserve">
+    <value>Switching to {0}…</value>
+  </data>
   <data name="QualityAuto" xml:space="preserve">
     <value>Auto</value>
   </data>

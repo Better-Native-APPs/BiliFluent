@@ -215,7 +215,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
                 ThrowIfInitializationInvalid(request);
             }
 
-            logger.LogError(ex, "获取剧集播放信息失败");
+            logger.LogError("Playback | play detail request failed kind=pgc error={Error}", ex.GetType().Name);
             throw;
         }
     }

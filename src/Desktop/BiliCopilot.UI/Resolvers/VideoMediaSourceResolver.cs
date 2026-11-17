@@ -69,7 +69,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             // A failed request is dropped as well, so choosing again retries it.
             if (_initTask.IsFaulted || _initTask.IsCanceled || reloadLanguage)
             {
-                InvalidateInitialization();
+                InvalidateInitialization(keepPlayingStreams: true);
             }
         }
     }
@@ -278,7 +278,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 ThrowIfInitializationInvalid(request);
             }
 
-            logger.LogError(ex, "获取视频播放信息失败");
+            logger.LogError("Playback | play detail request failed kind=video error={Error}", ex.GetType().Name);
             throw;
         }
     }

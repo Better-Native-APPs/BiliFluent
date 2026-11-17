@@ -19,6 +19,8 @@ internal readonly record struct OnDemandSelectionRequest(
     int? ResolvedVideoQuality = null,
     string? ResolvedAudioQualityId = null);
 
+internal readonly record struct OnDemandSelectionLoad(long Generation, OnDemandPlaybackSelection Selection);
+
 /// <summary>An immutable proposal. Describing it does not change the playing streams or the menu.</summary>
 internal sealed record OnDemandPlaybackSelection(
     PlayerFormatInformation Format,
@@ -97,7 +99,18 @@ internal sealed class SeamlessStreamDescription
     {
         var index = Candidates.Select((candidate, candidateIndex) => (candidate, candidateIndex))
             .Where(item => item.candidate.Url == url).Select(item => (int?)item.candidateIndex).FirstOrDefault();
-        return index is { } current ? new(Segment, Candidates, current, Target) : this;
+        if (index is not { } current) return this;
+        var target = Target is { } previous ? new MpvSeamlessTarget
+        {
+            Upstreams = previous.Upstreams,
+            Current = current,
+            Headers = previous.Headers,
+            Initialization = previous.Initialization,
+            IndexRange = previous.IndexRange,
+            Title = previous.Title,
+            Restrictions = previous.Restrictions,
+        } : null;
+        return new(Segment, Candidates, current, target);
     }
 
     internal static MpvSeamlessRestrictions GetRestrictions(PlayerFormatInformation? format, AudioQualityKind audioKind, string codecs)
