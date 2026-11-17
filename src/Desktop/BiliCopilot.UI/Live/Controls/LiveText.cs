@@ -5,7 +5,7 @@ using System.Globalization;
 namespace BiliCopilot.UI.Live.Controls;
 
 /// <summary>
-/// Local, fixed Chinese copy for the Live window. Kept here on purpose: the Live
+/// Local, fixed Chinese copy for the shared player's Live controls. The
 /// controls do not touch the shared resw files. Session/chat error strings are never
 /// shown verbatim; the UI derives its wording from typed state only.
 /// </summary>
@@ -13,13 +13,6 @@ internal static class LiveText
 {
     public const string UntitledRoom = "直播间";
 
-    public const string Play = "播放";
-    public const string Pause = "暂停";
-    public const string Refresh = "回到最新";
-    public const string RefreshName = "刷新到最新直播画面";
-    public const string Volume = "音量";
-    public const string OverlayToggle = "弹幕层";
-    public const string OverlayToggleName = "显示或隐藏画面上的弹幕";
     public const string ChatToggle = "弹幕列表";
     public const string ChatToggleName = "显示或隐藏右侧弹幕列表";
 
@@ -30,9 +23,6 @@ internal static class LiveText
     public const string ComposerPlaceholder = "发个弹幕…";
     public const string ComposerPlaceholderUnavailable = "现在还不能发送弹幕";
     public const string SendName = "发送弹幕";
-
-    public const string CommandFailed = "操作没有完成，请稍后再试。";
-    public const string VolumeFailed = "音量没有调整成功。";
 
     public const string Sending = "正在发送…";
     public const string SendAccepted = "已发送。";
@@ -51,9 +41,6 @@ internal static class LiveText
             ? JumpToLatest
             : count > 99 ? "99+ 条新弹幕" : string.Format(CultureInfo.CurrentCulture, "{0} 条新弹幕", count);
 
-    public static string VolumeValue(double percent)
-        => string.Format(CultureInfo.CurrentCulture, "{0:0}", percent);
-
     public static string Playback(LivePlaybackState state) => state switch
     {
         LivePlaybackState.Idle => "准备中",
@@ -64,19 +51,6 @@ internal static class LiveText
         LivePlaybackState.Failed => "直播加载失败",
         LivePlaybackState.Closing => "正在关闭…",
         LivePlaybackState.Closed => "已关闭",
-        _ => string.Empty,
-    };
-
-    /// <summary>Longer guidance shown on top of the video (inside the overlay island).</summary>
-    public static string PlaybackHint(LivePlaybackState state) => state switch
-    {
-        LivePlaybackState.Idle => "正在准备直播间…",
-        LivePlaybackState.Opening => "正在加载直播…",
-        LivePlaybackState.Paused => "已暂停。继续播放时会回到最新画面。",
-        LivePlaybackState.Ended => "直播已结束或连接中断。可以点“回到最新”重新加载。",
-        LivePlaybackState.Failed => "直播没有加载出来。可以点“回到最新”再试一次。",
-        LivePlaybackState.Closing => "正在关闭…",
-        LivePlaybackState.Closed => "直播已关闭。",
         _ => string.Empty,
     };
 

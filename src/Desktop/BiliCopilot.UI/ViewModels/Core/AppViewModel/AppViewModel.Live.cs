@@ -145,17 +145,6 @@ public sealed partial class AppViewModel
         finally { done.TrySetResult(); }
     }
 
-    internal void RestoreMainWindowAfterLiveRelease()
-    {
-        // Preserve the last-window return affordance without changing saved policy.
-        try
-        {
-            if (!IsPlaybackStopping && !HasApplicationPlaybackKeepAlive && Players.Count == 0 && !IsMainWindowVisible())
-                Windows.OfType<MainWindow>().FirstOrDefault()?.Activate();
-        }
-        catch { ReportLiveFailure(); }
-    }
-
     /// <summary>
     /// Exit/restart seam for later application owners. Cached false means keep dispatcher/windows alive.
     /// N4 joins inside owner close, before native teardown; terminal actions still require true.

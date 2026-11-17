@@ -347,7 +347,6 @@
                 x:Name="EmbeddedPresentationLayer"
                 Visibility="Collapsed">
                 <player:EmbeddedPlayerView x:Name="EmbeddedPlayerHost" Visibility="Collapsed" />
-                <Border x:Name="EmbeddedLiveHost" Visibility="Collapsed" />
             </Grid>
         </Canvas>
 

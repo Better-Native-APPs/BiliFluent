@@ -2,7 +2,6 @@
 
 using System.ComponentModel;
 using BiliCopilot.UI.Hosting;
-using BiliCopilot.UI.Live;
 using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
@@ -175,146 +174,10 @@ public sealed partial class RootLayout : RootLayoutBase
         ApplyPresentation(PlayerPresentationMode.Normal);
     }
 
-    private object? _embeddedLiveOwner;
-
-    /// <summary>
-    /// 当嵌入式直播展示中用户触发标题栏或鼠标返回时引发，通知直播所有者或路由层处理返回/取消.
-    /// </summary>
-    public event EventHandler<object>? EmbeddedLiveBackRequested;
-
-    /// <summary>
-    /// 当嵌入式直播呈现或隐藏时通知宿主与后端，用于协调底层 Surface 呈现与空域管理.
-    /// </summary>
-    public event Action<object, bool>? LivePresentationChanged;
-
-    /// <summary>
-    /// 获取当前嵌入式直播呈现是否处于视觉可见状态（注意：由 UI 视觉呈现决定，而非后台 HasLiveWork）.
-    /// </summary>
-    public bool IsEmbeddedLiveShown => EmbeddedLiveHost.Visibility == Visibility.Visible;
-
-    /// <summary>
-    /// 获取当前持有嵌入式直播展示权的宿主引用.
-    /// </summary>
-    public object? CurrentEmbeddedLiveOwner => _embeddedLiveOwner;
-
-    /// <summary>
-    /// 尝试绑定并展示嵌入式直播视图，折叠常规导航浏览区.
-    /// 严格身份防护：若已有不同所有者未释放，或同一所有者传入不同视图，均拒绝并返回 false.
-    /// </summary>
-    /// <param name="ownerKey">直播所有者标识引用.</param>
-    /// <param name="liveView">直播视图元素.</param>
-    /// <returns>若成功接纳并展示返回 true；若存在未释放的所有者或视图不匹配返回 false.</returns>
-    public bool TryShowEmbeddedLive(object ownerKey, BiliCopilot.UI.Live.Controls.LiveView liveView)
-    {
-        ArgumentNullException.ThrowIfNull(ownerKey);
-        ArgumentNullException.ThrowIfNull(liveView);
-
-        if (_embeddedLiveOwner is not null && !ReferenceEquals(_embeddedLiveOwner, ownerKey))
-        {
-            return false;
-        }
-
-        if (ReferenceEquals(_embeddedLiveOwner, ownerKey) && EmbeddedLiveHost.Child is not null && !ReferenceEquals(EmbeddedLiveHost.Child, liveView))
-        {
-            return false;
-        }
-
-        if (!ReferenceEquals(_embeddedLiveOwner, ownerKey) && ownerKey is ILivePresentation presentation)
-            presentation.PropertyChanged += OnLivePresentationPropertyChanged;
-        _embeddedLiveOwner = ownerKey;
-        if (!ReferenceEquals(EmbeddedLiveHost.Child, liveView))
-        {
-            EmbeddedLiveHost.Child = liveView;
-        }
-
-        EmbeddedLiveHost.Visibility = Visibility.Visible;
-        NavigationContentHost.Visibility = Visibility.Collapsed;
-        ApplyLivePresentation();
-        LivePresentationChanged?.Invoke(ownerKey, true);
-        return true;
-    }
-
-    /// <summary>
-    /// 隐藏嵌入式直播呈现，恢复常规导航浏览，但保留宿主 owner 引用.
-    /// 仅当 expectedOwner 匹配当前所有者时执行.
-    /// </summary>
-    /// <param name="expectedOwner">期望被隐藏的宿主引用.</param>
-    /// <returns>若匹配并执行隐藏返回 true；否则返回 false.</returns>
-    public bool HideEmbeddedLive(object expectedOwner)
-    {
-        if (!ReferenceEquals(_embeddedLiveOwner, expectedOwner))
-        {
-            return false;
-        }
-
-        LivePresentationChanged?.Invoke(expectedOwner, false);
-        if (!ReferenceEquals(_embeddedLiveOwner, expectedOwner))
-        {
-            return false;
-        }
-
-        EmbeddedLiveHost.Visibility = Visibility.Collapsed;
-        NavigationContentHost.Visibility = Visibility.Visible;
-        ApplyPresentation(_embeddedViewModel?.Presentation ?? PlayerPresentationMode.Normal);
-        return true;
-    }
-
-    /// <summary>
-    /// 释放并清理嵌入式直播呈现，清空视图引用并恢复导航浏览区.
-    /// 仅当 expectedOwner 匹配时执行，绝不触发主窗口关闭.
-    /// </summary>
-    /// <param name="expectedOwner">期望被释放的宿主引用.</param>
-    /// <returns>若匹配并执行清理返回 true；否则返回 false.</returns>
-    public bool ClearEmbeddedLive(object expectedOwner)
-    {
-        if (!ReferenceEquals(_embeddedLiveOwner, expectedOwner))
-        {
-            return false;
-        }
-
-        LivePresentationChanged?.Invoke(expectedOwner, false);
-        if (!ReferenceEquals(_embeddedLiveOwner, expectedOwner))
-        {
-            return false;
-        }
-
-        if (_embeddedLiveOwner is ILivePresentation presentation)
-            presentation.PropertyChanged -= OnLivePresentationPropertyChanged;
-        _embeddedLiveOwner = null;
-        EmbeddedLiveHost.Visibility = Visibility.Collapsed;
-        EmbeddedLiveHost.Child = null;
-        NavigationContentHost.Visibility = Visibility.Visible;
-        ApplyPresentation(_embeddedViewModel?.Presentation ?? PlayerPresentationMode.Normal);
-        return true;
-    }
-
-    private void OnLivePresentationPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (ReferenceEquals(sender, _embeddedLiveOwner) && IsEmbeddedLiveShown
-            && args.PropertyName is nameof(ILivePresentation.IsFullScreen) or nameof(ILivePresentation.IsCompactOverlay))
-            ApplyLivePresentation();
-    }
-
-    private void ApplyLivePresentation()
-    {
-        var presentation = _embeddedLiveOwner as ILivePresentation;
-        ApplyPresentation(presentation?.IsFullScreen == true ? PlayerPresentationMode.FullScreen
-            : presentation?.IsCompactOverlay == true ? PlayerPresentationMode.CompactOverlay
-            : PlayerPresentationMode.Normal);
-    }
-
-    internal void RequestLiveBack(object owner)
-    {
-        if (ReferenceEquals(_embeddedLiveOwner, owner) && EmbeddedLiveHost.Visibility == Visibility.Visible)
-        {
-            if (HideEmbeddedLive(owner)) EmbeddedLiveBackRequested?.Invoke(this, owner);
-        }
-    }
-
     private Task CloseEmbeddedLiveForNavigationAsync()
     {
         // App.CloseEmbeddedPlayerAsync has already captured and published the current live VM
-        // (or pre-host opening). Never recapture a successor or close an old LiveWindow here.
+        // (or pre-host opening). Never recapture a successor here.
         return this.Get<LiveApplicationBridge>().WaitForNavigationLiveCloseAsync();
     }
 
@@ -499,7 +362,7 @@ public sealed partial class RootLayout : RootLayoutBase
     /// <param name="applyMode">Whether this is the presentation's final layout commit.</param>
     private void ApplyPlayerLayerGeometry(bool applyMode)
     {
-        var visibility = EmbeddedPlayerHost.Visibility == Visibility.Visible || EmbeddedLiveHost.Visibility == Visibility.Visible
+        var visibility = EmbeddedPlayerHost.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
         if (EmbeddedPresentationLayer.Visibility != visibility) EmbeddedPresentationLayer.Visibility = visibility;
         // Normal video/Live panels inherit the window backdrop; only an active full-window layer paints black.
@@ -516,8 +379,8 @@ public sealed partial class RootLayout : RootLayoutBase
         if (WindowLayout.Width != width) WindowLayout.Width = width;
         if (WindowLayout.Height != height) WindowLayout.Height = height;
         var kind = ResolveChromeWindow()?.Presenter.Kind;
-        // Keep the shell's previous measure/arrange size while either player covers it. Native FullScreen/compact
-        // can be published before Live's logical mode; that presenter guard also prevents an intermediate page resize.
+        // Keep the shell's previous measure/arrange size while playback covers it. Native FullScreen/compact
+        // can be published before the logical mode; that presenter guard also prevents an intermediate page resize.
         if (TitleBarPresentation == PlayerPresentationMode.Normal && kind == AppWindowPresenterKind.Overlapped)
         {
             if (LayoutGrid.Width != width) LayoutGrid.Width = width;
@@ -565,7 +428,7 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private void UpdateChromeBackButtonVisibility()
     {
-        ChromeBackButton.Visibility = ViewModel.IsOverlayOpen || _embeddedViewModel is not null || (_embeddedLiveOwner is not null && EmbeddedLiveHost.Visibility == Visibility.Visible)
+        ChromeBackButton.Visibility = ViewModel.IsOverlayOpen || _embeddedViewModel is not null
             ? Visibility.Visible
             : Visibility.Collapsed;
         _chromeRegions.Request();
