@@ -13,17 +13,17 @@ internal static class WebLoginProtocol
 {
     internal const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69";
     internal static readonly Uri PasswordReferer = new("https://passport.bilibili.com/login");
-    internal static readonly Uri SmsReferer = new("https://www.bilibili.com/");
+    internal static readonly Uri SmsReferer = PasswordReferer;
+    internal static readonly Uri BrowserIdentityReferer = new("https://www.bilibili.com/");
 
-    // Web protocol choices are deliberately centralized: no App signature or disable_rcmd,
-    // include gee_gt, and omit the unconfirmed security-center verify source field.
-    internal const string SmsSendSource = "main-fe-header";
-    internal const string SmsLoginSource = "main_web";
+    // Match the standalone Passport page, rather than the header widget or App protocol.
+    internal const string CaptchaSource = "main-fe";
+    internal const string LoginSource = "main_web";
+    internal const string LoginGoUrl = "";
     internal const string VerificationWithRequestId = "loginTelCheck";
     internal const string VerificationWithoutRequestId = "secLogin";
     internal const string VerificationSmsType = "sms";
-    internal const string Keep = "true";
-    internal const string ExchangeGoUrl = "https://passport.bilibili.com/pc/passport/risk/secTip?gourl=https%3A%2F%2Fwww.bilibili.com%2F&bind_tel=1";
+    private const string ExchangeGoUrlBase = "https://passport.bilibili.com/pc/passport/risk/secTip";
 
     internal static int? GetInt(JsonElement value, string name)
     {
@@ -93,7 +93,11 @@ internal static class WebLoginProtocol
         }
 
         var data = GetData(root);
-        var type = securityCenter ? "geetest" : GetString(data, "type");
+        var type = GetString(data, securityCenter ? "recaptcha_type" : "type");
+        if (securityCenter && string.IsNullOrEmpty(type))
+        {
+            type = "geetest";
+        }
         var token = GetString(data, securityCenter ? "recaptcha_token" : "token");
         var geetest = securityCenter ? data
             : data.ValueKind == JsonValueKind.Object && data.TryGetProperty("geetest", out var gee) ? gee : default;
@@ -118,7 +122,18 @@ internal static class WebLoginProtocol
         }
 
         var data = GetData(root);
-        if (!TryReadCountries(data, "common", out var common) || !TryReadCountries(data, "others", out var others))
+        if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty("list", out _))
+        {
+            var defaultCountry = data.TryGetProperty("default", out var item) ? ReadCountry(item, "country_code") : null;
+            if (defaultCountry is null || !TryReadCountries(data, "list", "country_code", out var countries))
+            {
+                return BiliLoginCountriesResponse.Failed(new(BiliLoginErrorKind.InvalidResponse, 0));
+            }
+
+            return BiliLoginCountriesResponse.Succeeded([defaultCountry], countries.Where(country => country.Id != defaultCountry.Id).ToList());
+        }
+
+        if (!TryReadCountries(data, "common", "country_id", out var common) || !TryReadCountries(data, "others", "country_id", out var others))
         {
             return BiliLoginCountriesResponse.Failed(new(BiliLoginErrorKind.InvalidResponse, 0));
         }
@@ -146,7 +161,9 @@ internal static class WebLoginProtocol
             }
 
             query.TryGetValue("request_id", out var requestId);
-            var context = new WebVerificationContext(session, temporaryToken, requestId ?? string.Empty, referer);
+            query.TryGetValue("source", out var source);
+            query.TryGetValue("gourl", out var goUrl);
+            var context = new WebVerificationContext(session, temporaryToken, requestId ?? string.Empty, referer, source ?? string.Empty, goUrl ?? string.Empty);
             session.Verification?.Invalidate();
             session.Verification = context;
             session.Sms?.Invalidate();
@@ -210,7 +227,6 @@ internal static class WebLoginProtocol
             ["sms_type"] = string.IsNullOrEmpty(context.RequestId) ? VerificationWithoutRequestId : VerificationWithRequestId,
             ["tmp_code"] = context.TemporaryToken,
             ["recaptcha_token"] = captcha.Token,
-            ["gee_gt"] = context.Captcha!.Gt,
             ["gee_challenge"] = captcha.Challenge,
             ["gee_validate"] = captcha.Validate,
             ["gee_seccode"] = captcha.Seccode,
@@ -232,6 +248,10 @@ internal static class WebLoginProtocol
         {
             fields["type"] = VerificationWithRequestId;
             fields["request_id"] = context.RequestId;
+            if (!string.IsNullOrEmpty(context.Source))
+            {
+                fields["source"] = context.Source;
+            }
         }
 
         return fields;
@@ -239,6 +259,11 @@ internal static class WebLoginProtocol
 
     internal static string VerificationSubmitEndpoint(WebVerificationContext context)
         => string.IsNullOrEmpty(context.RequestId) ? BiliApis.Passport.VerificationSmsVerifyWithoutRequestId : BiliApis.Passport.VerificationSmsVerify;
+
+    internal static string ExchangeGoUrl(WebVerificationContext context)
+        => string.IsNullOrEmpty(context.RequestId)
+            ? ExchangeGoUrlBase + "?gourl=" + Uri.EscapeDataString(context.GoUrl) + "&bind_tel=1"
+            : context.GoUrl;
 
     internal static bool HasAuthenticationCookies(IDictionary<string, string> cookies)
         => cookies.TryGetValue("SESSDATA", out var sessionData) && !string.IsNullOrWhiteSpace(sessionData)
@@ -320,7 +345,16 @@ internal static class WebLoginProtocol
             && (method.Equals("email", StringComparison.OrdinalIgnoreCase) || method.Equals("loginEmailCheck", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool TryReadCountries(JsonElement data, string name, out List<BiliLoginCountry> countries)
+    private static BiliLoginCountry? ReadCountry(JsonElement item, string dialingCodeName)
+    {
+        var id = GetInt(item, "id");
+        var dialingCode = GetInt(item, dialingCodeName);
+        var name = GetString(item, "cname");
+        return id is null or <= 0 || dialingCode is null or <= 0 || string.IsNullOrWhiteSpace(name)
+            ? null : new(id.Value, name, dialingCode.Value);
+    }
+
+    private static bool TryReadCountries(JsonElement data, string name, string dialingCodeName, out List<BiliLoginCountry> countries)
     {
         countries = new List<BiliLoginCountry>();
         if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty(name, out var list) || list.ValueKind != JsonValueKind.Array)
@@ -330,15 +364,13 @@ internal static class WebLoginProtocol
 
         foreach (var item in list.EnumerateArray())
         {
-            var id = GetInt(item, "id");
-            var dialingCode = GetInt(item, "country_id");
-            var countryName = GetString(item, "cname");
-            if (id is null or <= 0 || dialingCode is null or <= 0 || string.IsNullOrWhiteSpace(countryName))
+            var country = ReadCountry(item, dialingCodeName);
+            if (country is null)
             {
                 return false;
             }
 
-            countries.Add(new(id.Value, countryName, dialingCode.Value));
+            countries.Add(country);
         }
 
         return true;

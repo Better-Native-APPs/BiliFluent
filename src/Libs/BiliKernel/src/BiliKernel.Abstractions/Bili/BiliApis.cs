@@ -31,8 +31,8 @@ public static class BiliApis
         /// <summary>Submits a Web Passport password login.</summary>
         public const string WebPasswordLogin = _passBase + "/x/passport-login/web/login";
 
-        /// <summary>Gets common and other SMS countries.</summary>
-        public const string WebSmsCountries = _passBase + "/web/generic/country/list";
+        /// <summary>Gets the default SMS country and the supported country list.</summary>
+        public const string WebSmsCountries = _passBase + "/x/passport-login/web/country";
 
         /// <summary>Sends a Web Passport login SMS.</summary>
         public const string WebSmsSend = _passBase + "/x/passport-login/web/sms/send";

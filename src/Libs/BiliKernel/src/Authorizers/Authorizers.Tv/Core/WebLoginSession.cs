@@ -159,7 +159,7 @@ internal sealed class WebLoginSession : BiliLoginSession
         _identityRequested = true;
         try
         {
-            using var response = await SendAsync(HttpMethod.Get, BiliApis.Account.Buvid, null, WebLoginProtocol.SmsReferer, cancellationToken).ConfigureAwait(false);
+            using var response = await SendAsync(HttpMethod.Get, BiliApis.Account.Buvid, null, WebLoginProtocol.BrowserIdentityReferer, cancellationToken).ConfigureAwait(false);
             var value = WebLoginProtocol.GetString(WebLoginProtocol.GetData(response.Root), "b_3");
             if (!string.IsNullOrWhiteSpace(value))
             {
@@ -212,12 +212,14 @@ internal sealed class WebLoginSession : BiliLoginSession
 
 internal sealed class WebVerificationContext : BiliLoginVerificationContext
 {
-    internal WebVerificationContext(WebLoginSession session, string temporaryToken, string requestId, Uri referer)
+    internal WebVerificationContext(WebLoginSession session, string temporaryToken, string requestId, Uri referer, string source = "", string goUrl = "")
     {
         Session = session;
         TemporaryToken = temporaryToken;
         RequestId = requestId;
         Referer = referer;
+        Source = source;
+        GoUrl = goUrl;
     }
 
     internal WebLoginSession Session { get; }
@@ -228,6 +230,10 @@ internal sealed class WebVerificationContext : BiliLoginVerificationContext
 
     internal Uri Referer { get; private set; }
 
+    internal string Source { get; private set; }
+
+    internal string GoUrl { get; private set; }
+
     internal BiliLoginCaptchaParameters? Captcha { get; set; }
 
     internal void Invalidate()
@@ -235,17 +241,19 @@ internal sealed class WebVerificationContext : BiliLoginVerificationContext
         TemporaryToken = string.Empty;
         RequestId = string.Empty;
         Referer = WebLoginProtocol.PasswordReferer;
+        Source = string.Empty;
+        GoUrl = string.Empty;
         Captcha = null;
     }
 }
 
 internal sealed class WebSmsContext : BiliLoginSmsContext
 {
-    internal WebSmsContext(WebLoginSession session, string captchaKey, int countryId, string phoneNumber, WebVerificationContext? verification)
+    internal WebSmsContext(WebLoginSession session, string captchaKey, int countryCode, string phoneNumber, WebVerificationContext? verification)
     {
         Session = session;
         CaptchaKey = captchaKey;
-        CountryId = countryId;
+        CountryCode = countryCode;
         PhoneNumber = phoneNumber;
         Verification = verification;
     }
@@ -254,7 +262,7 @@ internal sealed class WebSmsContext : BiliLoginSmsContext
 
     internal string CaptchaKey { get; private set; }
 
-    internal int CountryId { get; }
+    internal int CountryCode { get; }
 
     internal string PhoneNumber { get; private set; }
 
