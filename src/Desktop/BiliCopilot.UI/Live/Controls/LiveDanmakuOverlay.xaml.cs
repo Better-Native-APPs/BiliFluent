@@ -12,12 +12,11 @@ using Windows.UI.ViewManagement;
 namespace BiliCopilot.UI.Live.Controls;
 
 /// <summary>
-/// Live-only scrolling danmaku renderer. Driven by incoming <see cref="ILiveSession.MessageReceived"/>
+/// Live-only scrolling danmaku renderer. Driven by incoming <see cref="LiveConnectorViewModel.MessageReceived"/>
 /// and a monotonic clock (never media position). At most 32 items are on screen; anything that
 /// cannot be placed immediately is dropped—there is no backlog queue.
-/// It has two hosts. The Live window builds it over a session, which also feeds the playback hint card. The
-/// shared player places it in markup and gives it the room connector and whether the picture plays; the
-/// player shows its own states there, so the hint card stays off.
+/// The shared player places it in markup and gives it the room connector and whether the picture plays;
+/// the player shows its own playback states.
 /// </summary>
 public sealed partial class LiveDanmakuOverlay : UserControl
 {
@@ -42,7 +41,6 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private const double LaneAreaRatio = 0.72;
     private const double StaticSeconds = 4.5;
 
-    private readonly ILiveSession? _session;
     private readonly DispatcherQueue _dispatcher;
     private readonly List<Item> _active = new(MaxActive);
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -76,14 +74,6 @@ public sealed partial class LiveDanmakuOverlay : UserControl
         Unloaded += OnUnloaded;
     }
 
-    /// <summary>Initializes a new instance of the <see cref="LiveDanmakuOverlay"/> class over a Live window session.</summary>
-    public LiveDanmakuOverlay(ILiveSession session)
-        : this()
-    {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
-        Attach();
-    }
-
     /// <summary>The connector of the room that plays in the shared player. Another room starts from an empty screen.</summary>
     public LiveConnectorViewModel? Connector
     {
@@ -111,7 +101,7 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private static void OnSourceChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var overlay = (LiveDanmakuOverlay)sender;
-        if (overlay._session is not null || !overlay._attached) return;
+        if (!overlay._attached) return;
         overlay.SubscribeConnector(overlay.Connector);
         overlay.Snapshot();
     }
@@ -131,17 +121,9 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     {
         if (_attached) return;
         _attached = true;
-        if (_session is not null)
-        {
-            _session.PropertyChanged += OnSessionPropertyChanged; // Subscribe first ...
-            _session.MessageReceived += OnMessageReceived;
-        }
-        else
-        {
-            SubscribeConnector(Connector);
-        }
+        SubscribeConnector(Connector);
 
-        Snapshot(); // ... then read current state.
+        Snapshot(); // Subscribe first, then read current state.
     }
 
     private void SubscribeConnector(LiveConnectorViewModel? connector)
@@ -168,15 +150,7 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     {
         if (!_attached) return;
         _attached = false;
-        if (_session is not null)
-        {
-            _session.PropertyChanged -= OnSessionPropertyChanged;
-            _session.MessageReceived -= OnMessageReceived;
-        }
-        else
-        {
-            SubscribeConnector(null);
-        }
+        SubscribeConnector(null);
 
         ClearAll(); // Also unhooks CompositionTarget.Rendering.
     }
@@ -222,9 +196,8 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private void Snapshot()
     {
         // The shared player only tells whether the picture plays; its own views show every other state.
-        var binding = _session is not null ? _session.Binding : _connector?.Room.Binding;
-        var playback = _session is not null ? _session.PlaybackState
-            : _connector is not null && IsPlaying ? LivePlaybackState.Playing : LivePlaybackState.Idle;
+        var binding = _connector?.Room.Binding;
+        var playback = _connector is not null && IsPlaying ? LivePlaybackState.Playing : LivePlaybackState.Idle;
         if (binding != _binding || playback != LivePlaybackState.Playing)
         {
             // Room/account change or leaving Playing: nothing from the old scope stays on screen.
@@ -233,19 +206,6 @@ public sealed partial class LiveDanmakuOverlay : UserControl
 
         _binding = binding;
         _playback = playback;
-        if (_session is not null) UpdateStatus(playback);
-    }
-
-    private void UpdateStatus(LivePlaybackState playback)
-    {
-        var hint = playback == LivePlaybackState.Playing ? string.Empty : LiveText.PlaybackHint(playback);
-        var visible = hint.Length > 0;
-        StatusText.Text = hint;
-        StatusCard.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var spinning = visible && playback is LivePlaybackState.Opening or LivePlaybackState.Idle
-            && _uiSettings.AnimationsEnabled;
-        StatusRing.IsActive = spinning;
-        StatusRing.Visibility = spinning ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ---------------------------------------------------------------- incoming handoff
@@ -253,14 +213,14 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private void OnMessageReceived(object? sender, LiveChatMessage message)
     {
         // A message of a connector that was replaced in the meantime is not drawn.
-        if (_session is null && !ReferenceEquals(sender, _connector)) return;
+        if (!ReferenceEquals(sender, _connector)) return;
         if (_dispatcher.HasThreadAccess)
         {
             Admit(message);
             return;
         }
 
-        // Safety net only (the session already dispatches): bounded, drop when full.
+        // Safety net only (the room already dispatches): bounded, drop when full.
         if (Interlocked.Increment(ref _pendingHandoff) > MaxPendingHandoff)
         {
             Interlocked.Decrement(ref _pendingHandoff);
