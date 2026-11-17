@@ -139,11 +139,12 @@ internal sealed class LiveReleaseBarrier
         async Task CompleteAsync()
         {
             await Task.Yield();
-            var failed = false;
+            Exception? failure = null;
             foreach (var release in owners)
-                try { await release(); } catch (Exception) { failed = true; }
-            if (failed)
-                completion.SetException(new InvalidOperationException("Live media release is incomplete. Owned resources are retained."));
+                try { await release(); } catch (Exception error) { failure ??= error; }
+            if (failure is not null)
+                completion.SetException(BiliCopilot.UI.Live.Application.LiveCloseDiagnostics.Wrap(
+                    "Live media release is incomplete. Owned resources are retained.", failure));
             else
             {
                 ReleaseConfirmed = true;

@@ -21,6 +21,7 @@ using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Core.Models;
 using Richasy.MpvKernel.Player;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -54,6 +55,8 @@ public sealed partial class PlayerViewModel
     private Action? _detachLiveAttempt;
     private LiveReleaseBarrier? _liveClientRelease;
     private LiveReleaseBarrier? _liveRendererRelease;
+    private long _liveCloseStartedAt;
+    private LiveCloseDiagnostics.Failure? _liveCloseFailure;
 
     public bool IsLiveMedia => _snapshot?.Type == BiliMediaType.Live;
     public LiveConnectorViewModel? LiveConnector => Connector as LiveConnectorViewModel;
@@ -100,6 +103,7 @@ public sealed partial class PlayerViewModel
         ObjectDisposedException.ThrowIf(IsPlaybackClosing, this);
         CheckLiveRelease();
         BindLiveAccount(account);
+        LogLiveAction("open");
         return InitializeAsync(snapshot, cancellationToken);
     }
 
@@ -108,6 +112,7 @@ public sealed partial class PlayerViewModel
     {
         if (!IsLiveMedia || IsPlaybackClosing) return Task.CompletedTask;
         if (LiveLoadState == LiveMediaLoadState.Ready) return Task.CompletedTask;
+        LogLiveAction("resume");
         return RefreshLiveAsync();
     }
 
@@ -124,6 +129,7 @@ public sealed partial class PlayerViewModel
             CheckMediaAdmission();
             if (result.IsFailed) throw new InvalidOperationException("Live pause failed.");
             LiveLoadState = LiveMediaLoadState.Paused;
+            LogLiveAction("pause");
         });
     }
 
@@ -138,6 +144,7 @@ public sealed partial class PlayerViewModel
 #pragma warning disable VSTHRD003 // Return the player's retained actual initialization without a media gate or synchronous wait.
             return _liveInitialization;
 #pragma warning restore VSTHRD003
+        LogLiveAction("refresh");
         _liveMediaPending = true;
         _liveRefreshWork = OwnWork(_liveRefresh.RunAsync(() => InitializeAsync(_snapshot)));
         NotifyLivePropertiesChanged();
@@ -150,6 +157,7 @@ public sealed partial class PlayerViewModel
         if (!CanSelectLiveQuality || source is not { IsEnabled: true, IsAuto: false } || !LiveSources.Contains(source))
             return Task.CompletedTask;
         if (Equals(source, SelectedLiveSource)) return Task.CompletedTask;
+        LogLiveAction("quality-select");
         RequestedLiveSource = source;
         _snapshot.PreferQuality = source.Data.Quality;
         _snapshot.PreferEotf = source.Eotf;
@@ -206,6 +214,7 @@ public sealed partial class PlayerViewModel
 
     private async Task InitializeLiveMediaAsync(IMpvMediaHistoryResolver? previousHistory)
     {
+        var startedAt = Stopwatch.GetTimestamp();
         EnsureLiveRoom();
         var room = _liveRoom!;
         var previous = _liveScope;
@@ -277,6 +286,11 @@ public sealed partial class PlayerViewModel
                 CheckMediaAdmission();
                 if (ready && attempt.State == LiveMediaLoadState.Ready)
                 {
+                    SafeFailureContext.TryWriteFacts(() => logger, log =>
+                    {
+                        if (log.IsEnabled(LogLevel.Information))
+                            log.LogInformation("Live | first-frame ms={Milliseconds}", (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+                    });
                     MarkLiveSource(resolver);
                     LiveLoadState = LiveMediaLoadState.Ready;
                     _ = OwnWork(room.ConnectAsync(scope));
@@ -444,7 +458,7 @@ public sealed partial class PlayerViewModel
         async Task ReleaseAsync()
         {
             await _liveRendererRelease.ReleaseAsync(_mpvDanmakuRenderers.ToArray()
-                .Select(renderer => (Func<Task>)(() => renderer.DisposeAsync().AsTask())).ToArray());
+                .Select(renderer => (Func<Task>)(() => LiveCloseStepAsync("danmaku-renderer-dispose", () => renderer.DisposeAsync().AsTask()))).ToArray());
             _mpvDanmakuRenderers.Clear();
             _mpvDanmakuClient = null;
         }
@@ -458,8 +472,12 @@ public sealed partial class PlayerViewModel
         var client = Client;
         var native = _nativeMp;
         await _liveClientRelease.ReleaseAsync(
-            async () => { await SuspendPlaybackDiagnosticsAsync(); await SuspendNetworkMonitorAsync(); },
-            () => releaseRenderers ? ReleaseLiveRenderersAsync() : Task.CompletedTask,
+            async () =>
+            {
+                await LiveCloseStepAsync("playback-diagnostics-stop", SuspendPlaybackDiagnosticsAsync);
+                await LiveCloseStepAsync("network-monitor-stop", SuspendNetworkMonitorAsync);
+            },
+            () => LiveCloseStepAsync("player-renderers", () => releaseRenderers ? ReleaseLiveRenderersAsync() : Task.CompletedTask),
             async () =>
             {
                 if (player is not null)
@@ -472,18 +490,22 @@ public sealed partial class PlayerViewModel
                     client.ErrorOccurred -= OnClientErrorOccurred;
                     client.CacheStateChanged -= OnClientCacheStateChanged;
                     client.ReachFileLoaded -= OnChapterFileLoaded;
-                    try { await MpvShutdownHelper.QuitCoreAsync(client, NullLogger.Instance, TimeSpan.FromSeconds(3)); }
+                    try { await LiveCloseStepAsync("mpv-quit", () => MpvShutdownHelper.QuitCoreAsync(client, NullLogger.Instance, TimeSpan.FromSeconds(3))); }
                     finally
                     {
-                        if (player is not null) await player.DisposeAsync();
-                        else await client.DisposeAsync();
+                        if (player is not null) await LiveCloseStepAsync("mpv-player-dispose", () => player.DisposeAsync().AsTask());
+                        else await LiveCloseStepAsync("mpv-client-dispose", () => client.DisposeAsync().AsTask());
                     }
                 }
             },
             () =>
             {
                 if (_smtc is not null) _smtc.ButtonPressed -= OnSmtcButtonPressed;
-                native?.Dispose();
+                var startedAt = Stopwatch.GetTimestamp();
+                Exception? failure = null;
+                try { native?.Dispose(); }
+                catch (Exception error) { failure = error; LiveCloseDiagnostics.Record(error, "native-smtc-dispose"); throw; }
+                finally { LogLiveCloseStep("native-smtc-dispose", failure, Stopwatch.GetElapsedTime(startedAt)); }
                 return Task.CompletedTask;
             });
         // Terminal close waits all other owners before clearing even the successfully released pair.
@@ -531,50 +553,87 @@ public sealed partial class PlayerViewModel
     {
         if (_liveRoom is not null)
         {
-            await _liveRoom.CloseAsync();
-            if (!_liveRoom.ReleaseConfirmed) throw new InvalidOperationException("Live room release is unconfirmed.");
+            await LiveCloseStepAsync("room-close", () => _liveRoom.CloseAsync());
         }
-        if (_unadoptedLiveChat is not null) await _unadoptedLiveChat.DisposeAsync();
-        _liveChatFactory.ForgetReleased();
-        if (_liveChatFactory.HasWork) throw new InvalidOperationException("Live chat allocation release is unconfirmed.");
+        await LiveCloseStepAsync("room-release-confirmed", () => _liveRoom is null || _liveRoom.ReleaseConfirmed
+            ? Task.CompletedTask : Task.FromException(new InvalidOperationException("Live room release is unconfirmed.")));
+        await LiveCloseStepAsync("unadopted-chat-dispose", () => _unadoptedLiveChat?.DisposeAsync().AsTask() ?? Task.CompletedTask);
+        await LiveCloseStepAsync("chat-factory-work", () =>
+        {
+            _liveChatFactory.ForgetReleased();
+            return !_liveChatFactory.HasWork ? Task.CompletedTask
+                : Task.FromException(new InvalidOperationException("Live chat allocation release is unconfirmed."));
+        });
     }
 
     private async Task UnregisterLiveAccountAsync() => await _liveAccountRegistration.DisposeAsync();
 
     private void BeginLiveClose()
     {
-        void Attempt(Action action) { try { action(); } catch (Exception ex) { _closeCancellationErrors.Add(ex); } }
-        Attempt(() => _liveAttempt?.Invalidate());
-        Attempt(() => _liveRoom?.RequestClose());
-        Attempt(() => LiveConnector?.InvalidateRequests());
-        Attempt(HideMpvDanmaku);
-        Attempt(ClearActiveCommandDanmakus);
-        Attempt(StartSponsorApplicationCleanup);
-        Attempt(() => _ = SuspendPlaybackDiagnosticsAsync());
-        Attempt(() => _ = SuspendNetworkMonitorAsync());
+        _liveCloseStartedAt = Stopwatch.GetTimestamp();
+        _liveCloseFailure = null;
+        SafeFailureContext.TryWriteFacts(() => logger, log =>
+        {
+            if (log.IsEnabled(LogLevel.Information))
+                log.LogInformation("Live | close begin reason={Reason:l}", _liveAccountEnded ? "account" : LiveCloseDiagnostics.Reason);
+        });
+        void Attempt(string name, Action action)
+        {
+            var startedAt = Stopwatch.GetTimestamp();
+            Exception? failure = null;
+            try { action(); }
+            catch (Exception error) { failure = error; _closeCancellationErrors.Add(error); }
+            finally { LogLiveCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+        }
+        Attempt("attempt-invalidate", () => _liveAttempt?.Invalidate());
+        Attempt("room-request-close", () => _liveRoom?.RequestClose());
+        Attempt("connector-invalidate", () => LiveConnector?.InvalidateRequests());
+        Attempt("danmaku-hide", HideMpvDanmaku);
+        Attempt("command-danmaku-clear", ClearActiveCommandDanmakus);
+        Attempt("sponsor-cleanup-begin", StartSponsorApplicationCleanup);
+        Attempt("playback-diagnostics-stop-begin", () => _ = SuspendPlaybackDiagnosticsAsync());
+        Attempt("network-monitor-stop-begin", () => _ = SuspendNetworkMonitorAsync());
     }
 
     private async Task CompleteLiveCloseAsync(TaskCompletionSource completion, Action? cancelOpening)
     {
         await Task.Yield();
+        var cancelStartedAt = Stopwatch.GetTimestamp();
+        var cancellationErrors = _closeCancellationErrors.Count;
         CancelOpeningForClose(cancelOpening);
-        void Attempt(Action action) { try { action(); } catch (Exception ex) { _closeCancellationErrors.Add(ex); } }
+        LogLiveCloseStep("opening-cancel", _closeCancellationErrors.Count > cancellationErrors ? _closeCancellationErrors[cancellationErrors] : null,
+            Stopwatch.GetElapsedTime(cancelStartedAt));
+        void Attempt(string name, Action action)
+        {
+            var startedAt = Stopwatch.GetTimestamp();
+            Exception? failure = null;
+            try { action(); }
+            catch (Exception error) { failure = error; _closeCancellationErrors.Add(error); }
+            finally { LogLiveCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+        }
 #pragma warning disable VSTHRD103 // Synchronous cancellation scopes finish before the real owned-work/native close drain.
-        Attempt(() => _lifetime.Cancel());
-        Attempt(() => _mediaCancellation?.Cancel());
+        Attempt("player-lifetime-cancel", () => _lifetime.Cancel());
+        Attempt("media-cancel", () => _mediaCancellation?.Cancel());
 #pragma warning restore VSTHRD103
-        Attempt(RetainConnectorWork);
-        Attempt(() => _playerOverlay?.CancelPendingInput());
-        Attempt(() => _activeDanmakuDialog?.Hide());
+        Attempt("connector-work-retain", RetainConnectorWork);
+        Attempt("overlay-input-cancel", () => _playerOverlay?.CancelPendingInput());
+        Attempt("danmaku-dialog-hide", () => _activeDanmakuDialog?.Hide());
         try
         {
             await DisposeLiveCoreAsync();
+            LogLiveCloseResult(success: true);
             completion.SetResult();
         }
-        catch (Exception)
+        catch (Exception error)
         {
             _liveReleaseBlocked = true;
-            completion.SetException(new InvalidOperationException("Live close is incomplete. Owned resources are retained."));
+            if (_liveCloseFailure is null)
+            {
+                LiveCloseDiagnostics.Record(error, "player-finalize");
+                _liveCloseFailure = LiveCloseDiagnostics.GetFailure(error);
+            }
+            LogLiveCloseResult(success: false);
+            completion.SetException(LiveCloseDiagnostics.Wrap("Live close is incomplete. Owned resources are retained.", error));
             NotifyLivePropertiesChanged();
         }
     }
@@ -582,15 +641,15 @@ public sealed partial class PlayerViewModel
     private async Task DisposeLiveCoreAsync()
     {
         await _liveCloseRelease.ReleaseAsync(
-            () => Window is MainPlayerHost host ? host.PrepareForCloseAsync() : Task.CompletedTask,
-            DrainPlayerWorkAsync,
-            AwaitSponsorApplicationCleanupAsync,
-            ReleaseLiveRenderersAsync,
-            CloseLiveRoomAsync,
-            () => RetireLivePlayerAsync(releaseRenderers: false, clearOwners: false),
-            UnregisterLiveAccountAsync,
-            () => _closeCancellationErrors.Count == 0 ? Task.CompletedTask
-                : Task.FromException(new InvalidOperationException("Live cancellation/invalidation failed; ownership retained.")));
+            () => LiveCloseStepAsync("host-prepare", () => Window is MainPlayerHost host ? host.PrepareForCloseAsync() : Task.CompletedTask),
+            () => LiveCloseStepAsync("player-work-drain", DrainPlayerWorkAsync),
+            () => LiveCloseStepAsync("sponsor-cleanup", AwaitSponsorApplicationCleanupAsync),
+            () => LiveCloseStepAsync("danmaku-renderers", ReleaseLiveRenderersAsync),
+            () => LiveCloseStepAsync("room-release", CloseLiveRoomAsync),
+            () => LiveCloseStepAsync("player-release", () => RetireLivePlayerAsync(releaseRenderers: false, clearOwners: false)),
+            () => LiveCloseStepAsync("account-unregister", UnregisterLiveAccountAsync),
+            () => LiveCloseStepAsync("cancellation-confirmed", () => _closeCancellationErrors.Count == 0 ? Task.CompletedTask
+                : Task.FromException(new InvalidOperationException("Live cancellation/invalidation failed; ownership retained."))));
 
         if (_playerOverlay is not null)
         {
@@ -617,7 +676,7 @@ public sealed partial class PlayerViewModel
             Window.CloseRequested -= OnHostCloseRequested;
             Window.PresentationChanged -= OnHostPresentationChanged;
             if (_pointerSource is not null) _pointerSource.PointerReleased -= OnWindowPointerReleased;
-            await Window.DisposeAsync();
+            await LiveCloseStepAsync("host-dispose", () => Window.DisposeAsync().AsTask());
         }
         this.Get<AppViewModel>().ReleasePlayer(this);
         ClearLivePlayerOwners();
@@ -641,4 +700,46 @@ public sealed partial class PlayerViewModel
     }
 
     partial void OnLiveLoadStateChanged(LiveMediaLoadState value) => NotifyLivePropertiesChanged();
+
+    private void LogLiveAction(string action)
+        => SafeFailureContext.TryWriteFacts(() => logger, log =>
+        {
+            if (log.IsEnabled(LogLevel.Information)) log.LogInformation("Live | {Action:l}", action);
+        });
+
+    private async Task LiveCloseStepAsync(string name, Func<Task> operation)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? failure = null;
+        try { await operation(); }
+        catch (Exception error) { failure = error; LiveCloseDiagnostics.Record(error, name); throw; }
+        finally { LogLiveCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+    }
+
+    private void LogLiveCloseStep(string name, Exception? error, TimeSpan elapsed)
+    {
+        if (error is not null)
+        {
+            LiveCloseDiagnostics.Record(error, name);
+            _liveCloseFailure ??= LiveCloseDiagnostics.GetFailure(error);
+        }
+        SafeFailureContext.TryWriteFacts(() => logger, log =>
+        {
+            var level = error is null ? LogLevel.Information : LogLevel.Warning;
+            if (log.IsEnabled(level))
+                log.Log(level, "Live | close-step name={Name:l} result={Result:l} error={Error:l} inner={Inner:l} ms={Milliseconds}",
+                    name, error is null ? "ok" : "failed", error?.GetType().Name ?? "none",
+                    error?.InnerException?.GetType().Name ?? "none", (long)elapsed.TotalMilliseconds);
+        });
+    }
+
+    private void LogLiveCloseResult(bool success)
+        => SafeFailureContext.TryWriteFacts(() => logger, log =>
+        {
+            var level = success ? LogLevel.Information : LogLevel.Warning;
+            if (log.IsEnabled(level))
+                log.Log(level, "Live | close result={Result:l} failed-step={FailedStep:l} total-ms={Milliseconds}",
+                    success ? "ok" : "incomplete", success ? "none" : _liveCloseFailure?.Step ?? "none",
+                    (long)Stopwatch.GetElapsedTime(_liveCloseStartedAt).TotalMilliseconds);
+        });
 }
