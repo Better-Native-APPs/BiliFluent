@@ -39,7 +39,7 @@ public sealed partial class IslandDanmakuBox : PlayerControlBase
     }
 
     private bool CanInteract => _loaded && IsActive && ViewModel is { IsWindowDeactivated: false,
-        IsPlaybackClosing: false, IsConnecting: false, IsDanmakuControlVisible: true }
+        IsPlaybackClosing: false, IsConnecting: false, IsDanmakuSwitchAvailable: true }
         && ViewModel.Player?.IsPlaybackInitialized == true;
 
     /// <summary>
@@ -144,6 +144,10 @@ public sealed partial class IslandDanmakuBox : PlayerControlBase
         var claim = _popups.Open(sender, ViewModel, _epoch, _ => SendOptions.CancelPendingInput());
         SendOptions.Activate(() => CanInteract && _popups.IsCurrent(claim, ViewModel, _epoch));
     }
+
+    // A send of a live room that did not go through: the draft stays in the box and the player tells why.
+    private void OnRoomComposerNoticed(object? sender, Live.Controls.LiveComposerNotice notice)
+        => ViewModel?.Window?.ShowTip(notice.Message, notice.Type);
 
     private void OnDraftChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         => ++_draftRevision;

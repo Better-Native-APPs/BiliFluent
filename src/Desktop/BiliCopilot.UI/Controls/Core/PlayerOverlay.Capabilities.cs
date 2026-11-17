@@ -16,6 +16,9 @@ public sealed partial class PlayerOverlay
     // The volume ceiling of the player when nothing else is configured.
     private const double DefaultVolumeCeiling = 100;
 
+    // The height the timeline takes under the commands of the full screen bar: its bottom margin.
+    private const double TimelineRoom = 12;
+
     /// <summary>
     /// Whether an element that needs a capability stays in the layout. It leaves only for an admitted media
     /// that lacks the capability: before the first media every capability is false, and the views keep the
@@ -33,11 +36,18 @@ public sealed partial class PlayerOverlay
         => condition && IsCapabilityShown(capability, hasAdmittedMedia) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// A media without a timeline has nothing to seek, skip or speed up. The transport bars give it one row of
-    /// commands in place of their on-demand rows; that row is created only for an admitted media of this kind.
+    /// A media without a timeline plays at its newest picture. The transport bars are the same for it, less what
+    /// needs a timeline, plus one command an admitted media of this kind alone has: the way back to that picture.
     /// </summary>
     internal static bool IsTimelineFree(bool canSeek, bool hasAdmittedMedia)
         => hasAdmittedMedia && !canSeek;
+
+    /// <summary>
+    /// The room the full screen bar keeps where the timeline would be, for a media without one. It holds nothing;
+    /// it only keeps the commands above at the height they have over a timeline.
+    /// </summary>
+    internal static double GetTimelineRoom(bool canSeek, bool hasAdmittedMedia)
+        => IsTimelineFree(canSeek, hasAdmittedMedia) ? TimelineRoom : 0;
 
     /// <summary>
     /// The top of a volume slider. The player reports its ceiling once the media is set up; a ceiling that

@@ -6,8 +6,8 @@ using System.Globalization;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Windows.System;
 
@@ -17,11 +17,11 @@ namespace BiliCopilot.UI.Live.Controls;
 public sealed record LiveComposerNotice(string Message, InfoType Type);
 
 /// <summary>
-/// The danmaku box of a live room. It edits the draft of the room connector, reports the input method
-/// composition to it, and asks for one send on Enter or on the send button. While a send is on its way the
-/// draft cannot be edited and nothing more is sent. The connector clears the draft once a send is accepted; a send
-/// that fails keeps the draft and is reported through <see cref="Noticed"/>. Nothing sent is echoed here: the
-/// message shows when the room delivers it.
+/// The danmaku box of a live room, in the form of the on-demand danmaku box. It edits the draft of the room
+/// connector, reports the input method composition to it, and asks for one send on Enter or on the send icon.
+/// While a send is on its way the box takes no input, as the on-demand box does. The connector clears the draft
+/// once a send is accepted; a send that fails keeps the draft and is reported through <see cref="Noticed"/>.
+/// Nothing sent is echoed here: the message shows when the room delivers it.
 /// </summary>
 public sealed partial class LiveComposer : UserControl
 {
@@ -33,23 +33,16 @@ public sealed partial class LiveComposer : UserControl
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(LiveComposer), new PropertyMetadata(true, OnActiveChanged));
 
-    /// <summary><see cref="SendButtonStyle"/> dependency property.</summary>
-    public static readonly DependencyProperty SendButtonStyleProperty =
-        DependencyProperty.Register(nameof(SendButtonStyle), typeof(Style), typeof(LiveComposer), new PropertyMetadata(default(Style), OnSendButtonStyleChanged));
-
     private LiveConnectorViewModel? _subscribed;
+    private TextBox? _textBox;
     private bool _loaded;
-    private bool _synchronizing;
     private bool _composing;
+    private bool _enterBelongsElsewhere;
 
     /// <summary>Initializes a new instance of the <see cref="LiveComposer"/> class.</summary>
     public LiveComposer()
     {
         InitializeComponent();
-        var sendName = ResourceToolkit.GetLocalizedString(StringNames.SendDanmaku);
-        AutomationProperties.SetName(DraftBox, ResourceToolkit.GetLocalizedString(StringNames.LiveComposerName));
-        AutomationProperties.SetName(SendButton, sendName);
-        ToolTipService.SetToolTip(SendButton, sendName);
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         Synchronize();
@@ -72,13 +65,6 @@ public sealed partial class LiveComposer : UserControl
         set => SetValue(IsActiveProperty, value);
     }
 
-    /// <summary>The button style of the host bar, for the send button.</summary>
-    public Style? SendButtonStyle
-    {
-        get => (Style?)GetValue(SendButtonStyleProperty);
-        set => SetValue(SendButtonStyleProperty, value);
-    }
-
     private static void OnConnectorChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var composer = (LiveComposer)sender;
@@ -93,15 +79,23 @@ public sealed partial class LiveComposer : UserControl
         composer.Synchronize();
     }
 
-    private static void OnSendButtonStyleChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    private static TextBox? FindTextBox(DependencyObject root)
     {
-        if (args.NewValue is Style style) ((LiveComposer)sender).SendButton.Style = style;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TextBox box) return box;
+            if (FindTextBox(child) is { } found) return found;
+        }
+
+        return null;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_loaded) return;
         _loaded = true;
+        HookTextBox();
         Subscribe(Connector);
         Synchronize();
     }
@@ -111,8 +105,31 @@ public sealed partial class LiveComposer : UserControl
         // Re-parenting can raise Loaded before the old Unloaded.
         if (!_loaded || IsLoaded) return;
         _loaded = false;
+        UnhookTextBox();
         Subscribe(null);
         Synchronize();
+    }
+
+    // The composition of an input method is reported by the text box inside the box, once its template exists.
+    private void HookTextBox()
+    {
+        if (_textBox is not null) return;
+        DraftBox.ApplyTemplate();
+        if (FindTextBox(DraftBox) is not { } box) return;
+        _textBox = box;
+        box.TextChanging += OnDraftTextChanging;
+        box.TextCompositionStarted += OnCompositionStarted;
+        box.TextCompositionEnded += OnCompositionEnded;
+    }
+
+    private void UnhookTextBox()
+    {
+        if (_textBox is not { } box) return;
+        _textBox = null;
+        box.TextChanging -= OnDraftTextChanging;
+        box.TextCompositionStarted -= OnCompositionStarted;
+        box.TextCompositionEnded -= OnCompositionEnded;
+        EndComposition();
     }
 
     private void Subscribe(LiveConnectorViewModel? connector)
@@ -136,33 +153,37 @@ public sealed partial class LiveComposer : UserControl
     private void Synchronize()
     {
         var connector = _subscribed;
-        var usable = connector is not null && IsActive;
-        DraftBox.IsEnabled = usable;
 
         // While the input method composes, the box is ahead of the draft; the draft follows on the next change.
         var draft = connector?.Draft ?? string.Empty;
-        if (!_composing && !string.Equals(DraftBox.Text, draft, StringComparison.Ordinal))
+        if (!_composing && !string.Equals(_textBox?.Text ?? DraftBox.Text, draft, StringComparison.Ordinal))
         {
-            _synchronizing = true;
-            try { DraftBox.Text = draft; }
-            finally { _synchronizing = false; }
+            DraftBox.Text = draft;
+            if (_textBox is { } box && !string.Equals(box.Text, draft, StringComparison.Ordinal)) box.Text = draft;
         }
 
-        var sending = connector?.IsSending == true;
-        DraftBox.IsReadOnly = sending;
+        // A send on its way: the box takes no input until the room answers.
+        DraftBox.IsEnabled = connector is not null && IsActive && !connector.IsSending;
         var available = connector is null || (connector.IsActive && connector.Room.CanSend);
-        var placeholder = ResourceToolkit.GetLocalizedString(available ? StringNames.LiveComposerPlaceholder : StringNames.LiveComposerUnavailable);
+        var placeholder = ResourceToolkit.GetLocalizedString(available ? StringNames.DanmakuPlaceholder : StringNames.LiveComposerUnavailable);
         if (DraftBox.PlaceholderText != placeholder) DraftBox.PlaceholderText = placeholder;
-        SendButton.IsEnabled = usable && connector!.CanSend;
-        SendingRing.IsActive = sending;
-        SendingRing.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
-        SendIcon.Visibility = sending ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void OnDraftTextChanged(object sender, TextChangedEventArgs e)
+    // The text box reports a change as it happens, so the draft is never behind what is on screen. Whoever made
+    // the change, a text that equals the draft changes nothing.
+    private void OnDraftTextChanging(TextBox sender, TextBoxTextChangingEventArgs args)
+        => UpdateDraft(sender.Text);
+
+    // The box reports the same change again a moment later; it matters only if the text box was not found.
+    private void OnDraftTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        if (_synchronizing || _subscribed is not { } connector) return;
-        if (!string.Equals(connector.Draft, DraftBox.Text, StringComparison.Ordinal)) connector.Draft = DraftBox.Text;
+        if (_textBox is null) UpdateDraft(sender.Text);
+    }
+
+    private void UpdateDraft(string text)
+    {
+        if (_subscribed is not { } connector) return;
+        if (!string.Equals(connector.Draft, text, StringComparison.Ordinal)) connector.Draft = text;
     }
 
     private void OnCompositionStarted(TextBox sender, TextCompositionStartedEventArgs args)
@@ -181,16 +202,22 @@ public sealed partial class LiveComposer : UserControl
         if (_subscribed is { } connector) connector.IsComposing = false;
     }
 
-    private void OnDraftKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnDraftPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // One send per key press: a held key does not repeat it, and Enter inside a composition belongs to
-        // the input method.
-        if (e.Key != VirtualKey.Enter || _composing || e.KeyStatus.WasKeyDown) return;
-        e.Handled = true;
-        _ = SendAsync();
+        if (e.Key != VirtualKey.Enter) return;
+
+        // One send per key press: a held key does not repeat it, and Enter inside a composition belongs to the
+        // input method. The box may still report a submit for this key; it is dropped. The mark lasts for this
+        // key event only, so the send icon is never held back by it.
+        _enterBelongsElsewhere = _composing || e.KeyStatus.WasKeyDown;
+        if (_enterBelongsElsewhere) DispatcherQueue.TryEnqueue(() => _enterBelongsElsewhere = false);
     }
 
-    private void OnSendClick(object sender, RoutedEventArgs e) => _ = SendAsync();
+    private void OnDraftSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (_enterBelongsElsewhere || _composing) return;
+        _ = SendAsync();
+    }
 
     private async Task SendAsync()
     {
@@ -203,6 +230,8 @@ public sealed partial class LiveComposer : UserControl
             return;
         }
 
+        // The box loses the keyboard while it takes no input; it gets it back for the next line.
+        var hadFocus = _textBox is { FocusState: not FocusState.Unfocused };
         LiveSendResult result;
         try
         {
@@ -216,7 +245,9 @@ public sealed partial class LiveComposer : UserControl
         }
 
         // A result of a room that is gone has nobody to tell.
-        if (!connector.IsActive || connector.Room.Binding != binding) return;
+        if (!_loaded || !ReferenceEquals(_subscribed, connector) || !connector.IsActive || connector.Room.Binding != binding) return;
+        Synchronize();
+        if (hadFocus && DraftBox.IsEnabled) DraftBox.Focus(FocusState.Programmatic);
         switch (result.Outcome)
         {
             case LiveSendOutcome.Accepted:

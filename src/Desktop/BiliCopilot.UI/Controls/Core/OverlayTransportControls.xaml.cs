@@ -111,7 +111,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         => ProgressBarVisible && (ViewModel is not { } vm || PlayerOverlay.IsCapabilityShown(vm.CanSeek, vm.HasAdmittedMedia));
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
-    internal FrameworkElement PlayPauseTarget => LiveRow is { IsLoaded: true } row ? row.PlayPauseTarget : PlayPauseButton;
+    internal FrameworkElement PlayPauseTarget => PlayPauseButton;
     public event EventHandler<bool>? InteractionStateChanged;
 
     private static void OnIsActiveChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
@@ -294,7 +294,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             ResetProgressPreview();
             _chapterPreview?.Reset();
             ChapterEntry?.CancelPendingInput();
-            LiveRow?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
@@ -389,8 +388,9 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private FluentIcons.Common.Symbol GetFullScreenSymbol(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.FullScreen ? FluentIcons.Common.Symbol.FullScreenMinimize : FluentIcons.Common.Symbol.FullScreenMaximize;
 
-    private bool IsPlayPauseEnabled(MpvPlayerState state)
-        => state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End;
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private bool IsPlayPauseEnabled(MpvPlayerState state, bool isLiveReleaseBlocked)
+        => (state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
 
     private string GetPlayPauseTip(bool isPlaying)
         => isPlaying ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Pause) : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Play);
@@ -452,6 +452,20 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         else if (owner.ViewModel.Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
             await ExecuteInputAsync(owner, () => owner.ViewModel.PlayPauseCommand.ExecuteAsync(null));
+    }
+
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (CaptureInput() is not { } owner || !owner.ViewModel.CanRefreshLive) return;
+        try
+        {
+            await owner.ViewModel.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Fullscreen transport refresh failed: {ex.Message}");
+        }
     }
 
     private void OnProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)

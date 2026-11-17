@@ -8,6 +8,7 @@
     xmlns:danmaku="using:BiliCopilot.UI.Controls.Danmaku"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:live="using:BiliCopilot.UI.Live.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:store="using:BiliCopilot.UI.Controls.Player.StoreIsland"
     mc:Ignorable="d">
@@ -46,12 +47,14 @@
                 IsChecked="{x:Bind RenderViewModel.IsShowDanmaku, Mode=TwoWay}"
                 IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                 ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}" />
+            <!--  The display settings shape the danmaku of an on-demand media.  -->
             <Button
                 x:Name="DanmakuOptionButton"
                 AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
                 IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                 Style="{StaticResource CircleIconButtonStyle}"
-                ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
+                Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                 <Button.Flyout>
                     <!--  与全屏弹幕设置共用同一固定宽度面板；弹出层不受视频区域边界约束  -->
@@ -71,7 +74,8 @@
             VerticalAlignment="Center"
             PlaceholderText="{ext:Locale Name=DanmakuPlaceholder}"
             QuerySubmitted="OnDanmakuInputBoxSubmittedAsync"
-            TextChanged="OnDraftChanged">
+            TextChanged="OnDraftChanged"
+            Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSendOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <AutoSuggestBox.TextBoxStyle>
                 <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
                     <Setter Property="Padding" Value="36,4,8,4" />
@@ -86,7 +90,8 @@
             VerticalAlignment="Center"
             AutomationProperties.Name="{ext:Locale Name=DanmakuSendSettings}"
             Style="{StaticResource IconButtonStyle}"
-            ToolTipService.ToolTip="{ext:Locale Name=DanmakuSendSettings}">
+            ToolTipService.ToolTip="{ext:Locale Name=DanmakuSendSettings}"
+            Visibility="{x:Bind core:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSendOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <ic:SymbolIcon FontSize="12" Symbol="Options" />
             <Button.Flyout>
                 <Flyout
@@ -96,5 +101,16 @@
                 </Flyout>
             </Button.Flyout>
         </Button>
+        <!--
+            A live room sends through its own pipeline: the same box in the same place, created only for a room.
+            The send settings of the on-demand box do not apply to it.
+        -->
+        <live:LiveComposer
+            x:Name="RoomComposer"
+            Grid.Column="1"
+            x:Load="{x:Bind ViewModel.HasRoomChat, Mode=OneWay}"
+            Connector="{x:Bind ViewModel.LiveConnector, Mode=OneWay}"
+            IsActive="{x:Bind IsActive, Mode=OneWay}"
+            Noticed="OnRoomComposerNoticed" />
     </Grid>
 </core:PlayerControlBase>

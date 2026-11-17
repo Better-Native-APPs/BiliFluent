@@ -150,7 +150,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public bool IsInteracting => _isInteracting;
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
-    internal FrameworkElement PlayPauseTarget => LiveRow is { IsLoaded: true } row ? row.PlayPauseTarget : PlayPauseButton;
+    internal FrameworkElement PlayPauseTarget => PlayPauseButton;
 
     /// <summary>
     /// 交互状态发生变化. 参数为新值，与 <see cref="IsInteracting"/> 一致.
@@ -261,13 +261,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             if (cancel) ChapterEntry.CancelPendingInput();
         }
 
-        // The row of a media without a timeline exists only for such a media.
-        if (LiveRow is { } row)
-        {
-            row.IsActive = !IsInputBlocked;
-            if (cancel) row.CancelPendingInput();
-        }
-
         void Update(object? content)
         {
             var active = !IsInputBlocked;
@@ -296,12 +289,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         }
     }
 
-    // The row is created when a media without a timeline arrives; it starts with the state of this bar.
-    private void OnLiveRowLoaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is LiveTransportRow row) row.IsActive = !IsInputBlocked;
-    }
-
     private static bool IsPaused(MpvPlayerState state)
         => state is MpvPlayerState.Paused;
 
@@ -319,6 +306,24 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
     private static bool IsNotBuffering(MpvPlayerState state, bool isLoading)
         => !IsBuffering(state, isLoading);
+
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private static bool IsPlayPauseEnabled(MpvPlayerState state, bool isLoading, bool isLiveReleaseBlocked)
+        => IsNotBuffering(state, isLoading) && !isLiveReleaseBlocked;
+
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (IsInputBlocked || ViewModel is not { CanRefreshLive: true } owner) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Island transport refresh failed: {ex.Message}");
+        }
+    }
 
     private void SubscribeViewModel(PlayerViewModel? viewModel)
     {

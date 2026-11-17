@@ -68,9 +68,18 @@
         <DataTemplate x:Key="PgcPanelTemplate" x:DataType="core:PgcConnectorViewModel">
             <player:PgcPlayerPanel ViewModel="{x:Bind}" />
         </DataTemplate>
-        <!--  A room has no widget beside the commands and no extra panel: its own row of the bar carries its box.  -->
+        <!--
+            The full screen bar has no danmaku box. A room puts its box where other media show what plays, so it
+            comes and goes with the widgets; the bar is a black gradient in every app theme, hence the dark box.
+            A room has no extra panel.
+        -->
         <DataTemplate x:Key="LiveWidgetTemplate" x:DataType="core:LiveConnectorViewModel">
-            <Grid />
+            <live:LiveComposer
+                Width="320"
+                VerticalAlignment="Center"
+                Connector="{x:Bind}"
+                Noticed="OnRoomComposerNoticed"
+                RequestedTheme="Dark" />
         </DataTemplate>
         <DataTemplate x:Key="LivePanelTemplate" x:DataType="core:LiveConnectorViewModel">
             <Grid />
