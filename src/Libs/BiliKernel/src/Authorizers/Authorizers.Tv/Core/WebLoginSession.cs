@@ -147,6 +147,72 @@ internal sealed class WebLoginSession : BiliLoginSession
         }
     }
 
+    internal async Task<BiliLoginCaptchaResponse> LoadCaptchaImageAsync(BiliLoginCaptchaParameters parameters, Uri referer, CancellationToken cancellationToken)
+    {
+        // Download through the isolated HTTP session: the image URL's token must not enter WebView2 history/cache.
+        const int maxImageBytes = 1024 * 1024;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeToken);
+        linked.CancelAfter(TimeSpan.FromSeconds(30));
+        var endpoint = BiliApis.Passport.WebCaptchaImage + "?_=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            + "&token=" + Uri.EscapeDataString(parameters.Token);
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Referrer = referer;
+        request.Headers.TryAddWithoutValidation("Accept", "image/*");
+        try
+        {
+            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return BiliLoginCaptchaResponse.Failed(WebLoginProtocol.HttpFailure((int)response.StatusCode, null));
+            }
+
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (mediaType is not ("image/png" or "image/jpeg" or "image/gif" or "image/webp")
+                || response.Content.Headers.ContentLength > maxImageBytes)
+            {
+                return BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.InvalidResponse));
+            }
+
+            using var source = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var image = new MemoryStream();
+            var buffer = new byte[8192];
+            int count;
+            while ((count = await source.ReadAsync(buffer, 0, buffer.Length, linked.Token).ConfigureAwait(false)) != 0)
+            {
+                if (image.Length + count > maxImageBytes)
+                {
+                    return BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.InvalidResponse));
+                }
+
+                image.Write(buffer, 0, count);
+            }
+
+            if (image.Length == 0 || IsClosed)
+            {
+                return BiliLoginCaptchaResponse.Failed(new(IsClosed ? BiliLoginErrorKind.SessionExpired : BiliLoginErrorKind.InvalidResponse));
+            }
+
+            var data = "data:" + mediaType + ";base64," + Convert.ToBase64String(image.GetBuffer(), 0, (int)image.Length);
+            return BiliLoginCaptchaResponse.Succeeded(new(parameters.Type, parameters.Token, parameters.Gt, parameters.Challenge, data));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("The login operation was canceled.", cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return BiliLoginCaptchaResponse.Failed(new(IsClosed ? BiliLoginErrorKind.SessionExpired : BiliLoginErrorKind.TimedOut));
+        }
+        catch (HttpRequestException)
+        {
+            throw new HttpRequestException("The captcha image request could not be completed.");
+        }
+        catch (ObjectDisposedException) when (IsClosed)
+        {
+            return BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.SessionExpired));
+        }
+    }
+
     // Browsers always send a buvid3 cookie to these endpoints, so request an anonymous one once per attempt.
     // Whether the server requires it is unconfirmed: failing to get one never fails the login step.
     internal async Task EnsureBrowserIdentityAsync(CancellationToken cancellationToken)
