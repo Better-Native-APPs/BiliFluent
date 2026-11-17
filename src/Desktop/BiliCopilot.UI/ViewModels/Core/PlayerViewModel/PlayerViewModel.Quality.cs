@@ -19,6 +19,15 @@ public sealed partial class PlayerViewModel
     // Counts the files that start and finish loading, so a check that waited can tell that another load began.
     private long _automaticAudioLoads;
 
+    // The network load that the standard quality replaced. The node failover looks at the same missing
+    // track after the same delay; it leaves that load alone, or the file would be loaded twice.
+    private long _automaticAudioFallbackLoad = -1;
+
+    // The automatic choice is a Dolby or Hi-Res stream that the standard quality can still replace.
+    private bool IsAutomaticSpecialAudioPending(MediaSourceResolverBase resolver)
+        => _snapshot is { IsAutomaticAudioStandardOnly: false } snapshot && string.IsNullOrEmpty(snapshot.PreferAudioQualityId)
+            && GetSpecialAudioName(GetResolverAudioSelections(resolver)) is not null;
+
     /// <summary>
     /// Whether the quality is automatic: neither a video quality nor an audio quality is chosen by hand.
     /// The automatic entry of the quality menu is the selected one then.
@@ -153,6 +162,7 @@ public sealed partial class PlayerViewModel
             }
 
             var position = loaded.IsSuccess && double.IsFinite(loaded.Value) && loaded.Value > 0 ? loaded.Value : player.Position;
+            _automaticAudioFallbackLoad = _networkLoads;
             snapshot.IsAutomaticAudioStandardOnly = true;
             await RunWithoutPlayerInputAsync(async () =>
             {

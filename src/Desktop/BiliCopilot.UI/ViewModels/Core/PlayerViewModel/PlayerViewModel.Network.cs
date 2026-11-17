@@ -366,6 +366,13 @@ public sealed partial class PlayerViewModel
                 return;
             }
 
+            // An automatic Dolby or Hi-Res stream that did not load is replaced by the standard quality, once.
+            // Trying another node for it here as well would load the file a second time.
+            if (load == _automaticAudioFallbackLoad || (OnDemandResolver is { } resolver && IsAutomaticSpecialAudioPending(resolver)))
+            {
+                return;
+            }
+
             ApplyFailoverDecision(_failover.OnAudioMissing(NetworkNow, availability));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
