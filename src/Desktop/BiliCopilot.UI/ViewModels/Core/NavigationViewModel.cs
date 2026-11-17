@@ -25,9 +25,12 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     private OverlayFrame? _overFrame;
     private long _navigationSequence;
     private Func<Task>? _closeEmbeddedLive;
+    private readonly NavigationOperationQueue _navigationOperations = new();
 
     /// <summary>Observable completion/failure for the legacy void navigation interface.</summary>
-    public Task LastNavigationTask { get; private set; } = Task.CompletedTask;
+#pragma warning disable VSTHRD003 // Exposes an independent producer, never a prerequisite of that producer.
+    public Task LastNavigationTask => _navigationOperations.LastTask;
+#pragma warning restore VSTHRD003
     public Exception? LastNavigationError { get; private set; }
 
     /// <summary>Start the optional selected command and snapshot the actual initial navigation barrier.</summary>
@@ -45,53 +48,45 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         return navigation;
     }
 
-    public void NavigateTo(Type pageType, object? parameter = null) => QueueNavigation(() => NavigateToCore(pageType, parameter));
+    public void NavigateTo(Type pageType, object? parameter = null)
+        => _ = QueueNavigation(() => { NavigateToCore(pageType, parameter); RecordCurrentPage(); });
     public void NavigateToOver(Type pageType, object? parameter = null)
-        => QueueNavigation(() => NavigateToOverCore(pageType, parameter), allowBackgroundLiveClose: true);
-    public void Search(string keyword) => QueueNavigation(() => SearchCore(keyword));
-    public void SearchInRegion(string keyword) => QueueNavigation(() => SearchInRegionCore(keyword));
-    public void Back()
-    {
-        var app = this.Get<AppViewModel>();
-        var returningFromPlayer = app.HasEmbeddedWork || app.HasLiveWork;
-        QueueNavigation(() => { if (!returningFromPlayer) BackCore(); });
-    }
+        => _ = QueueNavigation(() => { NavigateToOverCore(pageType, parameter); RecordCurrentPage(); }, allowBackgroundLiveClose: true);
+    public void Search(string keyword) => _ = QueueNavigation(() => { SearchCore(keyword); RecordCurrentPage(); });
+    public void SearchInRegion(string keyword) => _ = QueueNavigation(() => SearchInRegionCore(keyword));
+    public void Back() => _ = GoBackAsync();
+    public void Forward() => _ = GoForwardAsync();
 
-    private void QueueNavigation(Action navigate, bool allowBackgroundLiveClose = false)
+    private Task QueueNavigation(Action navigate, bool allowBackgroundLiveClose = false)
+        => QueueNavigation(_ => { navigate(); return Task.CompletedTask; }, allowBackgroundLiveClose);
+
+    private Task QueueNavigation(Func<long, Task> navigate, bool allowBackgroundLiveClose = false)
     {
-        var previous = LastNavigationTask;
         var app = this.Get<AppViewModel>();
+        if (app.IsPlaybackStopping) return Task.CompletedTask;
+        SaveCurrentPlayback(); // Capture progress/part before CloseAsync resets the native state.
         var backgroundLiveClose = allowBackgroundLiveClose && !app.HasEmbeddedWork;
-        // VOD always keeps its real close barrier, including pending opening/Sponsor cleanup.
-        // Root hides Live synchronously and registers its retained close with playback admission.
-        var playerClose = app.CloseEmbeddedPlayerAsync();
-        Task liveClose;
-        try { liveClose = _closeEmbeddedLive?.Invoke() ?? Task.CompletedTask; }
-        catch (Exception ex)
+        Task liveClose = Task.CompletedTask;
+        Task StartCloseAsync()
         {
-            // A synchronous hide/close-start failure must still block navigation and be observed.
-            liveClose = Task.FromException(ex);
-            backgroundLiveClose = false;
+            // The close starts immediately, including while an earlier navigation/open awaits.
+            var playerClose = app.CloseEmbeddedPlayerAsync();
+            try { liveClose = _closeEmbeddedLive?.Invoke() ?? Task.CompletedTask; }
+            catch (Exception ex)
+            {
+                liveClose = Task.FromException(ex);
+                backgroundLiveClose = false;
+            }
+            return backgroundLiveClose ? playerClose : Task.WhenAll(playerClose, liveClose);
         }
-        var close = backgroundLiveClose ? playerClose : Task.WhenAll(playerClose, liveClose);
-        _navigationSequence++;
-        LastNavigationTask = NavigateAfterCloseAsync(previous, close, navigate);
-        OnPropertyChanged(nameof(LastNavigationTask));
-        // Navigation may finish first, but its close failure still reaches the existing observer/tip.
-        _ = ObserveNavigationAsync(backgroundLiveClose ? Task.WhenAll(LastNavigationTask, liveClose) : LastNavigationTask);
-    }
 
-    private static async Task NavigateAfterCloseAsync(Task previous, Task close, Action navigate)
-    {
-        // This continuation owns no player gate; the previous navigation never waits for this successor.
-#pragma warning disable VSTHRD003
-        try { await previous; } catch { /* Prior failure is exposed by LastNavigationError. */ }
-#pragma warning restore VSTHRD003
-        // Join the actual cached close before navigating; close has no dependency on this continuation.
-#pragma warning disable VSTHRD003
-        await close; // A failed close retains ownership and MUST prevent navigation.
-#pragma warning restore VSTHRD003
-        navigate();
+        var sequence = ++_navigationSequence;
+        var navigation = _navigationOperations.Enqueue(StartCloseAsync, () => navigate(sequence));
+        OnPropertyChanged(nameof(LastNavigationTask));
+        NotifyHistoryAvailability();
+        // Navigation may finish first, but its close failure still reaches the existing observer/tip.
+        _ = ObserveNavigationAsync(backgroundLiveClose ? Task.WhenAll(navigation, liveClose) : navigation);
+        return navigation;
     }
 
     private async Task ObserveNavigationAsync(Task navigation)
@@ -110,6 +105,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             this.Get<AppViewModel>().ShowTipCommand.Execute((ex.Message, Richasy.WinUIKernel.Share.Base.InfoType.Error));
         }
         OnPropertyChanged(nameof(LastNavigationError));
+        NotifyHistoryAvailability();
     }
 
     [ObservableProperty]
@@ -151,6 +147,8 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
 
         ActiveMainWindow();
         var currentContent = _navFrame.GetCurrentContent();
+        _mainPage = new(pageType, parameter);
+        _overlayPage = null;
         if (IsOverlayOpen)
         {
             IsOverlayOpen = false;
@@ -158,6 +156,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             CheckSubPageStatus();
         }
 
+        SelectNavigationItem(pageType);
         if (currentContent?.GetType() == pageType)
         {
             if (currentContent is ICancelPageViewModel cancelPage)
@@ -170,12 +169,12 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
 
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedFeaturePage, pageType.FullName);
         _navFrame.NavigateTo(pageType, parameter);
+    }
 
-        var item = MenuItems.Find(p => p.PageKey == pageType.FullName);
-        if (item is not null && _navigationView.SelectedItem != item)
-        {
-            _navigationView.SelectedItem = item;
-        }
+    private void SelectNavigationItem(Type pageType)
+    {
+        var item = MenuItems.Concat(FooterItems).FirstOrDefault(p => p.PageKey == pageType.FullName);
+        if (item is not null && _navigationView.SelectedItem != item) _navigationView.SelectedItem = item;
     }
 
     public void TryClearOverlayPages()
@@ -187,6 +186,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
 
         IsOverlayOpen = false;
         IsTemporaryOverlayClosed = false;
+        _overlayPage = null;
         _overFrame?.ClearBackStack();
     }
 
@@ -206,6 +206,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
 
         ActiveMainWindow();
         _overFrame.NavigateTo(pageType, parameter);
+        _overlayPage = new(pageType, parameter);
         IsOverlayOpen = true;
         CheckSubPageStatus();
 
@@ -233,6 +234,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         if (_overFrame is not null && _overFrame.GetCurrentContent() is SearchPage page)
         {
             IsOverlayOpen = true;
+            _overlayPage = new(typeof(SearchPage), keyword);
             page.ViewModel.SearchCommand.Execute(keyword);
             return;
         }
@@ -265,29 +267,6 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     }
 
     /// <summary>
-    /// 尝试返回.
-    /// </summary>
-    private void BackCore()
-    {
-        if (_overFrame is not null)
-        {
-            if (_overFrame.GetCurrentContent() is ICancelPageViewModel cancelPage)
-            {
-                cancelPage.CancelLoading();
-            }
-
-            _overFrame.GoBack();
-            if (_overFrame.GetBackStack().Count == 0)
-            {
-                IsOverlayOpen = false;
-                _navFrame?.Focus(FocusState.Programmatic);
-            }
-        }
-
-        CheckSubPageStatus();
-    }
-
-    /// <summary>
     /// 初始化导航视图模型.
     /// </summary>
     public void Initialize(NavigationView view, MainFrame navFrame, OverlayFrame overFrame,
@@ -302,6 +281,8 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         _overFrame = overFrame;
         _navigationView = view;
         _closeEmbeddedLive = closeEmbeddedLive;
+        _history.Navigate(new(null, null, null));
+        this.Get<AppViewModel>().BindMainNavigation(this);
         IsTopNavBarShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
 
         MenuItems = [.. GetMenuItems()];

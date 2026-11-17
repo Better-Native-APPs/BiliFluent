@@ -565,6 +565,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         args.Handled = true;
         ShowControlsForInput();
         if (args.KeyStatus.WasKeyDown) return;
+        if (args.Key == VirtualKey.Escape && owner.IsEmbedded)
+        {
+            this.Get<NavigationViewModel>().Back();
+            return;
+        }
         try { await command.ExecuteAsync(null); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Player shortcut failed: {ex.Message}"); }
     }
@@ -1105,9 +1110,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
     }
 
-    // 返回：恢复标准视图（BackToDefaultModeCommand），不是关闭播放的 BackCommand.
-    private async void OnEmbeddedBackClick(object sender, RoutedEventArgs e)
-        => await RunEmbeddedHeaderCommandAsync(owner => owner.BackToDefaultModeCommand);
+    // The global Back owner preserves panel/presentation priority before walking visit history.
+    private void OnEmbeddedBackClick(object sender, RoutedEventArgs e)
+    {
+        if (CaptureEmbeddedHeaderRequest() is not { } request || !IsCurrentHeaderRequest(request)) return;
+        this.Get<NavigationViewModel>().Back();
+    }
 
     private async void OnEmbeddedCompactClick(object sender, RoutedEventArgs e)
         => await RunEmbeddedHeaderCommandAsync(owner => owner.ToggleCompactOverlayCommand);
