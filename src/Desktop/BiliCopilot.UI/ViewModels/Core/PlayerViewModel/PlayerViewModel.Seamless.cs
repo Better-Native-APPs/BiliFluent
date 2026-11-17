@@ -17,6 +17,7 @@ namespace BiliCopilot.UI.ViewModels.Core;
 public sealed partial class PlayerViewModel
 {
     private readonly SeamlessRequestSequence _seamlessRequests = new();
+    private readonly PlaybackPositionIntent _playbackPosition = new();
     private SelectionIntent? _selectionIntent;
     // Each execution cancels its predecessor; its own finally disposes the CTS after the library drains.
 #pragma warning disable CA2213
@@ -133,7 +134,8 @@ public sealed partial class PlayerViewModel
                         if (observation is { Paused: true })
                             result = new(MpvSeamlessSwitchStatus.NotSupported, MpvSeamlessSwitchReason.Paused);
                         else if (!SeamlessSwitchPolicy.CanAttempt(CanSelectOnDemandQuality, intent.Player.IsPlaybackInitialized,
-                            observation is { Playing: true, Seeking: false }, false, intent.Player.IsRelaying(relayKind), description?.Target is not null))
+                            observation is { Playing: true, Seeking: false } && _playbackPosition.PendingPosition is null,
+                            false, intent.Player.IsRelaying(relayKind), description?.Target is not null))
                             result = new(MpvSeamlessSwitchStatus.NotSupported, description?.Target is null
                                 ? MpvSeamlessSwitchReason.MissingMetadata : MpvSeamlessSwitchReason.PlaybackUnavailable);
                         else if ((current.Video?.Target?.Restrictions ?? MpvSeamlessRestrictions.None) != MpvSeamlessRestrictions.None
@@ -307,33 +309,70 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    private async Task SeekSelectedOnDemandAsync(double position, long version, Func<Task> seek)
+    private long NoteUserPosition(double position)
+    {
+        var request = _playbackPosition.Request(position);
+        var now = NetworkNow;
+        _failover.OnSeek(now);
+        OnAdaptiveSeek(now);
+        ResetSelectedRelayObservation();
+        if (_reloadState is { } state) _reloadState = (position, state.Paused, state.Speed);
+        return request;
+    }
+
+    private async Task SeekSelectedOnDemandAsync(double position, long version, Func<Task> seek, long? userRequest = null)
     {
         var player = Player;
         if (player is null || !CanSeek || !IsCurrentPlayback(version)) return;
+        var request = userRequest ?? NoteUserPosition(position);
+        if (!_playbackPosition.IsLatest(request)) return;
         var reload = false;
         var entered = false;
         try
         {
             await _initializationGate.WaitAsync(_activeMediaToken);
             entered = true;
-            if (!CanSeek || !IsCurrentPlayback(version) || !ReferenceEquals(player, Player)) return;
+            if (!CanSeek || !IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !_playbackPosition.IsLatest(request)) return;
             var state = await player.GetSeamlessPlaybackStateAsync(_activeMediaToken);
-            if (!IsCurrentPlayback(version)) return;
+            var observation = await ReadPlaybackObservationAsync(player);
+            if (!IsCurrentPlayback(version) || !_playbackPosition.IsLatest(request)) return;
             if (state.IsSuccess)
             {
                 _selectedPlaybackState = state.Value;
-                reload = _onDemandReplayNeedsLoad || SeamlessSwitchPolicy.RequiresReloadForSeek(position, state.Value.Video.IsExternal, state.Value.Video.MinimumSeekTimeSeconds);
+                reload = _onDemandReplayNeedsLoad || SeamlessSwitchPolicy.RequiresReloadForSeek(position,
+                    observation?.Position ?? player.Position, state.Value.Video.IsExternal, state.Value.Video.MinimumSeekTimeSeconds,
+                    OnDemandResolver?.CurrentStreams is { Video: not null, Audio: not null });
             }
-            else reload = _onDemandReplayNeedsLoad || _seamlessVideoSelected;
-            if (!reload) await seek();
+            else reload = _onDemandReplayNeedsLoad || _seamlessVideoSelected
+                || (OnDemandResolver?.CurrentStreams is { Video: not null, Audio: not null }
+                    && position < (observation?.Position ?? player.Position));
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Playback | user-seek from={From} target={Target} mode={Mode}",
+                    observation?.Position ?? player.Position, position, reload ? "reload" : "seek");
+            if (!reload)
+            {
+                await seek();
+                _playbackPosition.MarkSubmitted(request);
+                var after = await ReadPlaybackObservationAsync(player);
+                if (IsCurrentPlayback(version) && _playbackPosition.IsLatest(request) && after is { } settled)
+                    _playbackPosition.Observe(settled.Position, settled.Seeking, settled.Buffering, !settled.Playing, settled.Paused, settled.Speed);
+            }
         }
         finally
         {
             if (entered) _initializationGate.Release();
         }
 
-        if (reload && IsCurrentPlayback(version)) await ReplayAsync(position);
+        if (reload && IsCurrentPlayback(version) && _playbackPosition.IsLatest(request)) await ReplayAsync(position);
+    }
+
+    private async Task ObserveUserPositionCompletionAsync(MpvPlayer player, long version, long request)
+    {
+        var observation = await ReadPlaybackObservationAsync(player);
+        if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !_playbackPosition.IsLatest(request)
+            || _onDemandReplayNeedsLoad || observation is not { } settled) return;
+        if (_playbackPosition.Observe(settled.Position, settled.Seeking, settled.Buffering, !settled.Playing, settled.Paused, settled.Speed))
+            _failover.OnPlaybackRestart(NetworkNow);
     }
 
     private void ApplyCurrentOnDemandSelection(MediaSourceResolverBase resolver)
@@ -410,12 +449,16 @@ public sealed partial class PlayerViewModel
             if (client.IsDisposed || client.GetProperty("pause", out bool paused) != MpvError.Success
                 || client.GetProperty("seeking", out bool seeking) != MpvError.Success
                 || client.GetProperty("core-idle", out bool idle) != MpvError.Success
+                || client.GetProperty("paused-for-cache", out bool buffering) != MpvError.Success
                 || client.GetProperty("speed", out double speed) != MpvError.Success || !double.IsFinite(speed) || speed <= 0
-                || client.GetProperty("time-pos", out double position) != MpvError.Success || !double.IsFinite(position)) return null;
-            return new(paused, seeking, !idle, speed, position);
+                || client.GetProperty("time-pos", out double position) != MpvError.Success || !double.IsFinite(position) || position < 0) return null;
+            return new(paused, seeking, !idle, speed, position) { Buffering = buffering };
         });
 
-    private readonly record struct PlaybackObservation(bool Paused, bool Seeking, bool Playing, double Speed, double Position);
+    private readonly record struct PlaybackObservation(bool Paused, bool Seeking, bool Playing, double Speed, double Position)
+    {
+        public bool Buffering { get; init; }
+    }
 
     partial void PrepareAdaptiveSelection(ref OnDemandSelectionRequest request, bool silent);
     partial void OnAdaptiveSelectionCommitted(SelectionIntent intent, int fromQuality, int toQuality);

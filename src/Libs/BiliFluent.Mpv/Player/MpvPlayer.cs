@@ -231,11 +231,23 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             if (!TryStartPlayerOperation(() => resolver!.GetSourceAsync(), out var sourceWork)) return false;
             var source = await sourceWork;
             if (_isDisposed) return false;
+            var position = preferPosition;
+            if (position is null)
+            {
+                if (!TryStartPlayerOperation(Client.GetCurrentPositionAsync, out var positionWork)) return false;
+                var actual = await positionWork;
+                if (_isDisposed) return false;
+                position = PlaybackState == MpvPlayerState.End ? 0
+                    : actual.IsSuccess && double.IsFinite(actual.Value) && actual.Value >= 0 ? actual.Value : Position;
+            }
             if (!TryStartPlayerOperation(() =>
             {
+                Interlocked.Increment(ref _positionUpdateVersion);
                 _cachedSource = source;
                 if (!string.IsNullOrEmpty(PreferExtraLoader)) source.Options?.InitExtraLoader = PreferExtraLoader;
-                if (preferPosition != null) source.Options?.StartPosition = preferPosition.Value;
+                // A resolver may return its cached source, whose start was the entry history.
+                // Every load supplies a fresh position, including zero; never inherit that option.
+                source.Options.StartPosition = position ?? 0;
                 if (speed is > 0) source.Options?.InitialSpeed = speed.Value;
                 Title = source.Title;
                 var (url, options) = PrepareLoad(source);

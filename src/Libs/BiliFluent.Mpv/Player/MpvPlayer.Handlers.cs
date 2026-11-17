@@ -72,8 +72,11 @@ public sealed partial class MpvPlayer
                 PostCounted(_ => Duration = (double)e.Data!);
                 break;
             case MpvClientEventId.PositionChanged:
-                Interlocked.Increment(ref _positionUpdateVersion);
-                PostCounted(_ => Position = (double)e.Data!);
+                var positionVersion = Interlocked.Increment(ref _positionUpdateVersion);
+                PostCounted(_ =>
+                {
+                    if (positionVersion == Interlocked.Read(ref _positionUpdateVersion)) Position = (double)e.Data!;
+                });
                 break;
             case MpvClientEventId.FullScreenChanged:
                 PostCounted(_ => IsFullScreen = (bool)e.Data!);
