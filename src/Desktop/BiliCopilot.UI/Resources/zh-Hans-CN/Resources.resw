@@ -1968,8 +1968,11 @@
   <data name="SignInCountryName" xml:space="preserve">
     <value>国家或地区</value>
   </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>地区</value>
+  </data>
   <data name="SignInCountryLoading" xml:space="preserve">
-    <value>正在加载地区…</value>
+    <value>加载中…</value>
   </data>
   <data name="SignInCountryLoadFailed" xml:space="preserve">
     <value>地区列表加载失败，请检查网络后重试</value>
@@ -2078,6 +2081,18 @@
   </data>
   <data name="SignInErrorInvalidPhoneNumber" xml:space="preserve">
     <value>手机号格式不正确</value>
+  </data>
+  <data name="SignInErrorAccountFormat" xml:space="preserve">
+    <value>请输入手机号或邮箱</value>
+  </data>
+  <data name="SignInErrorInvalidEmail" xml:space="preserve">
+    <value>邮箱格式不正确</value>
+  </data>
+  <data name="SignInErrorMainlandPhoneLength" xml:space="preserve">
+    <value>请输入 11 位手机号</value>
+  </data>
+  <data name="SignInErrorSmsCodeLength" xml:space="preserve">
+    <value>请输入 6 位验证码</value>
   </data>
   <data name="SignInErrorSmsAlreadySent" xml:space="preserve">
     <value>验证码刚刚已经发送过，请查看短信或稍后再获取</value>

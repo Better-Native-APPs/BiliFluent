@@ -300,8 +300,11 @@
   <data name="SignInCountryName" xml:space="preserve">
     <value>Country or region</value>
   </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>Region</value>
+  </data>
   <data name="SignInCountryLoading" xml:space="preserve">
-    <value>Loading regions…</value>
+    <value>Loading…</value>
   </data>
   <data name="SignInCountryLoadFailed" xml:space="preserve">
     <value>Couldn't load the region list. Check your network and try again.</value>
@@ -410,6 +413,18 @@
   </data>
   <data name="SignInErrorInvalidPhoneNumber" xml:space="preserve">
     <value>That phone number doesn't look right</value>
+  </data>
+  <data name="SignInErrorAccountFormat" xml:space="preserve">
+    <value>Enter a phone number or an email address</value>
+  </data>
+  <data name="SignInErrorInvalidEmail" xml:space="preserve">
+    <value>That email address doesn't look right</value>
+  </data>
+  <data name="SignInErrorMainlandPhoneLength" xml:space="preserve">
+    <value>Enter an 11-digit phone number</value>
+  </data>
+  <data name="SignInErrorSmsCodeLength" xml:space="preserve">
+    <value>Enter the 6-digit code</value>
   </data>
   <data name="SignInErrorSmsAlreadySent" xml:space="preserve">
     <value>A code was sent recently. Check your messages or try again later.</value>

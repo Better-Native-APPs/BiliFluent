@@ -14,6 +14,32 @@
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid">
+        <Grid.Resources>
+            <!--
+                What is wrong with a field is said in a line of its own right under it. The line is always there,
+                empty or not, so showing it moves nothing.
+            -->
+            <Style
+                x:Key="FieldErrorTextStyle"
+                BasedOn="{StaticResource CaptionTextBlockStyle}"
+                TargetType="TextBlock">
+                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="Padding" Value="0,2" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <!--
+                Lies over a field that has something wrong with it. The text boxes have no state for this, and a
+                brush set on them is replaced as soon as the pointer or the focus is on them.
+            -->
+            <Style x:Key="FieldErrorOutlineStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="BorderThickness" Value="1,1,1,2" />
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+        </Grid.Resources>
+
         <VisualStateManager.VisualStateGroups>
             <!--  Two columns need 712 or more (344 form + 2 x 32 gutters + 1 divider + 300 QR column, rounded up).  -->
             <VisualStateGroup x:Name="ColumnStates">
@@ -149,10 +175,11 @@
                         </Grid.RowDefinitions>
 
                         <!--
-                            Both steps and both sign-in methods fill the same 124 (selector 44, then two rows of 32
-                            with 8 around them) and end on the same line, so switching between them moves nothing.
+                            Both steps and both sign-in methods fill the same 156 (selector 44, a space of 8, then two
+                            fields of 32, each with a line of 20 under it for what is wrong with it) and end on the
+                            same line, so switching between them moves nothing.
                         -->
-                        <Grid MinHeight="124">
+                        <Grid MinHeight="156">
                             <!--  Step 1: account and password, or phone number and SMS code  -->
                             <Grid Visibility="{x:Bind ViewModel.IsCredentialStep, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <Grid.RowDefinitions>
@@ -176,44 +203,61 @@
                                     Grid.Row="1"
                                     Margin="0,8,0,0"
                                     VerticalAlignment="Bottom"
-                                    Spacing="8"
                                     Visibility="{x:Bind ViewModel.IsPasswordFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <TextBox
-                                        x:Name="AccountBox"
-                                        AutomationProperties.Name="{ext:Locale Name=SignInAccountName}"
-                                        InputScope="EmailNameOrAddress"
-                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                        IsSpellCheckEnabled="False"
-                                        IsTextPredictionEnabled="False"
-                                        KeyDown="OnAccountBoxKeyDown"
-                                        MaxLength="128"
-                                        PlaceholderText="{ext:Locale Name=SignInAccountPlaceholder}"
-                                        Text="{x:Bind ViewModel.Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                    <PasswordBox
-                                        x:Name="PasswordInput"
-                                        AutomationProperties.Name="{ext:Locale Name=SignInPasswordPlaceholder}"
-                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                        KeyDown="OnPasswordInputKeyDown"
-                                        MaxLength="128"
-                                        Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
-                                        PlaceholderText="{ext:Locale Name=SignInPasswordPlaceholder}" />
+                                    <Grid>
+                                        <TextBox
+                                            x:Name="AccountBox"
+                                            AutomationProperties.HelpText="{x:Bind ViewModel.AccountError, Mode=OneWay}"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInAccountName}"
+                                            InputScope="EmailNameOrAddress"
+                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                            IsSpellCheckEnabled="False"
+                                            IsTextPredictionEnabled="False"
+                                            KeyDown="OnAccountBoxKeyDown"
+                                            LostFocus="OnAccountBoxLostFocus"
+                                            MaxLength="128"
+                                            PlaceholderText="{ext:Locale Name=SignInAccountPlaceholder}"
+                                            Text="{x:Bind ViewModel.Account, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            TextChanging="OnFieldTextChanging"
+                                            TextCompositionEnded="OnFieldCompositionEnded"
+                                            TextCompositionStarted="OnFieldCompositionStarted" />
+                                        <Border Style="{StaticResource FieldErrorOutlineStyle}" Visibility="{x:Bind ViewModel.HasAccountError, Mode=OneWay}" />
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource FieldErrorTextStyle}" Text="{x:Bind ViewModel.AccountError, Mode=OneWay}" />
+                                    <Grid>
+                                        <PasswordBox
+                                            x:Name="PasswordInput"
+                                            AutomationProperties.HelpText="{x:Bind ViewModel.PasswordError, Mode=OneWay}"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInPasswordPlaceholder}"
+                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                            KeyDown="OnPasswordInputKeyDown"
+                                            MaxLength="128"
+                                            Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
+                                            PlaceholderText="{ext:Locale Name=SignInPasswordPlaceholder}" />
+                                        <Border Style="{StaticResource FieldErrorOutlineStyle}" Visibility="{x:Bind ViewModel.HasPasswordError, Mode=OneWay}" />
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource FieldErrorTextStyle}" Text="{x:Bind ViewModel.PasswordError, Mode=OneWay}" />
                                 </StackPanel>
 
                                 <StackPanel
                                     Grid.Row="1"
                                     Margin="0,8,0,0"
                                     VerticalAlignment="Bottom"
-                                    Spacing="8"
                                     Visibility="{x:Bind ViewModel.IsSmsFormVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition />
                                         </Grid.ColumnDefinitions>
+                                        <!--
+                                            Closed, the box shows a flag and the dialing code and is as wide as the longest
+                                            code needs. The list adds the name; it is wider than the box.
+                                        -->
                                         <ComboBox
                                             x:Name="CountryBox"
-                                            Width="148"
+                                            Width="124"
                                             AutomationProperties.Name="{ext:Locale Name=SignInCountryName}"
+                                            CharacterReceived="OnCountryCharacterReceived"
                                             DropDownOpened="OnCountryBoxDropDownOpened"
                                             IsEnabled="{x:Bind ViewModel.CanSelectCountry, Mode=OneWay}"
                                             ItemsSource="{x:Bind ViewModel.Countries}"
@@ -222,50 +266,112 @@
                                             SelectionChanged="OnCountryBoxSelectionChanged">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate x:DataType="viewmodels:StartupCountryItem">
-                                                    <Grid ColumnSpacing="8">
+                                                    <!--  One template serves the list and the closed box; OnCountryEntryLoaded shows the part that fits.  -->
+                                                    <Grid Loaded="OnCountryEntryLoaded">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBlock Text="{x:Bind DialingCode}" />
+                                                        <Grid
+                                                            Width="20"
+                                                            Height="15"
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            CornerRadius="2">
+                                                            <Image
+                                                                Source="{x:Bind Flag}"
+                                                                Stretch="Fill"
+                                                                Visibility="{x:Bind HasFlag}" />
+                                                            <!--  A hairline keeps a flag with a white edge apart from the background.  -->
+                                                            <Border
+                                                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="2"
+                                                                Visibility="{x:Bind HasFlag}" />
+                                                            <ic:SymbolIcon
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
+                                                                FontSize="16"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Symbol="Globe"
+                                                                Visibility="{x:Bind IsFlagMissing}" />
+                                                        </Grid>
                                                         <TextBlock
+                                                            x:Name="CountryEntryCode"
                                                             Grid.Column="1"
-                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                            Text="{x:Bind Name}"
-                                                            TextTrimming="CharacterEllipsis" />
+                                                            Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Text="{x:Bind DialingCode}" />
+                                                        <Grid
+                                                            x:Name="CountryEntryDetail"
+                                                            Grid.Column="2"
+                                                            Width="216"
+                                                            Margin="10,0,0,0"
+                                                            ColumnSpacing="12"
+                                                            Visibility="Collapsed">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock
+                                                                VerticalAlignment="Center"
+                                                                Text="{x:Bind Name}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Text="{x:Bind DialingCode}" />
+                                                        </Grid>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <TextBox
-                                            x:Name="PhoneBox"
-                                            Grid.Column="1"
-                                            AutomationProperties.Name="{ext:Locale Name=SignInPhonePlaceholder}"
-                                            InputScope="TelephoneNumber"
-                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                            IsSpellCheckEnabled="False"
-                                            IsTextPredictionEnabled="False"
-                                            KeyDown="OnPhoneBoxKeyDown"
-                                            MaxLength="24"
-                                            PlaceholderText="{ext:Locale Name=SignInPhonePlaceholder}"
-                                            Text="{x:Bind ViewModel.PhoneNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <!--  Only digits get in, and no more than a number can have; see OnPhoneBoxTextChanging.  -->
+                                        <Grid Grid.Column="1">
+                                            <TextBox
+                                                x:Name="PhoneBox"
+                                                AutomationProperties.HelpText="{x:Bind ViewModel.PhoneNumberError, Mode=OneWay}"
+                                                AutomationProperties.Name="{ext:Locale Name=SignInPhonePlaceholder}"
+                                                InputScope="TelephoneNumber"
+                                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                                IsSpellCheckEnabled="False"
+                                                IsTextPredictionEnabled="False"
+                                                KeyDown="OnPhoneBoxKeyDown"
+                                                LostFocus="OnPhoneBoxLostFocus"
+                                                PlaceholderText="{ext:Locale Name=SignInPhonePlaceholder}"
+                                                Text="{x:Bind ViewModel.PhoneNumber, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                TextChanging="OnFieldTextChanging"
+                                                TextCompositionEnded="OnFieldCompositionEnded"
+                                                TextCompositionStarted="OnFieldCompositionStarted" />
+                                            <Border Style="{StaticResource FieldErrorOutlineStyle}" Visibility="{x:Bind ViewModel.HasPhoneNumberError, Mode=OneWay}" />
+                                        </Grid>
                                     </Grid>
+                                    <TextBlock Style="{StaticResource FieldErrorTextStyle}" Text="{x:Bind ViewModel.PhoneNumberError, Mode=OneWay}" />
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox
-                                            x:Name="SmsCodeBox"
-                                            AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                            InputScope="Number"
-                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                            IsSpellCheckEnabled="False"
-                                            IsTextPredictionEnabled="False"
-                                            KeyDown="OnSmsCodeBoxKeyDown"
-                                            MaxLength="8"
-                                            PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                            Text="{x:Bind ViewModel.SmsCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Grid>
+                                            <TextBox
+                                                x:Name="SmsCodeBox"
+                                                AutomationProperties.HelpText="{x:Bind ViewModel.SmsCodeError, Mode=OneWay}"
+                                                AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                                InputScope="Number"
+                                                IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                                IsSpellCheckEnabled="False"
+                                                IsTextPredictionEnabled="False"
+                                                KeyDown="OnSmsCodeBoxKeyDown"
+                                                LostFocus="OnSmsCodeBoxLostFocus"
+                                                PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                                Text="{x:Bind ViewModel.SmsCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                TextChanging="OnFieldTextChanging"
+                                                TextCompositionEnded="OnFieldCompositionEnded"
+                                                TextCompositionStarted="OnFieldCompositionStarted" />
+                                            <Border Style="{StaticResource FieldErrorOutlineStyle}" Visibility="{x:Bind ViewModel.HasSmsCodeError, Mode=OneWay}" />
+                                        </Grid>
                                         <Button
                                             x:Name="SendSmsCodeButton"
                                             Grid.Column="1"
@@ -275,6 +381,7 @@
                                             Content="{x:Bind ViewModel.SendSmsCodeText, Mode=OneWay}"
                                             IsEnabled="{x:Bind ViewModel.CanSendSmsCode, Mode=OneWay}" />
                                     </Grid>
+                                    <TextBlock Style="{StaticResource FieldErrorTextStyle}" Text="{x:Bind ViewModel.SmsCodeError, Mode=OneWay}" />
                                 </StackPanel>
                             </Grid>
 
@@ -284,6 +391,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition />
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <TextBlock
@@ -305,17 +413,23 @@
                                         <ColumnDefinition />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBox
-                                        x:Name="VerificationCodeBox"
-                                        AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                        InputScope="Number"
-                                        IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
-                                        IsSpellCheckEnabled="False"
-                                        IsTextPredictionEnabled="False"
-                                        KeyDown="OnVerificationCodeBoxKeyDown"
-                                        MaxLength="8"
-                                        PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
-                                        Text="{x:Bind ViewModel.VerificationCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Grid>
+                                        <TextBox
+                                            x:Name="VerificationCodeBox"
+                                            AutomationProperties.HelpText="{x:Bind ViewModel.VerificationCodeError, Mode=OneWay}"
+                                            AutomationProperties.Name="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                            InputScope="Number"
+                                            IsEnabled="{x:Bind ViewModel.IsSignInIdle, Mode=OneWay}"
+                                            IsSpellCheckEnabled="False"
+                                            IsTextPredictionEnabled="False"
+                                            KeyDown="OnVerificationCodeBoxKeyDown"
+                                            PlaceholderText="{ext:Locale Name=SignInSmsCodePlaceholder}"
+                                            Text="{x:Bind ViewModel.VerificationCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            TextChanging="OnFieldTextChanging"
+                                            TextCompositionEnded="OnFieldCompositionEnded"
+                                            TextCompositionStarted="OnFieldCompositionStarted" />
+                                        <Border Style="{StaticResource FieldErrorOutlineStyle}" Visibility="{x:Bind ViewModel.HasVerificationCodeError, Mode=OneWay}" />
+                                    </Grid>
                                     <Button
                                         x:Name="SendVerificationCodeButton"
                                         Grid.Column="1"
@@ -325,13 +439,15 @@
                                         Content="{x:Bind ViewModel.SendVerificationCodeText, Mode=OneWay}"
                                         IsEnabled="{x:Bind ViewModel.CanSendVerificationCode, Mode=OneWay}" />
                                 </Grid>
+                                <TextBlock
+                                    Grid.Row="4"
+                                    Style="{StaticResource FieldErrorTextStyle}"
+                                    Text="{x:Bind ViewModel.VerificationCodeError, Mode=OneWay}" />
                             </Grid>
                         </Grid>
 
-                        <Grid
-                            Grid.Row="1"
-                            Margin="0,16,0,0"
-                            ColumnSpacing="8">
+                        <!--  The line under the second field is the space above the buttons.  -->
+                        <Grid Grid.Row="1" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition />
                                 <ColumnDefinition Width="Auto" />
