@@ -92,7 +92,7 @@ internal sealed class LiveApplicationBridge
         CheckAccess();
         // The VM owns its room, chat factory, partial host and native player. Retaining this
         // composite before AttachHostAsync also covers a room/client created later during open.
-        admission.Retain(player, player.CloseAsync, () => _app.CompletePlayerRelease(player));
+        admission.Retain(player, player.CloseAsync, () => _app.CompletePlayerRelease(player), player.RetryLiveCloseAsync);
     }
 
     internal Task ClosePlayerAsync(PlayerViewModel player)
