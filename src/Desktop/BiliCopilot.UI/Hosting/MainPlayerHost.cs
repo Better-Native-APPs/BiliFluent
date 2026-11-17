@@ -120,8 +120,8 @@ public sealed partial class MainPlayerHost : IPlayerHost
             cancellationToken.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(IsIslandUnavailable, this);
             if (!TryGetBounds(out _)) throw new InvalidOperationException("Embedded video slot became unavailable.");
-            // Exactly the LiveIslandSurface topology: mpv's wid and the island's parent are
-            // the SAME hidden STATIC child. A separate opaque parent would cover the video.
+            // mpv's wid and the island's parent are the same hidden STATIC child.
+            // A separate opaque parent would cover the video.
             _renderHwnd = CreateRenderWindow(new RectInt32(0, 0, 1, 1));
             _source = new DesktopWindowXamlSource();
             _source.Initialize(Win32Interop.GetWindowIdFromWindow(_renderHwnd));
@@ -270,7 +270,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
         if (!ReferenceEquals(node, _owner.Content) || !PInvoke.GetClientRect(new(OwnerHwnd), out var client)) return false;
         visible.Intersect(new Rect(client.X, client.Y, client.Width, client.Height));
         if (visible.IsEmpty || visible.Width <= 0 || visible.Height <= 0) return false;
-        // LiveIslandSurface rounds the visible clip inward to prevent native content bleeding.
+        // Round the visible clip inward to prevent native content bleeding.
         var left = Math.Clamp((int)Math.Ceiling(visible.Left) - bounds.X, 0, bounds.Width);
         var top = Math.Clamp((int)Math.Ceiling(visible.Top) - bounds.Y, 0, bounds.Height);
         var right = Math.Clamp((int)Math.Floor(visible.Right) - bounds.X, left, bounds.Width);
@@ -488,7 +488,7 @@ public sealed partial class MainPlayerHost : IPlayerHost
         _lastBounds = null;
         _lastClip = null;
         CancelCompactHeaderDrag();
-        // As in LiveIslandSurface, hide the parent, not the bridge-owned child HWND.
+        // Hide the parent, not the bridge-owned child HWND.
         if (renderHwnd != IntPtr.Zero && renderHwnd == _renderHwnd) PInvoke.ShowWindow(new(renderHwnd), SHOW_WINDOW_CMD.SW_HIDE);
     }
 
