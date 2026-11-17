@@ -2,6 +2,7 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
 
@@ -42,6 +43,11 @@ public sealed class LiveRoomSession : ILiveRoomSession
     private int _closeRequested;
     private bool _closePublished;
     private bool _releaseBlocked;
+    private long _roomStatsAt = Stopwatch.GetTimestamp();
+    private long _inboxIn;
+    private long _inboxDrop;
+    private long _published;
+    private long _dispatchFail;
 
     /// <summary>Transfers chat ownership to a room session using the supplied dispatcher delegates.</summary>
     /// <param name="chat">The exclusively owned chat client, released by CloseAsync.</param>
@@ -227,6 +233,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
             completion.TrySetResult();
         }
         catch (Exception ex) { completion.TrySetException(ex); }
+        finally { ReportRoomStatistics(final: true); }
     }
 
     /// <summary>Closes admission/publication now; this is not release confirmation. CloseAsync performs the actual drain.</summary>
@@ -301,6 +308,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
             Notify();
             completion.TrySetException(new InvalidOperationException("Live room close is incomplete. Owned resources are retained."));
         }
+        finally { ReportRoomStatistics(final: true); }
     }
 
     public ValueTask DisposeAsync() => new(CloseAsync());
@@ -381,7 +389,12 @@ public sealed class LiveRoomSession : ILiveRoomSession
             if (scope.Invalidated || scope.Token.IsCancellationRequested || IsClosing || scope.Binding != message.Binding) return;
             lock (_inboxSync)
             {
-                if (_inbox.Count < 256) _inbox.Enqueue((scope, message));
+                if (_inbox.Count < 256)
+                {
+                    _inbox.Enqueue((scope, message));
+                    Interlocked.Increment(ref _inboxIn);
+                }
+                else Interlocked.Increment(ref _inboxDrop);
                 PostInboxLocked();
             }
         };
@@ -412,9 +425,21 @@ public sealed class LiveRoomSession : ILiveRoomSession
     }
     private void PostInboxLocked()
     {
+        ReportRoomStatistics(final: false);
         if (_inboxPosted || IsClosing) return;
         _inboxPosted = true;
-        if (!_tryEnqueue(DrainInbox)) { _inboxPosted = false; _inbox.Clear(); _chatStatus = null; _audience = null; }
+        bool queued;
+        try { queued = _tryEnqueue(DrainInbox); }
+        catch
+        {
+            Interlocked.Increment(ref _dispatchFail);
+            throw;
+        }
+        if (!queued)
+        {
+            Interlocked.Increment(ref _dispatchFail);
+            _inboxPosted = false; _inbox.Clear(); _chatStatus = null; _audience = null;
+        }
     }
     private void ClearInbox()
     {
@@ -450,9 +475,15 @@ public sealed class LiveRoomSession : ILiveRoomSession
             if (!IsCurrent(item.Scope) || Binding != item.Message.Binding) continue;
             try { if (_messages.Count == 200) _messages.RemoveAt(0); } catch { RecordFailure("CollectionSubscriber"); }
             if (!IsCurrent(item.Scope) || Binding != item.Message.Binding) continue;
-            try { _messages.Add(item.Message); } catch { RecordFailure("CollectionSubscriber"); }
+            try
+            {
+                _messages.Add(item.Message);
+                Interlocked.Increment(ref _published);
+            }
+            catch { RecordFailure("CollectionSubscriber"); }
             if (IsCurrent(item.Scope) && Binding == item.Message.Binding) PublishMessage(item.Scope, item.Message);
         }
+        ReportRoomStatistics(final: false);
     }
     private void PublishMessage(LiveRoomScope scope, LiveChatMessage message)
     {
@@ -485,5 +516,24 @@ public sealed class LiveRoomSession : ILiveRoomSession
     private void RecordFailure(string category)
     {
         try { _reportFailure?.Invoke(category); } catch { }
+    }
+
+    private void ReportRoomStatistics(bool final)
+    {
+        var previous = Volatile.Read(ref _roomStatsAt);
+        var now = Stopwatch.GetTimestamp();
+        if (!final && Stopwatch.GetElapsedTime(previous, now) < TimeSpan.FromSeconds(30)) return;
+        if (Interlocked.CompareExchange(ref _roomStatsAt, now, previous) != previous) return;
+        var inboxIn = Interlocked.Exchange(ref _inboxIn, 0);
+        var inboxDrop = Interlocked.Exchange(ref _inboxDrop, 0);
+        var published = Interlocked.Exchange(ref _published, 0);
+        var dispatchFail = Interlocked.Exchange(ref _dispatchFail, 0);
+        if (inboxIn == 0 && inboxDrop == 0 && published == 0 && dispatchFail == 0) return;
+        try
+        {
+            if (_chat is ILiveChatDiagnosticSink diagnostics)
+                diagnostics.ReportRoomStatistics(inboxIn, inboxDrop, published, dispatchFail);
+        }
+        catch { } // Diagnostics must not change inbox admission or publication.
     }
 }
