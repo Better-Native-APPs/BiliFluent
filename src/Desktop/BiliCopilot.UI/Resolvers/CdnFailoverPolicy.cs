@@ -104,6 +104,7 @@ internal readonly record struct PlaybackCacheSample(
     double Duration)
 {
     public PlaybackStreamKind? SelectedRelayStalled { get; init; }
+    public bool CoreIdle { get; init; }
 }
 
 /// <summary>
@@ -371,7 +372,9 @@ internal sealed class CdnFailoverPolicy
         }
 
         // A filled cache that stops growing is never waiting, so it cannot look like a stall.
-        var waiting = _phase == Phase.Opening || sample.Seeking || sample.PausedForCache;
+        // A timestamp reset can leave the core idle after seeking/paused-for-cache cleared.
+        // It still needs data; unlike a user pause, that wait must retain the normal timeouts.
+        var waiting = _phase == Phase.Opening || sample.Seeking || sample.PausedForCache || sample.CoreIdle;
         if (!waiting)
         {
             _waitingSince = null;

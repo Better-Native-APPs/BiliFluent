@@ -202,6 +202,7 @@ public sealed partial class PlayerViewModel
     {
         if (!CanSeek || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
         var version = _mediaVersion;
+        var request = NoteUserPosition(position);
         var selectionDrain = CancelAndDrainSeamlessSelectionAsync();
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Seek);
         return OwnWork(ApplyAsync());
@@ -214,7 +215,7 @@ public sealed partial class PlayerViewModel
                 await selectionDrain;
 #pragma warning restore VSTHRD003
                 if (CanSeek && IsCurrentPlayback(version))
-                    await SeekSelectedOnDemandAsync(position, version, () => _sponsor.SeekAsync(ticket, position));
+                    await SeekSelectedOnDemandAsync(position, version, () => _sponsor.SeekAsync(ticket, position), request);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }

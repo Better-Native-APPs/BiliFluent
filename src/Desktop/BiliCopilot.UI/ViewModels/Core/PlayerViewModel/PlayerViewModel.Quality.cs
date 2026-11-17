@@ -155,13 +155,11 @@ public sealed partial class PlayerViewModel
                 return;
             }
 
-            var loaded = await client.GetCurrentPositionAsync();
             if (!IsCurrent() || !IsAutomaticSpecial())
             {
                 return;
             }
 
-            var position = loaded.IsSuccess && double.IsFinite(loaded.Value) && loaded.Value > 0 ? loaded.Value : player.Position;
             _automaticAudioFallbackLoad = _networkLoads;
             snapshot.IsAutomaticAudioStandardOnly = true;
             await RunWithoutPlayerInputAsync(async () =>
@@ -171,7 +169,8 @@ public sealed partial class PlayerViewModel
                     CancelSeamlessSelection();
                     resolver.SetReloadSelection(new(new(snapshot.PreferQuality, null, snapshot.PreferAudioLanguageId, true),
                         GetPlayingFormat(resolver)?.Quality));
-                    await ReplayWithSubtitleRestoreAsync(player, position);
+                    // Read the position inside the replay boundary, not before draining input.
+                    await ReplayWithSubtitleRestoreAsync(player, null);
                 }
             }, nativeReplay: true);
         }

@@ -2,9 +2,11 @@ using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
+using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Player;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -16,8 +18,19 @@ public sealed partial class PlayerViewModel
     {
         if (!CanSeek && preferPosition.HasValue) return Task.CompletedTask;
         if (IsLiveMedia) return RefreshLiveAsync();
-        CancelSeamlessSelection();
         var player = Player;
+        if (preferPosition is { } position)
+        {
+            if (!double.IsFinite(position) || position < 0) return Task.CompletedTask;
+            NoteUserPosition(position);
+        }
+        else if (player?.PlaybackState == MpvPlayerState.End)
+        {
+            // The explicit replay of an ended file is a new request for the beginning.
+            preferPosition = 0;
+            NoteUserPosition(0);
+        }
+        CancelSeamlessSelection();
         return player is null ? Task.CompletedTask
             : RunWithoutPlayerInputAsync(() => ReplayWithSubtitleRestoreAsync(player, preferPosition), nativeReplay: true);
     }
@@ -66,6 +79,9 @@ public sealed partial class PlayerViewModel
         if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(client, Client)) return false;
         var observation = await ReadPlaybackObservationAsync(player);
         if (!IsCurrentPlayback(version)) return false;
+        preferPosition = _playbackPosition.Resolve(observation?.Position, preferPosition ?? player.Position);
+        _reloadState = (preferPosition, observation?.Paused ?? player.PlaybackState == MpvPlayerState.Paused,
+            observation?.Speed ?? player.PlaybackRate);
         _onDemandReplayNeedsLoad = true;
         _lastOnDemandReplayIssued = false;
 
@@ -86,12 +102,17 @@ public sealed partial class PlayerViewModel
         client.ErrorOccurred += OnError;
         try
         {
+            var positionRequest = _playbackPosition.Version;
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Playback | reload-start position={Position} user-seek-pending={Pending}",
+                    preferPosition, _playbackPosition.PendingPosition is not null);
             if (!await player.ReplayAsync(preferPosition, resume: observation is not { Paused: true }, speed: observation?.Speed))
             {
                 OnDemandResolver?.AbandonSelectionLoad();
                 if (OnDemandResolver is { } previous) ApplyCurrentOnDemandSelection(previous);
                 return false;
             }
+            _playbackPosition.MarkSubmitted(positionRequest);
             _lastOnDemandReplayIssued = true;
             // Replay returns after issuing loadfile, not after the replacement file is ready.
             bool isLoaded;

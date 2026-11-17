@@ -90,6 +90,7 @@ public sealed partial class PlayerViewModel
         _failover.Reset();
         _deferredLoadError = null;
         _reloadState = null;
+        _playbackPosition.Reset();
         _hasLoadedFile = false;
         _subtitleToRestore = null;
         _userPausedSample = false;
@@ -225,7 +226,9 @@ public sealed partial class PlayerViewModel
         => PostNetworkEvent(() =>
         {
             var now = NetworkNow;
-            _failover.OnSeek(now);
+            // A user request already reset the clocks. Internal resets during that seek must
+            // not keep postponing recovery while the requested position still has no frame.
+            if (_playbackPosition.PendingPosition is null) _failover.OnSeek(now);
             OnAdaptiveSeek(now);
         });
 
@@ -233,7 +236,12 @@ public sealed partial class PlayerViewModel
     {
         if (e.Id == MpvClientEventId.PlaybackRestart)
         {
-            PostNetworkEvent(() => _failover.OnPlaybackRestart(NetworkNow));
+            PostNetworkEvent(() =>
+            {
+                if (_playbackPosition.PendingPosition is null) _failover.OnPlaybackRestart(NetworkNow);
+                else if (Player is { } player)
+                    _ = OwnWork(ObserveUserPositionCompletionAsync(player, _mediaVersion, _playbackPosition.Version));
+            });
         }
     }
 
@@ -241,6 +249,10 @@ public sealed partial class PlayerViewModel
     {
         if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver || raw.StreamEpoch != Interlocked.Read(ref _selectedStreamEpoch)) return;
         _userPausedSample = raw.UserPaused;
+        var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
+        if (!_onDemandReplayNeedsLoad && raw.PositionKnown
+            && _playbackPosition.Observe(raw.Position, raw.Seeking, raw.PausedForCache, raw.CoreIdle, raw.UserPaused, speed))
+            _failover.OnPlaybackRestart(NetworkNow);
         if (raw.SelectedState is { } selected)
         {
             _selectedPlaybackState = selected;
@@ -254,7 +266,6 @@ public sealed partial class PlayerViewModel
         var streams = resolver.CurrentStreams;
         var cache = Volatile.Read(ref _cacheState);
         var forwardBytes = Volatile.Read(ref _forwardCacheBytes);
-        var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
 
         var mainBandwidth = GetMainBandwidth(streams);
 
@@ -264,7 +275,7 @@ public sealed partial class PlayerViewModel
         var sample = new PlaybackCacheSample(
             raw.UserPaused,
             raw.PausedForCache,
-            raw.Seeking,
+            raw.Seeking || _playbackPosition.PendingPosition is not null,
             raw.CacheIdle,
             raw.CacheSeconds,
             forwardBytes,
@@ -273,7 +284,10 @@ public sealed partial class PlayerViewModel
             raw.Position,
             raw.AudioPosition,
             cache?.AudioCacheSeconds,
-            Player?.Duration ?? 0);
+            Player?.Duration ?? 0)
+        {
+            CoreIdle = raw.CoreIdle,
+        };
         var now = NetworkNow;
         var utcNow = DateTimeOffset.UtcNow;
         var videoState = raw.SelectedState?.Video ?? _selectedPlaybackState?.Video;
@@ -324,8 +338,8 @@ public sealed partial class PlayerViewModel
             sample.AudioCacheSeconds,
             Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers));
         ApplyFailoverDecision(decision, sample);
-        ObserveAdaptiveQuality(now, raw, sample, decision, speed);
-        if (decision.Action == CdnFailoverAction.None) ContinueDeferredSelection(raw.UserPaused, raw.Seeking);
+        ObserveAdaptiveQuality(now, raw with { Seeking = sample.Seeking }, sample, decision, speed);
+        if (decision.Action == CdnFailoverAction.None) ContinueDeferredSelection(raw.UserPaused, sample.Seeking);
     }
 
     partial void ResetAdaptiveQuality();
@@ -650,6 +664,7 @@ public sealed partial class PlayerViewModel
         // A media that never loaded has no position, pause or speed of its own to keep.
         (double? Position, bool Paused, double? Speed) state = _reloadState
             ?? (_hasLoadedFile ? (player.Position, _userPausedSample, player.PlaybackRate) : (null, false, null));
+        state.Position = _playbackPosition.Resolve(state.Position);
         _reloadState = state;
         var refresh = decision.Action == CdnFailoverAction.RefreshPlayUrl;
         _ = ObserveNetworkReloadAsync(RunWithoutPlayerInputAsync(
@@ -671,7 +686,7 @@ public sealed partial class PlayerViewModel
                 {
                     // Input was drained above, so these are the position and the speed without a held key.
                     var current = await player.Client.GetCurrentPositionAsync();
-                    if (current.IsSuccess && double.IsFinite(current.Value) && current.Value > 0) position = current.Value;
+                    position = _playbackPosition.Resolve(current.IsSuccess ? current.Value : null, position);
                     var rate = await player.Client.GetSpeedAsync();
                     if (rate.IsSuccess && double.IsFinite(rate.Value) && rate.Value > 0) speed = rate.Value;
                     if (speed is not > 0) speed = null;
@@ -683,6 +698,14 @@ public sealed partial class PlayerViewModel
                         return;
                     }
                 }
+
+                if (!IsCurrentPlayback(version))
+                {
+                    _failover.Abandon();
+                    return;
+                }
+                position = _playbackPosition.Resolve(position);
+                _reloadState = (position, keepPaused, speed);
 
                 if (refresh)
                 {
@@ -798,13 +821,20 @@ public sealed partial class PlayerViewModel
     private async Task<bool> ReloadForNetworkAsync(MpvPlayer player, double? position, bool resume, double? speed)
     {
         if (!CanUseOnDemandNetwork) return false;
+        position = _playbackPosition.Resolve(position, player.Position);
+        _reloadState = (position, !resume, speed);
         CancelSeamlessSelection();
         ResetChapters();
         InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
         _subtitleToRestore = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
         _onDemandReplayNeedsLoad = true;
+        var positionRequest = _playbackPosition.Version;
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Playback | reload-start position={Position} user-seek-pending={Pending}",
+                position, _playbackPosition.PendingPosition is not null);
         var issued = await player.ReplayAsync(position, resume, speed);
+        if (issued) _playbackPosition.MarkSubmitted(positionRequest);
         if (!issued) OnDemandResolver?.AbandonSelectionLoad();
         return issued;
     }
@@ -871,8 +901,10 @@ public sealed partial class PlayerViewModel
                     resolver.RefreshPlayUrl();
                 }
 
-                var observation = preservePause ? await ReadPlaybackObservationAsync(player) : null;
-                var resume = observation is not { Paused: true };
+                // The captured resume position may predate a seek that already completed while
+                // this operation waited for the gate. Read its actual position at every reload.
+                var observation = await ReadPlaybackObservationAsync(player);
+                var resume = !preservePause || observation is not { Paused: true };
                 if (!await ReloadForNetworkAsync(player, observation?.Position ?? position, resume, observation?.Speed ?? speed))
                 {
                     // The request failed and nothing was loaded: resume what is there.
@@ -1035,7 +1067,11 @@ public sealed partial class PlayerViewModel
         MpvSeamlessPlaybackState? SelectedState,
         RelayStreamStatistics? VideoRelay,
         RelayStreamStatistics? AudioRelay,
-        long StreamEpoch);
+        long StreamEpoch)
+    {
+        public bool CoreIdle { get; init; }
+        public bool PositionKnown { get; init; } = true;
+    }
 
     /// <summary>
     /// Reads the cache state of mpv once per <see cref="PlaybackNetworkPolicy.SampleInterval"/>,
@@ -1096,6 +1132,7 @@ public sealed partial class PlayerViewModel
                         audioRelay = player.GetSelectedRelayStatistics(MpvRelayStreamKind.Audio);
                     }
 
+                    var position = ReadDouble("time-pos");
                     var sample = new NetworkSample(
                         ReadFlag("pause"),
                         ReadFlag("paused-for-cache"),
@@ -1103,8 +1140,12 @@ public sealed partial class PlayerViewModel
                         ReadFlag("demuxer-cache-idle"),
                         ReadDouble("demuxer-cache-duration") ?? 0,
                         _client.GetProperty("cache-speed", out long speed) == MpvError.Success ? speed : 0,
-                        ReadDouble("time-pos") ?? 0,
-                        ReadDouble("audio-pts"), selected, videoRelay, audioRelay, streamEpoch);
+                        position ?? 0,
+                        ReadDouble("audio-pts"), selected, videoRelay, audioRelay, streamEpoch)
+                    {
+                        CoreIdle = ReadFlag("core-idle"),
+                        PositionKnown = position is >= 0,
+                    };
                     if (_stopped)
                     {
                         return;
