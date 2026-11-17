@@ -64,38 +64,6 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     internal void HideEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.HideEmbeddedPlayer(expectedViewModel);
     internal void ClearEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.ClearEmbeddedPlayer(expectedViewModel);
 
-    internal bool TryShowEmbeddedLive(object ownerKey, BiliCopilot.UI.Live.Controls.LiveView liveView)
-        => RootLayout.TryShowEmbeddedLive(ownerKey, liveView);
-
-    internal bool HideEmbeddedLive(object expectedOwner)
-        => RootLayout.HideEmbeddedLive(expectedOwner);
-
-    internal bool ClearEmbeddedLive(object expectedOwner)
-        => RootLayout.ClearEmbeddedLive(expectedOwner);
-
-    internal bool IsEmbeddedLiveShown => RootLayout.IsEmbeddedLiveShown;
-
-    internal object? CurrentEmbeddedLiveOwner => RootLayout.CurrentEmbeddedLiveOwner;
-
-    internal bool IsEmbeddedLiveVisible => IsEmbeddedLiveShown && !_playerOcclusion.IsSuspended;
-
-    internal event EventHandler<object>? EmbeddedLiveBackRequested
-    {
-        add => RootLayout.EmbeddedLiveBackRequested += value;
-        remove => RootLayout.EmbeddedLiveBackRequested -= value;
-    }
-
-    internal event Action<object, bool>? LivePresentationChanged
-    {
-        add => RootLayout.LivePresentationChanged += value;
-        remove => RootLayout.LivePresentationChanged -= value;
-    }
-
-    /// <summary>
-    /// 当主窗口渲染遮挡状态（如弹出弹窗/浮层）变化时触发，通知 Live 后端调整底层 Surface 呈现.
-    /// </summary>
-    internal event Action? LiveOcclusionChanged;
-
     internal void ReportEmbeddedHostFailure(Exception exception)
     {
         var app = this.Get<AppViewModel>();
@@ -116,7 +84,6 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     private void OnRenderingOcclusionChanged()
     {
         UpdateEmbeddedPlayerOcclusion();
-        LiveOcclusionChanged?.Invoke();
     }
 
     private void UpdateEmbeddedPlayerOcclusion()
