@@ -7,6 +7,7 @@ using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Input;
+using Richasy.BiliKernel.Models.Media;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -97,6 +98,16 @@ public sealed partial class LiveQualityButton : PlayerControlBase
         Subscribe(_loaded ? newValue : null);
         Synchronize();
     }
+
+    // A tier whose name already says HDR needs no second mark.
+    private static Visibility GetHdrTagVisibility(PlayerFormatInformation? format)
+        => format is { IsHdr: true } && format.Description?.Contains("HDR", StringComparison.OrdinalIgnoreCase) != true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    // The row as it is read out: the eye gets the HDR mark from the tag, the ear from the name.
+    private static string GetItemName(string? name, PlayerFormatInformation? format)
+        => GetHdrTagVisibility(format) == Visibility.Visible ? $"{name} HDR" : name ?? string.Empty;
 
     private static void OnActiveChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {

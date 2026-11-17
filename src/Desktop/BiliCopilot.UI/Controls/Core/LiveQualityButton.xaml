@@ -24,8 +24,8 @@
 
     <!--
         The quality of a live room on a transport bar: the same menu as the on-demand quality button (a caption
-        over a 220px list of card rows, the row that plays selected). There is no automatic entry. A media without
-        live tiers shows nothing and takes no room.
+        over a 220px list of card rows, the row that plays selected). There is no automatic entry. An HDR tier
+        whose name does not say so carries a tag. A media without live tiers shows nothing and takes no room.
     -->
     <Button
         x:Name="EntryButton"
@@ -57,16 +57,28 @@
                             <DataTemplate x:DataType="items:SourceItemViewModel">
                                 <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
                                 <ItemContainer
-                                    AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind local:LiveQualityButton.GetItemName(Name, Data), Mode=OneWay}"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     Style="{StaticResource AppItemContainerStyle}">
                                     <Grid
                                         MinHeight="40"
                                         Padding="12,0"
                                         Background="Transparent"
+                                        ColumnSpacing="8"
                                         Tag="{x:Bind}"
                                         Tapped="OnQualityItemTapped">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" Text="{x:Bind Name, Mode=OneWay}" />
+                                        <!--  Two tiers of one name differ by this tag, when the name itself does not say it.  -->
+                                        <Border
+                                            Grid.Column="1"
+                                            Style="{StaticResource TagBorderStyle}"
+                                            Visibility="{x:Bind local:LiveQualityButton.GetHdrTagVisibility(Data)}">
+                                            <TextBlock Style="{StaticResource TagTextStyle}" Text="HDR" />
+                                        </Border>
                                     </Grid>
                                 </ItemContainer>
                             </DataTemplate>
