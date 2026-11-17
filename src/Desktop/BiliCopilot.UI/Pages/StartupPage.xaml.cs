@@ -75,10 +75,11 @@ public sealed partial class StartupPage : StartupPageBase
         ViewModel.CaptchaPresenter = null;
     }
 
-    private Task<BiliLoginCaptchaResult?> ShowCaptchaAsync(BiliLoginCaptchaParameters parameters, CancellationToken cancellationToken)
+    private Task<BiliLoginCaptchaResult?> ShowCaptchaAsync(BiliLoginCaptchaParameters parameters, Func<Task<BiliLoginCaptchaParameters?>> refreshParameters, CancellationToken cancellationToken)
         => CaptchaWindow.RequestAsync(
             this.Get<AppViewModel>().Windows.FirstOrDefault(p => p is StartupWindow),
             parameters,
+            refreshParameters,
             cancellationToken);
 
     private void ShowWebSignIn()
