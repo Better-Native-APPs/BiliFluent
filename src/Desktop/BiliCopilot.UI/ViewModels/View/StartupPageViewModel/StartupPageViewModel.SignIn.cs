@@ -645,10 +645,33 @@ public sealed partial class StartupPageViewModel
     {
         var token = attempt.Token;
         SignInStatus = ResourceToolkit.GetLocalizedString(StringNames.SignInStatusPreparing);
-        var response = await getParameters();
-        token.ThrowIfCancellationRequested();
-        if (!response.IsSuccess || response.Parameters is null)
+        var parameters = await ReadParametersAsync();
+        if (parameters is null)
         {
+            return null;
+        }
+
+        var presenter = CaptchaPresenter;
+        if (presenter is null)
+        {
+            ShowSignInMessage(StringNames.SignInErrorUnexpected);
+            return null;
+        }
+
+        SignInStatus = ResourceToolkit.GetLocalizedString(StringNames.SignInStatusCaptcha);
+        var result = await presenter(parameters, ReadParametersAsync, token);
+        token.ThrowIfCancellationRequested();
+        return result;
+
+        async Task<BiliLoginCaptchaParameters?> ReadParametersAsync()
+        {
+            var response = await getParameters();
+            token.ThrowIfCancellationRequested();
+            if (response.IsSuccess && response.Parameters is not null)
+            {
+                return response.Parameters;
+            }
+
             if (IsVerificationStep)
             {
                 ShowVerificationFailure(response.Failure);
@@ -665,18 +688,6 @@ public sealed partial class StartupPageViewModel
 
             return null;
         }
-
-        var presenter = CaptchaPresenter;
-        if (presenter is null)
-        {
-            ShowSignInMessage(StringNames.SignInErrorUnexpected);
-            return null;
-        }
-
-        SignInStatus = ResourceToolkit.GetLocalizedString(StringNames.SignInStatusCaptcha);
-        var result = await presenter(response.Parameters, token);
-        token.ThrowIfCancellationRequested();
-        return result;
     }
 
     private async Task HandleSignInResultAsync(StartupLoginAttempt attempt, BiliLoginSession session, BiliLoginResult result)

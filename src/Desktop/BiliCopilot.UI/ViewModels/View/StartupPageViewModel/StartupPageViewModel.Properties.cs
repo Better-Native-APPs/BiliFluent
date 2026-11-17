@@ -142,9 +142,9 @@ public sealed partial class StartupPageViewModel
 
     /// <summary>
     /// Shows a human verification challenge and returns the answer, or <c>null</c> when the user dismissed it.
-    /// The view provides it, because the challenge needs a window.
+    /// The view provides it, because the challenge needs a window. Retry requests fresh parameters.
     /// </summary>
-    public Func<BiliLoginCaptchaParameters, CancellationToken, Task<BiliLoginCaptchaResult?>>? CaptchaPresenter { get; set; }
+    public Func<BiliLoginCaptchaParameters, Func<Task<BiliLoginCaptchaParameters?>>, CancellationToken, Task<BiliLoginCaptchaResult?>>? CaptchaPresenter { get; set; }
 
     /// <summary>
     /// Countries and regions for SMS sign-in, common ones first.

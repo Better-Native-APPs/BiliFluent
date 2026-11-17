@@ -4,6 +4,7 @@ using System.Text.Json;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -38,19 +39,25 @@ public sealed partial class CaptchaWindow : WindowEx
     private static readonly TimeSpan _loadTimeout = TimeSpan.FromSeconds(30);
     private static CaptchaWindow? _current;
 
-    private readonly BiliLoginCaptchaParameters _parameters;
+    private readonly ILogger<CaptchaWindow> _logger;
+    private BiliLoginCaptchaParameters _parameters;
+    private Func<Task<BiliLoginCaptchaParameters?>>? _refreshParameters;
     private readonly TaskCompletionSource<BiliLoginCaptchaResult?> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly DispatcherQueueTimer _loadTimer;
     private CoreWebView2? _core;
     private bool _isInitializing;
+    private bool _isRefreshing;
+    private bool _initialParametersChecked;
     private bool _isPageActive;
     private bool _isInitSent;
     private bool _isChallengeShown;
     private bool _isClosed;
 
-    private CaptchaWindow(BiliLoginCaptchaParameters parameters, Window? owner)
+    private CaptchaWindow(BiliLoginCaptchaParameters parameters, Func<Task<BiliLoginCaptchaParameters?>> refreshParameters, Window? owner)
     {
         _parameters = parameters;
+        _refreshParameters = refreshParameters;
+        _logger = this.Get<ILogger<CaptchaWindow>>();
         InitializeComponent();
         IsMaximizable = false;
         IsMinimizable = false;
@@ -87,16 +94,18 @@ public sealed partial class CaptchaWindow : WindowEx
     /// </summary>
     /// <param name="owner">The window the challenge belongs to; the new window is centered over it.</param>
     /// <param name="parameters">Challenge parameters issued by the login service.</param>
+    /// <param name="refreshParameters">Requests another challenge on retry; a failed request closes the window.</param>
     /// <param name="cancellationToken">Closes the window when canceled.</param>
     /// <returns>The answer, or <c>null</c> when the window was closed without one.</returns>
-    public static async Task<BiliLoginCaptchaResult?> RequestAsync(Window? owner, BiliLoginCaptchaParameters parameters, CancellationToken cancellationToken)
+    public static async Task<BiliLoginCaptchaResult?> RequestAsync(Window? owner, BiliLoginCaptchaParameters parameters, Func<Task<BiliLoginCaptchaParameters?>> refreshParameters, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(refreshParameters);
         cancellationToken.ThrowIfCancellationRequested();
 
         // One challenge at a time: a newer request replaces whatever is still open.
         _current?.Close();
-        var window = new CaptchaWindow(parameters, owner);
+        var window = new CaptchaWindow(parameters, refreshParameters, owner);
         _current = window;
         var dispatcher = window.DispatcherQueue;
         using var registration = cancellationToken.Register(() => dispatcher.TryEnqueue(window.CloseIfOpen));
@@ -268,6 +277,7 @@ public sealed partial class CaptchaWindow : WindowEx
     private void OnClosed(object sender, WindowEventArgs args)
     {
         _isClosed = true;
+        _refreshParameters = null;
         if (ReferenceEquals(_current, this))
         {
             _current = null;
@@ -385,6 +395,7 @@ public sealed partial class CaptchaWindow : WindowEx
 
         _isPageActive = true;
         _isInitSent = false;
+        _initialParametersChecked = false;
         _isChallengeShown = false;
         ShowLoading();
         _loadTimer.Stop();
@@ -440,7 +451,15 @@ public sealed partial class CaptchaWindow : WindowEx
                 break;
             case "error" when message.Count == 2 && _isInitSent
                 && message.TryGetValue("code", out var code) && IsErrorCode(code):
-                ShowError(ResourceToolkit.GetLocalizedString(StringNames.CaptchaErrorGeneric), code);
+                if (code == "error_34")
+                {
+                    // This is a GeeTest site-account lookup error, not a network diagnosis.
+                    ShowError($"{ResourceToolkit.GetLocalizedString(StringNames.SignInErrorCaptchaFailed)} ({code})", null);
+                }
+                else
+                {
+                    ShowError(ResourceToolkit.GetLocalizedString(StringNames.CaptchaErrorGeneric), code);
+                }
                 break;
             case "success" when message.Count == 4 && _isChallengeShown
                 && message.TryGetValue("challenge", out var challenge) && IsToken(challenge, MaxAnswerLength)
@@ -456,10 +475,42 @@ public sealed partial class CaptchaWindow : WindowEx
 
     private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
+        Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out var target);
         if (!IsAllowedRequest(args.Request.Uri))
         {
             args.Response = sender.Environment.CreateWebResourceResponse(null, 403, "Forbidden", string.Empty);
+            if (target?.Scheme is "https" or "http")
+            {
+                // Queries contain challenge tickets; only the resource host and path are diagnostic.
+                _logger.LogWarning("Captcha resource blocked: {Host}{Path} ({ResourceContext}).", target.Host, target.AbsolutePath, args.ResourceContext);
+            }
         }
+        else if (!_initialParametersChecked && _isInitSent && target is not null
+            && IsChallengeHost(target.Host) && target.AbsolutePath == "/get.php")
+        {
+            _initialParametersChecked = true;
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Captcha initialization parameters: gt matches issued value={GtMatches}, challenge matches issued value={ChallengeMatches}.",
+                    ReadQueryParameter(target, "gt") == _parameters.Gt,
+                    ReadQueryParameter(target, "challenge") == _parameters.Challenge);
+            }
+        }
+    }
+
+    private static string ReadQueryParameter(Uri uri, string name)
+    {
+        var prefix = name + "=";
+        foreach (var field in uri.Query.TrimStart('?').Split('&'))
+        {
+            if (field.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(field[prefix.Length..]);
+            }
+        }
+
+        return string.Empty;
     }
 
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
@@ -566,13 +617,50 @@ public sealed partial class CaptchaWindow : WindowEx
 
     private async void OnRetryButtonClick(object sender, RoutedEventArgs e)
     {
-        if (_core is null)
+        if (_isClosed || _isRefreshing || _refreshParameters is not { } refreshParameters)
         {
-            await InitializeViewAsync();
+            return;
         }
-        else
+
+        _isRefreshing = true;
+        _isPageActive = false;
+        _loadTimer.Stop();
+        ShowLoading();
+        try
         {
-            LoadPage();
+            var parameters = await refreshParameters();
+            if (_isClosed)
+            {
+                return;
+            }
+
+            if (parameters is null)
+            {
+                CloseIfOpen();
+                return;
+            }
+
+            _parameters = parameters;
+            if (_core is null)
+            {
+                await InitializeViewAsync();
+            }
+            else
+            {
+                LoadPage();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            CloseIfOpen();
+        }
+        catch (Exception)
+        {
+            ShowError(ResourceToolkit.GetLocalizedString(StringNames.CaptchaErrorGeneric), "refresh");
+        }
+        finally
+        {
+            _isRefreshing = false;
         }
     }
 

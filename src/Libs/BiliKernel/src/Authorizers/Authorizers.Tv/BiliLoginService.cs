@@ -47,7 +47,7 @@ public sealed class BiliLoginService : IBiliLoginService
 
             attempt.Captcha = null;
             await attempt.EnsureBrowserIdentityAsync(cancellationToken).ConfigureAwait(false);
-            using var response = await attempt.SendAsync(HttpMethod.Get, BiliApis.Passport.WebCaptcha + "?source=main_web", null, WebLoginProtocol.PasswordReferer, cancellationToken).ConfigureAwait(false);
+            using var response = await attempt.SendAsync(HttpMethod.Get, BiliApis.Passport.WebCaptcha + "?source=" + WebLoginProtocol.CaptchaSource, null, WebLoginProtocol.PasswordReferer, cancellationToken).ConfigureAwait(false);
             var result = response.Failure is not null ? BiliLoginCaptchaResponse.Failed(response.Failure)
                 : WebLoginProtocol.ParseCaptcha(response.Root, securityCenter: false);
             attempt.Captcha = result.Parameters;
@@ -76,7 +76,8 @@ public sealed class BiliLoginService : IBiliLoginService
                 }
 
                 // The hash is short-lived: fetch immediately before encryption and submission.
-                using var keyResponse = await attempt.SendAsync(HttpMethod.Get, BiliApis.Passport.PasswordEncrypt, null, WebLoginProtocol.PasswordReferer, cancellationToken).ConfigureAwait(false);
+                var keyUri = BiliApis.Passport.PasswordEncrypt + "?_=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture);
+                using var keyResponse = await attempt.SendAsync(HttpMethod.Get, keyUri, null, WebLoginProtocol.PasswordReferer, cancellationToken).ConfigureAwait(false);
                 var keyFailure = keyResponse.Failure ?? WebLoginProtocol.ReadFailure(keyResponse.Root);
                 if (keyFailure is not null)
                 {
@@ -108,7 +109,8 @@ public sealed class BiliLoginService : IBiliLoginService
                 var fields = WebLoginProtocol.CaptchaFields(captcha);
                 fields["username"] = account.Trim();
                 fields["password"] = encrypted;
-                fields["keep"] = WebLoginProtocol.Keep;
+                fields["source"] = WebLoginProtocol.LoginSource;
+                fields["go_url"] = WebLoginProtocol.LoginGoUrl;
                 encrypted = string.Empty;
                 attempt.PasswordSubmitted = true;
                 attempt.Captcha = null;
@@ -153,11 +155,11 @@ public sealed class BiliLoginService : IBiliLoginService
             }
 
             var fields = WebLoginProtocol.CaptchaFields(captcha);
-            // cid is the list item's id, not its displayed international dialing code.
-            // The Web send and login endpoints intentionally use different source values.
-            fields["cid"] = country.Id.ToString(CultureInfo.InvariantCulture);
+            // Passport's current web form uses country_code as cid, not the database id.
+            fields["cid"] = country.DialingCode.ToString(CultureInfo.InvariantCulture);
             fields["tel"] = phoneNumber.Trim();
-            fields["source"] = WebLoginProtocol.SmsSendSource;
+            fields["source"] = WebLoginProtocol.LoginSource;
+            fields["go_url"] = WebLoginProtocol.LoginGoUrl;
             attempt.Captcha = null;
             using var response = await attempt.SendAsync(HttpMethod.Post, BiliApis.Passport.WebSmsSend, fields, WebLoginProtocol.SmsReferer, cancellationToken).ConfigureAwait(false);
             var failure = response.Failure ?? WebLoginProtocol.ReadCaptchaKey(response.Root, out _);
@@ -168,7 +170,7 @@ public sealed class BiliLoginService : IBiliLoginService
 
             var key = WebLoginProtocol.GetString(WebLoginProtocol.GetData(response.Root), "captcha_key");
             attempt.Sms?.Invalidate();
-            attempt.Sms = new WebSmsContext(attempt, key, country.Id, phoneNumber.Trim(), null);
+            attempt.Sms = new WebSmsContext(attempt, key, country.DialingCode, phoneNumber.Trim(), null);
             return BiliLoginSmsResponse.Succeeded(attempt.Sms);
         }, BiliLoginSmsResponse.Failed, cancellationToken);
 
@@ -192,19 +194,19 @@ public sealed class BiliLoginService : IBiliLoginService
                 return Failed(BiliLoginErrorKind.SessionExpired);
             }
 
-            if (sms.CountryId != country.Id || !sms.PhoneNumber.Equals(phoneNumber.Trim(), StringComparison.Ordinal))
+            if (sms.CountryCode != country.DialingCode || !sms.PhoneNumber.Equals(phoneNumber.Trim(), StringComparison.Ordinal))
             {
                 return Failed(BiliLoginErrorKind.InvalidParameters);
             }
 
             var fields = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["cid"] = country.Id.ToString(CultureInfo.InvariantCulture),
+                ["cid"] = country.DialingCode.ToString(CultureInfo.InvariantCulture),
                 ["tel"] = phoneNumber.Trim(),
                 ["code"] = smsCode.Trim(),
                 ["captcha_key"] = sms.CaptchaKey,
-                ["source"] = WebLoginProtocol.SmsLoginSource,
-                ["keep"] = WebLoginProtocol.Keep,
+                ["source"] = WebLoginProtocol.LoginSource,
+                ["go_url"] = WebLoginProtocol.LoginGoUrl,
             };
             smsCode = string.Empty;
             using var response = await attempt.SendAsync(HttpMethod.Post, BiliApis.Passport.WebSmsLogin, fields, WebLoginProtocol.SmsReferer, cancellationToken).ConfigureAwait(false);
@@ -221,7 +223,11 @@ public sealed class BiliLoginService : IBiliLoginService
             }
 
             verification.Captcha = null;
-            using var response = await attempt.SendAsync(HttpMethod.Post, BiliApis.Passport.VerificationCaptcha, null, verification.Referer, cancellationToken).ConfigureAwait(false);
+            var fields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["source"] = string.IsNullOrEmpty(verification.Source) ? WebLoginProtocol.CaptchaSource : verification.Source,
+            };
+            using var response = await attempt.SendAsync(HttpMethod.Post, BiliApis.Passport.VerificationCaptcha, fields, verification.Referer, cancellationToken).ConfigureAwait(false);
             var result = response.Failure is not null ? BiliLoginCaptchaResponse.Failed(WebFallback(response.Failure))
                 : WebLoginProtocol.ParseCaptcha(response.Root, securityCenter: true);
             if (result.Failure is not null)
@@ -290,12 +296,13 @@ public sealed class BiliLoginService : IBiliLoginService
             var exchangeFields = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["code"] = exchangeCode,
+                ["source"] = string.IsNullOrEmpty(verification.Source) ? WebLoginProtocol.LoginSource : verification.Source,
             };
             exchangeCode = string.Empty;
-            if (string.IsNullOrEmpty(verification.RequestId))
+            var goUrl = WebLoginProtocol.ExchangeGoUrl(verification);
+            if (!string.IsNullOrEmpty(goUrl))
             {
-                // The request-id-less branch is documented by only one protocol source.
-                exchangeFields["go_url"] = WebLoginProtocol.ExchangeGoUrl;
+                exchangeFields["go_url"] = goUrl;
             }
 
             sms.Invalidate();
