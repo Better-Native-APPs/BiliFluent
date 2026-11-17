@@ -7,6 +7,7 @@ using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
 using Humanizer;
 using Microsoft.Extensions.Logging;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.WinUIKernel.Share;
@@ -65,6 +66,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         PreferCodec = SettingsToolkit.ReadLocalSetting(SettingNames.PreferCodec, PreferCodecType.H264);
         var preferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
         PreferQuality = preferQuality == PreferQualityType.High ? PreferQualityType.Auto : preferQuality;
+        HomeRecommendationFeedSourceCollection = [RecommendationFeedSource.Web, RecommendationFeedSource.App];
+        HomeRecommendationFeedSource = SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.App);
         IsPopularNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(PopularPage).Name}Visible", true);
         IsMomentNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(MomentPage).Name}Visible", true);
         IsVideoNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(VideoPartitionPage).Name}Visible", true);
@@ -462,6 +465,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnShowSearchRecommendChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.ShowSearchRecommend, value);
+
+    partial void OnHomeRecommendationFeedSourceChanged(RecommendationFeedSource value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.HomeRecommendationFeedSource, value);
 
     partial void OnIsPopularNavVisibleChanged(bool value)
         => WriteNavVisibleSetting(typeof(PopularPage), value);

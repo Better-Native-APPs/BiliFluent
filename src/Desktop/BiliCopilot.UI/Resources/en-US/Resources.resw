@@ -534,4 +534,16 @@
   <data name="LivePlaybackTransitionIncomplete" xml:space="preserve">
     <value>Playback or switching did not complete. If closing failed, try opening it again shortly.</value>
   </data>
+  <data name="HomeRecommendationFeedSource" xml:space="preserve">
+    <value>Home recommendation source</value>
+  </data>
+  <data name="HomeRecommendationFeedSourceDescription" xml:space="preserve">
+    <value>Recommendations refresh from the beginning when you return to Home. Anonymous recommendations are used when signed out.</value>
+  </data>
+  <data name="RecommendationFeedWeb" xml:space="preserve">
+    <value>Web</value>
+  </data>
+  <data name="RecommendationFeedApp" xml:space="preserve">
+    <value>Mobile app</value>
+  </data>
 </root>

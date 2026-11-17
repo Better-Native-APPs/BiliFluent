@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Models.Constants;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core.Enums;
 using System.Collections.ObjectModel;
@@ -105,6 +106,12 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private List<PreferQualityType> _preferQualityCollection;
+
+    [ObservableProperty]
+    private RecommendationFeedSource _homeRecommendationFeedSource;
+
+    [ObservableProperty]
+    private List<RecommendationFeedSource> _homeRecommendationFeedSourceCollection;
 
     [ObservableProperty]
     private List<PreferDecodeType> _preferDecodeCollection;
