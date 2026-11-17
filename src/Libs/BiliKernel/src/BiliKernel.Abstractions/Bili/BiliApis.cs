@@ -845,6 +845,16 @@ public static class BiliApis
         public const string AddReply = _apiBase + "/x/v2/reply/add";
 
         /// <summary>
+        /// 投票详情（评论、动态里的投票共用）.
+        /// </summary>
+        public const string VoteInfo = _apiBase + "/x/vote/vote_info";
+
+        /// <summary>
+        /// 提交投票.
+        /// </summary>
+        public const string DoVote = _apiBase + "/x/vote/do_vote";
+
+        /// <summary>
         /// 动态标签.
         /// </summary>
         public const string DynamicTabs = _grpcBase + "/bilibili.app.dynamic.v2.Dynamic/DynTab";
