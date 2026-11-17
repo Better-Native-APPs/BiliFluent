@@ -24,8 +24,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using Windows.Media;
-using Windows.Storage.Streams;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -110,22 +108,16 @@ public sealed partial class PlayerViewModel
             await MpvShutdownHelper.QuitCoreAsync(Client, logger, TimeSpan.FromSeconds(3));
             await Client.DisposeAsync();
             Client = null;
+            ReleaseSystemMediaTransportControls(_smtc);
             _nativeMp?.Dispose();
             _nativeMp = null;
-            if (_smtc is not null) _smtc.ButtonPressed -= OnSmtcButtonPressed;
             _smtc = null;
             CheckMediaAdmission();
         }
 
         if (Client?.IsDisposed != false)
         {
-            _nativeMp = new Windows.Media.Playback.MediaPlayer();
-            _nativeMp.CommandManager.IsEnabled = false; // 禁用原生播放器的命令管理器.
-            _smtc = _nativeMp.SystemMediaTransportControls;
-            _smtc.IsEnabled = true; // 启用系统媒体控制.
-            _smtc.IsPlayEnabled = true;
-            _smtc.IsPauseEnabled = true;
-            _smtc.ButtonPressed += OnSmtcButtonPressed;
+            InitializeSystemMediaTransportControls();
             var gpuNames = await Task.Run(AppToolkit.GetGpuNames);
             CheckMediaAdmission();
             HasNvidiaGpu = gpuNames.Any(p => p.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
@@ -375,61 +367,6 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    private void OnConnectorPropertiesUpdated(object? sender, PlayerInformationUpdatedEventArgs e)
-    {
-        if (IsLiveMedia && IsCurrentPlayback(_mediaVersion) && ReferenceEquals(sender, Connector))
-        {
-            Title = e.Title;
-            NotifyLivePropertiesChanged();
-        }
-        if (!IsCurrentPlayback(_mediaVersion) || _smtc is null || !ReferenceEquals(sender, Connector))
-        {
-            return;
-        }
-
-        var updater = _smtc!.DisplayUpdater;
-        //updater.AppMediaId = GetSnapshotItemId();
-        updater.Type = MediaPlaybackType.Video;
-        updater.VideoProperties.Title = e.Title;
-        updater.VideoProperties.Subtitle = e.Subtitle;
-        if (e.Cover is RandomAccessStreamReference streamRef)
-        {
-            updater.Thumbnail = streamRef;
-        }
-        else if (e.Cover is Uri uri)
-        {
-            updater.Thumbnail = RandomAccessStreamReference.CreateFromUri(uri);
-        }
-        else
-        {
-            updater.Thumbnail = null;
-        }
-
-        updater.Update();
-    }
-
-    private void OnSmtcButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
-    {
-        queue.TryEnqueue(() =>
-        {
-            if (args.Button is SystemMediaTransportControlsButton.Play or SystemMediaTransportControlsButton.Pause)
-            {
-                if (IsLiveMedia)
-                    _ = ObserveLiveTransportAsync(args.Button == SystemMediaTransportControlsButton.Pause ? PauseLiveAsync() : PlayLiveAsync());
-                else
-                    PlayPauseCommand.Execute(default);
-            }
-            else if (args.Button == SystemMediaTransportControlsButton.Next && CanNavigatePlaylist && IsNextButtonEnabled)
-            {
-                PlayNextCommand.Execute(default);
-            }
-            else if (args.Button == SystemMediaTransportControlsButton.Previous && CanNavigatePlaylist && IsPrevButtonEnabled)
-            {
-                PlayPreviousCommand.Execute(default);
-            }
-        });
-    }
-
     private readonly object _cacheStateUpdateLock = new();
     private MpvCacheStateEventArgs? _pendingCacheState;
     private long _pendingCacheStateMediaVersion;
@@ -646,6 +583,7 @@ public sealed partial class PlayerViewModel
         var mediaVersion = _mediaVersion;
         try
         {
+            ObserveSystemMediaPlayerPropertyChanged(e.PropertyName);
             var work = OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
             // The UI thread has been held up to here; anything after the await may have yielded.
             if (diagnostics) synchronousTicks = Stopwatch.GetTimestamp() - handlerStarted;
@@ -1018,13 +956,6 @@ public sealed partial class PlayerViewModel
                 CheckBlackBackgroundVisible();
             }
 
-            _smtc?.PlaybackStatus = Player.PlaybackState switch
-            {
-                MpvPlayerState.Playing => MediaPlaybackStatus.Playing,
-                MpvPlayerState.Paused => MediaPlaybackStatus.Paused,
-                MpvPlayerState.Buffering or MpvPlayerState.Buffering => MediaPlaybackStatus.Changing,
-                _ => MediaPlaybackStatus.Stopped,
-            };
         }
     }
 
@@ -1058,11 +989,7 @@ public sealed partial class PlayerViewModel
         PrevButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.PrevVideoTemplate), e.PrevTitle);
         NextButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.NextVideoTemplate), e.NextTitle);
         IsVideoNavigationAvailable = CanNavigatePlaylist && (e.CanPrev || e.CanNext);
-        if (_smtc != null)
-        {
-            _smtc.IsNextEnabled = IsNextButtonEnabled;
-            _smtc.IsPreviousEnabled = IsPrevButtonEnabled;
-        }
+        NotifySystemMediaPlaylistInitialized();
     }
 
     private void OnRequestOpenExtraPanel(object? sender, EventArgs e)

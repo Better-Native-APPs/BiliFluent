@@ -180,6 +180,8 @@ public sealed partial class PlayerViewModel
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _closeTask = completion.Task;
         _isClosing = true;
+        try { ReleaseSystemMediaTransportControls(_smtc); }
+        catch (Exception ex) { _closeCancellationErrors.Add(ex); }
         if (HasOwnedLiveResources || IsLiveMedia)
         {
             BeginLiveClose();
