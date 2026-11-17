@@ -437,7 +437,10 @@
                         </Grid>
 
                         <!--  Ways out: back to the first step, or the web page as a last resort. The negative margin lines the link text up with the form.  -->
-                        <Grid Grid.Row="4" Margin="-12,0">
+                        <Grid
+                            x:Name="SignInLinksPanel"
+                            Grid.Row="4"
+                            Margin="-12,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition />

@@ -147,6 +147,14 @@ public sealed partial class StartupPage : StartupPageBase
         {
             Announce(AppNameBlock, ViewModel.SignInStatus, isImportant: false);
         }
+        else if (e.PropertyName == nameof(ViewModel.IsSignInMessageOpen) && ViewModel.IsSignInMessageOpen)
+        {
+            // A long message can push the end of the form below the fold. The links come right after the message,
+            // so showing them shows all of it; nothing scrolls when they are already in view.
+            DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => SignInLinksPanel.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true }));
+        }
         else if (e.PropertyName == nameof(ViewModel.ErrorTip) && !string.IsNullOrEmpty(ViewModel.ErrorTip))
         {
             Announce(AppNameBlock, QRTipBlock.Text, isImportant: true);
