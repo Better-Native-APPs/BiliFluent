@@ -505,7 +505,7 @@ public sealed partial class PlayerViewModel
                 : LiveCloseStepAsync("mpv-client-dispose", () => client?.DisposeAsync().AsTask() ?? Task.CompletedTask),
             () => LiveCloseStepAsync("smtc-events-detach", () =>
             {
-                if (smtc is not null) smtc.ButtonPressed -= OnSmtcButtonPressed;
+                ReleaseSystemMediaTransportControls(smtc);
                 return Task.CompletedTask;
             }),
             () => LiveCloseStepAsync("native-smtc-dispose", () => { native?.Dispose(); return Task.CompletedTask; })));

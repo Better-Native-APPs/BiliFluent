@@ -53,6 +53,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
         Danmaku.ClearAll();
         ClearCommandDanmakuMedia();
+        ReleaseSystemMediaTransportControls(_smtc);
         _nativeMp?.Dispose();
         _nativeMp = null;
 
@@ -61,12 +62,6 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             _tripleTimer.Tick -= OnTripleTimerTick;
             _tripleTimer.Stop();
             _tripleTimer = null;
-        }
-
-        if (_smtc != null)
-        {
-            _smtc.ButtonPressed -= OnSmtcButtonPressed;
-            _smtc = null;
         }
 
         if (Connector != null)
@@ -193,11 +188,6 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             IsPrevButtonEnabled = false;
             IsNextButtonEnabled = false;
             IsVideoNavigationAvailable = false;
-            if (_smtc is not null)
-            {
-                _smtc.IsNextEnabled = false;
-                _smtc.IsPreviousEnabled = false;
-            }
         }
         if (!CanSeek)
         {
