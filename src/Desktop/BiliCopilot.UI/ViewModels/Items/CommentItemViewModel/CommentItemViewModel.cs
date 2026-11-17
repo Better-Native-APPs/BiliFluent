@@ -37,6 +37,7 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
         UserName = data.User.User.Name;
         IsVip = data.User.IsVip ?? false;
         Content = data.Content;
+        Vote = data.Vote is { } vote ? new CommentVoteViewModel(vote, service) : null;
         _markReplyTargetAction = markReplyTargetAction;
     }
 
