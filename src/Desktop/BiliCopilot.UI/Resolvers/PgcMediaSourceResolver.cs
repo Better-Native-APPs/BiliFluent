@@ -27,6 +27,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         lock (InitializationSync)
         {
             InvalidateInitialization();
+            ResetPlayingSelection();
             _snapshot = snapshot;
             _episode = episode;
         }
@@ -54,21 +55,24 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
     {
         lock (InitializationSync)
         {
-            return _playbackInfo is { } info
-                ? new(
-                    [new(AudioLanguageInformation.OriginalId)],
-                    AudioLanguageInformation.OriginalId,
-                    info.AudioQualities is { } qualities ? [.. qualities] : [],
-                    GetSelectedAudioQuality()?.Id)
-                : AudioSelections.Empty;
+            return PlayingSelection?.AudioSelections ?? GetResolvedAudioSelections(new(GetPreferences()));
         }
     }
+
+    private AudioSelections GetResolvedAudioSelections(OnDemandSelectionRequest request)
+        => _playbackInfo is { } info
+            ? new([new(AudioLanguageInformation.OriginalId)], AudioLanguageInformation.OriginalId,
+                info.AudioQualities is { } qualities ? [.. qualities] : [], GetSelectedAudioQuality(request)?.Id)
+            : AudioSelections.Empty;
 
     /// <summary>
     /// The quality that plays: the one chosen by hand when there is one, otherwise the automatic choice.
     /// Null until the media is loaded.
     /// </summary>
     internal PlayerFormatInformation? GetCurrentFormat()
+        => PlayingSelection?.Format ?? ResolveFormat(VideoMediaSourceResolver.GetManualQuality(_snapshot));
+
+    private PlayerFormatInformation? ResolveFormat(int? preferQuality)
     {
         if (_playbackInfo?.Formats is not { } formats)
         {
@@ -78,14 +82,14 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var availableFormats = formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default)).Where(p => p.IsEnabled).ToList();
         return VideoQualityPreference.Pick(
             VideoMediaSourceResolver.KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos),
-            VideoMediaSourceResolver.GetManualQuality(_snapshot),
+            preferQuality ?? 0,
             SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
     }
 
     /// <summary>
     /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
     /// </summary>
-    internal bool IsAutoQuality() => VideoMediaSourceResolver.GetManualQuality(_snapshot) <= 0;
+    internal bool IsAutoQuality() => PlayingSelection is { } playing ? playing.Preferences.VideoQuality is not > 0 : VideoMediaSourceResolver.GetManualQuality(_snapshot) <= 0;
 
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
 
@@ -121,7 +125,9 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             var id = _snapshot.Episode?.Identifier.Id ?? _snapshot.Season?.Identifier.Id;
             var title = _snapshot.Episode?.Identifier.Title ?? _snapshot.Season?.Identifier.Title;
             options.MediaName = title;
-            var (videoUrl, audioUrl) = GetPlayUrls();
+            var upstreamHeaders = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase) { ["User-Agent"] = userAgent };
+            var selection = CreateSelection(GetLoadSelection(GetPreferences()), upstreamHeaders);
+            var (videoUrl, audioUrl) = StageSelection(selection);
             var fileUrl = string.Empty;
             if (!string.IsNullOrEmpty(videoUrl))
             {
@@ -209,16 +215,32 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
                 ThrowIfInitializationInvalid(request);
             }
 
-            logger.LogError(ex, "获取剧集播放信息失败");
+            logger.LogError("Playback | play detail request failed kind=pgc error={Error}", ex.GetType().Name);
             throw;
         }
     }
 
-    private (string? video, string? audio) GetPlayUrls()
+    internal override async Task<OnDemandPlaybackSelection?> DescribeSelectionAsync(OnDemandSelectionRequest selectionRequest)
+    {
+        var request = CaptureInitialization();
+        await LoadMediaInfoAsync(request);
+        lock (InitializationSync)
+        {
+            ThrowIfInitializationInvalid(request);
+            return CreateSelection(selectionRequest, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Cookie"] = cookiesResolver.GetCookieString(),
+                ["Referer"] = InternalHttpExtensions.VideoReferer,
+                ["User-Agent"] = InternalHttpExtensions.VideoUserAgent,
+            });
+        }
+    }
+
+    private OnDemandPlaybackSelection CreateSelection(OnDemandSelectionRequest request, IReadOnlyDictionary<string, string> headers)
     {
         var videoSegments = _playbackInfo.Videos;
         var audioSegments = _playbackInfo.Audios;
-        var selectedFormat = GetCurrentFormat();
+        var selectedFormat = ResolveFormat(request.ResolvedVideoQuality ?? request.Preferences.VideoQuality);
         if (selectedFormat is null)
         {
             throw new InvalidCastException("无法获取到有效的播放地址");
@@ -229,14 +251,19 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         var vSeg = videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString() && p.Codecs.Contains(preferCodec))
             ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
         // The quality the user picked, or the automatic choice when nothing (available) is picked.
-        var aSeg = GetSelectedAudioQuality()?.Segment
+        var audioQuality = GetSelectedAudioQuality(request);
+        var aSeg = audioQuality?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
-        // Each stream is read from the first usable address among its main and backup URLs.
-        var urls = SelectStreams(vSeg, aSeg, selectedFormat.Quality);
-        return urls;
+        return DescribeSelection(selectedFormat, GetResolvedAudioSelections(request), request.Preferences,
+            vSeg, aSeg, audioQuality?.Kind ?? AudioQualityKind.Standard, headers);
     }
 
-    private AudioQualityInformation? GetSelectedAudioQuality()
-        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId, _snapshot.IsAutomaticAudioStandardOnly);
+    private OnDemandSelectionPreferences GetPreferences()
+        => new(VideoMediaSourceResolver.GetManualQuality(_snapshot), _snapshot.PreferAudioQualityId, _snapshot.PreferAudioLanguageId,
+            _snapshot.IsAutomaticAudioStandardOnly);
+
+    private AudioQualityInformation? GetSelectedAudioQuality(OnDemandSelectionRequest request)
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, request.ResolvedAudioQualityId ?? request.Preferences.AudioQualityId,
+            request.Preferences.StandardAudioOnly);
 }

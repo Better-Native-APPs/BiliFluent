@@ -32,73 +32,7 @@ public sealed partial class PlayerViewModel
     //   - an audio quality is kept for this playback, and keeps the video quality that plays for this playback.
     // So a media that follows a video quality chosen by hand plays that quality with the best audio.
     private Task SelectQualityEntryAsync(SourceItemViewModel source)
-    {
-        if (!CanSelectOnDemandQuality) return Task.CompletedTask;
-        var resolver = OnDemandResolver;
-        if (source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null
-            || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
-        {
-            return SelectSourceAsync(source);
-        }
-
-        var player = Player;
-        var position = player.Position;
-        var snapshot = _snapshot;
-        var version = _mediaVersion;
-        var audioBefore = GetResolverAudioSelections(resolver).QualityId;
-        var videoBefore = GetPlayingFormat(resolver)?.Quality;
-
-        snapshot.PreferAudioQualityId = source.IsAuto ? default : snapshot.PreferAudioQualityId ?? audioBefore;
-        ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
-        var audioAfter = GetResolverAudioSelections(resolver);
-
-        // The video part of the choice names the automatic entry again, so it has to know the audio first.
-        foreach (var item in Sources.Where(item => item.IsAuto))
-        {
-            item.AutoAudioName = source.IsAuto ? GetSpecialAudioName(audioAfter) : default;
-        }
-
-        var videoTask = SelectSourceAsync(source);
-        var isVideoReplayed = GetPlayingFormat(resolver) is { } videoAfter && videoAfter.Quality != videoBefore;
-        if (isVideoReplayed)
-        {
-            // That replay loads the audio as well.
-            return FinishAsync();
-        }
-
-        ApplyAudioSelections(audioAfter, keepRows: true);
-        if (audioAfter.QualityId == audioBefore)
-        {
-            return videoTask;
-        }
-
-        // Only the audio changes: "automatic" was chosen while its video quality already plays.
-        return RunWithoutPlayerInputAsync(async () =>
-        {
-            if (!IsCurrentPlayback(version) || !ReferenceEquals(resolver, _sourceResolver))
-            {
-                return;
-            }
-
-            await ReplayWithSubtitleRestoreAsync(player, position);
-            if (IsCurrentPlayback(version) && ReferenceEquals(resolver, _sourceResolver))
-            {
-                ApplyAudioSelections(GetResolverAudioSelections(resolver), keepRows: true);
-            }
-        }, nativeReplay: true);
-
-        async Task FinishAsync()
-        {
-            // The task is the replay this very call has just started.
-#pragma warning disable VSTHRD003
-            await videoTask;
-#pragma warning restore VSTHRD003
-            if (IsCurrentPlayback(version) && ReferenceEquals(resolver, _sourceResolver))
-            {
-                ApplyAudioSelections(GetResolverAudioSelections(resolver), keepRows: true);
-            }
-        }
-    }
+        => SelectSourceAsync(source);
 
     // Marks the entry of the quality list that is in effect. The automatic entry is the one only while both
     // the video and the audio quality are automatic; it is named after what it picked, such as "Auto (1080P)",
@@ -116,7 +50,8 @@ public sealed partial class PlayerViewModel
             _ => false,
         };
 
-        var isAuto = isVideoAuto && playing is not null && string.IsNullOrEmpty(_snapshot?.PreferAudioQualityId);
+        var audioPreference = resolver.PlayingSelection is { } selected ? selected.Preferences.AudioQualityId : _snapshot?.PreferAudioQualityId;
+        var isAuto = isVideoAuto && playing is not null && string.IsNullOrEmpty(audioPreference);
         var audioName = isAuto ? GetSpecialAudioName(GetResolverAudioSelections(resolver)) : default;
         foreach (var item in Sources)
         {
@@ -147,6 +82,7 @@ public sealed partial class PlayerViewModel
     // before the first load starts.
     private void WatchAutomaticAudio()
     {
+        WatchSeamlessPlayback();
         var client = CanSelectOnDemandQuality && OnDemandResolver is not null ? Client : null;
         if (ReferenceEquals(client, _automaticAudioClient))
         {
@@ -218,12 +154,13 @@ public sealed partial class PlayerViewModel
 
             var position = loaded.IsSuccess && double.IsFinite(loaded.Value) && loaded.Value > 0 ? loaded.Value : player.Position;
             snapshot.IsAutomaticAudioStandardOnly = true;
-            ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
-            ApplyAudioSelections(GetResolverAudioSelections(resolver), keepRows: true);
             await RunWithoutPlayerInputAsync(async () =>
             {
                 if (IsCurrent())
                 {
+                    CancelSeamlessSelection();
+                    resolver.SetReloadSelection(new(new(snapshot.PreferQuality, null, snapshot.PreferAudioLanguageId, true),
+                        GetPlayingFormat(resolver)?.Quality));
                     await ReplayWithSubtitleRestoreAsync(player, position);
                 }
             }, nativeReplay: true);

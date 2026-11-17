@@ -31,6 +31,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         lock (InitializationSync)
         {
             InvalidateInitialization();
+            ResetPlayingSelection();
             _snapshot = snapshot;
             _part = part;
         }
@@ -68,7 +69,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             // A failed request is dropped as well, so choosing again retries it.
             if (_initTask.IsFaulted || _initTask.IsCanceled || reloadLanguage)
             {
-                InvalidateInitialization();
+                InvalidateInitialization(keepPlayingStreams: true);
             }
         }
     }
@@ -77,22 +78,26 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     {
         lock (InitializationSync)
         {
-            return _playbackInfo is { } info
-                ? new(
-                    info.AudioLanguages is { } languages ? [.. languages] : [],
-                    _servedLanguage ?? AudioLanguageInformation.OriginalId,
-                    info.AudioQualities is { } qualities ? [.. qualities] : [],
-                    GetSelectedAudioQuality()?.Id,
-                    info.AudioLanguageGroupTitle)
-                : AudioSelections.Empty;
+            return PlayingSelection?.AudioSelections ?? GetResolvedAudioSelections(new(GetPreferences()));
         }
     }
+
+    private AudioSelections GetResolvedAudioSelections(OnDemandSelectionRequest request)
+        => _playbackInfo is { } info
+            ? new(info.AudioLanguages is { } languages ? [.. languages] : [],
+                _servedLanguage ?? AudioLanguageInformation.OriginalId,
+                info.AudioQualities is { } qualities ? [.. qualities] : [],
+                GetSelectedAudioQuality(request)?.Id, info.AudioLanguageGroupTitle)
+            : AudioSelections.Empty;
 
     /// <summary>
     /// The quality that plays: the one chosen by hand when there is one, otherwise the automatic choice.
     /// Null until the media is loaded.
     /// </summary>
     internal PlayerFormatInformation? GetCurrentFormat()
+        => PlayingSelection?.Format ?? ResolveFormat(GetManualQuality(_snapshot));
+
+    private PlayerFormatInformation? ResolveFormat(int? preferQuality)
     {
         if (_playbackInfo?.Formats is not { } formats)
         {
@@ -107,14 +112,14 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         return VideoQualityPreference.Pick(
             KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos),
-            GetManualQuality(_snapshot),
+            preferQuality ?? 0,
             SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
     }
 
     /// <summary>
     /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
     /// </summary>
-    internal bool IsAutoQuality() => GetManualQuality(_snapshot) <= 0;
+    internal bool IsAutoQuality() => PlayingSelection is { } playing ? playing.Preferences.VideoQuality is not > 0 : GetManualQuality(_snapshot) <= 0;
 
     // The quality chosen by hand: the one of this playback, or the one remembered from an earlier media.
     internal static int GetManualQuality(MediaSnapshot snapshot)
@@ -165,7 +170,9 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         {
             ThrowIfInitializationInvalid(request);
             options.MediaName = _snapshot.Video.Identifier.Title;
-            var (videoUrl, audioUrl) = GetPlayUrls();
+            var upstreamHeaders = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase) { ["User-Agent"] = userAgent };
+            var selection = CreateSelection(GetLoadSelection(GetPreferences()), upstreamHeaders);
+            var (videoUrl, audioUrl) = StageSelection(selection);
             var fileUrl = string.Empty;
             if (!string.IsNullOrEmpty(videoUrl))
             {
@@ -271,16 +278,32 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 ThrowIfInitializationInvalid(request);
             }
 
-            logger.LogError(ex, "获取视频播放信息失败");
+            logger.LogError("Playback | play detail request failed kind=video error={Error}", ex.GetType().Name);
             throw;
         }
     }
 
-    private (string? video, string? audio) GetPlayUrls()
+    internal override async Task<OnDemandPlaybackSelection?> DescribeSelectionAsync(OnDemandSelectionRequest selectionRequest)
+    {
+        var request = CaptureInitialization();
+        await LoadMediaInfoAsync(request);
+        lock (InitializationSync)
+        {
+            ThrowIfInitializationInvalid(request);
+            return CreateSelection(selectionRequest, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Cookie"] = cookiesResolver.GetCookieString(),
+                ["Referer"] = InternalHttpExtensions.VideoReferer,
+                ["User-Agent"] = InternalHttpExtensions.VideoUserAgent,
+            });
+        }
+    }
+
+    private OnDemandPlaybackSelection CreateSelection(OnDemandSelectionRequest request, IReadOnlyDictionary<string, string> headers)
     {
         var videoSegments = _playbackInfo.Videos;
         var audioSegments = _playbackInfo.Audios;
-        var selectedFormat = GetCurrentFormat();
+        var selectedFormat = ResolveFormat(request.ResolvedVideoQuality ?? request.Preferences.VideoQuality);
         if (selectedFormat is null)
         {
             throw new InvalidCastException("无法获取到有效的播放地址");
@@ -296,18 +319,22 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 13 || p.Codecs.Contains("av01", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
         // The quality the user picked, or the automatic choice when nothing (available) is picked.
-        var aSeg = GetSelectedAudioQuality()?.Segment
+        var audioQuality = GetSelectedAudioQuality(request);
+        var aSeg = audioQuality?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
-        // Each stream is read from the first usable address among its main and backup URLs.
-        var urls = SelectStreams(vSeg, aSeg, selectedFormat.Quality);
-        return urls;
+        return DescribeSelection(selectedFormat, GetResolvedAudioSelections(request), request.Preferences,
+            vSeg, aSeg, audioQuality?.Kind ?? AudioQualityKind.Standard, headers);
     }
 
     // The language code to request with cur_language; the original audio is requested without one.
     private static string? GetRequestedLanguage(string? languageId)
         => string.IsNullOrWhiteSpace(languageId) || languageId == AudioLanguageInformation.OriginalId ? default : languageId;
 
-    private AudioQualityInformation? GetSelectedAudioQuality()
-        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, _snapshot.PreferAudioQualityId, _snapshot.IsAutomaticAudioStandardOnly);
+    private OnDemandSelectionPreferences GetPreferences()
+        => new(GetManualQuality(_snapshot), _snapshot.PreferAudioQualityId, _snapshot.PreferAudioLanguageId, _snapshot.IsAutomaticAudioStandardOnly);
+
+    private AudioQualityInformation? GetSelectedAudioQuality(OnDemandSelectionRequest request)
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, request.ResolvedAudioQualityId ?? request.Preferences.AudioQualityId,
+            request.Preferences.StandardAudioOnly);
 }

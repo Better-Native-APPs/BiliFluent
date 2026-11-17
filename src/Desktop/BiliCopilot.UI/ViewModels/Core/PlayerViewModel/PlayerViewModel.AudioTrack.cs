@@ -165,7 +165,7 @@ public sealed partial class PlayerViewModel
     private Task SelectAudioLanguageAsync(AudioLanguageItemViewModel language)
     {
         if (!CanSelectAudioTrack || language is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || Player is null
-            || !AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage)
+            || !AudioLanguages.Any(item => ReferenceEquals(item, language))
             || OnDemandResolver is not VideoMediaSourceResolver resolver)
         {
             return Task.CompletedTask;
@@ -175,6 +175,8 @@ public sealed partial class PlayerViewModel
         var position = player.Position;
         var snapshot = _snapshot;
         var version = _mediaVersion;
+        CancelSeamlessSelection();
+        if (ReferenceEquals(language, SelectedAudioLanguage)) return Task.CompletedTask;
         return RunWithoutPlayerInputAsync(async () =>
         {
             if (!CanSelectAudioTrack || !AudioLanguages.Any(item => ReferenceEquals(item, language)) || ReferenceEquals(language, SelectedAudioLanguage))
@@ -187,7 +189,8 @@ public sealed partial class PlayerViewModel
             var previousSelectedId = SelectedAudioLanguage?.Id;
             snapshot.PreferAudioLanguageId = language.Id;
             ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: true);
-            MarkSelectedAudioLanguage(language.Id);
+            resolver.SetReloadSelection(new(new(snapshot.PreferQuality, snapshot.PreferAudioQualityId, language.Id, snapshot.IsAutomaticAudioStandardOnly),
+                GetPlayingFormat(resolver)?.Quality));
 
             // Same as a quality switch: replay consumes the captured position and restores the subtitle.
             await ReplayWithSubtitleRestoreAsync(player, position);
@@ -210,6 +213,8 @@ public sealed partial class PlayerViewModel
             if (selections.LanguageId != (previousSelectedId ?? AudioLanguageInformation.OriginalId))
             {
                 ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: true);
+                resolver.SetReloadSelection(new(new(snapshot.PreferQuality, snapshot.PreferAudioQualityId, previousId, snapshot.IsAutomaticAudioStandardOnly),
+                    GetPlayingFormat(resolver)?.Quality));
 
                 // Replay once more even when nothing new was loaded: the first attempt already retired the
                 // danmaku and skip-segment bindings of the file that is playing, and only a load brings them back.
@@ -224,6 +229,8 @@ public sealed partial class PlayerViewModel
 
             if (selections.Languages.Count > 0)
             {
+                if (resolver.PlayingSelection is { } playing)
+                    resolver.CommitSelectionPreferences(playing.Preferences with { AudioLanguageId = previousId });
                 ApplyAudioSelections(selections, keepRows: true);
             }
             else
@@ -246,100 +253,11 @@ public sealed partial class PlayerViewModel
             return Task.CompletedTask;
         }
 
-        var player = Player;
-        var position = player.Position;
         var snapshot = _snapshot;
-        var version = _mediaVersion;
-        if (IsPlaying(GetResolverAudioSelections(resolver), quality))
-        {
-            // The quality already plays, picked automatically. Choosing it keeps it; nothing is loaded again.
-            if (string.IsNullOrEmpty(snapshot.PreferAudioQualityId))
-            {
-                PinQuality();
-                ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
-                ApplyAudioSelections(GetResolverAudioSelections(resolver), keepRows: true);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        return RunWithoutPlayerInputAsync(async () =>
-        {
-            if (!CanSelectOnDemandQuality || !AudioQualities.Any(item => ReferenceEquals(item, quality)) || !ReferenceEquals(resolver, _sourceResolver))
-            {
-                return;
-            }
-
-            // Only the stable ID is remembered. The resolver looks the address up again on every load.
-            var previousId = snapshot.PreferAudioQualityId;
-            var previousVideoQuality = snapshot.PreferQuality;
-            var previousSelectedId = SelectedAudioQuality?.Id;
-            PinQuality();
-            ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
-            MarkSelectedAudioQuality(quality.Id);
-            MarkQualityMenu();
-
-            await ReplayWithSubtitleRestoreAsync(player, position);
-            if (!IsCurrentPlayback(version) || !ReferenceEquals(resolver, _sourceResolver))
-            {
-                return;
-            }
-
-            var selections = GetResolverAudioSelections(resolver);
-            if (IsPlaying(selections, quality))
-            {
-                ApplyAudioSelections(selections, keepRows: true);
-                return;
-            }
-
-            // The choice did not take effect, so it is given up, together with the video quality it kept.
-            snapshot.PreferQuality = previousVideoQuality;
-            if (selections.Qualities.Count > 0)
-            {
-                // The loaded media has no such quality. The automatic one is already playing,
-                // which is what "no choice" means.
-                snapshot.PreferAudioQualityId = default;
-                ApplyAudioSelections(selections, keepRows: true);
-                return;
-            }
-
-            // The request failed. Go back to the previous quality instead of leaving a choice
-            // that does not match what is playing.
-            snapshot.PreferAudioQualityId = previousId;
-            ResetResolverAudioSelection(resolver, snapshot, reloadLanguage: false);
-
-            // Replay once more even when nothing new was loaded: the first attempt already retired the
-            // danmaku and skip-segment bindings of the file that is playing, and only a load brings them back.
-            await ReplayWithSubtitleRestoreAsync(player, position);
-            if (!IsCurrentPlayback(version) || !ReferenceEquals(resolver, _sourceResolver))
-            {
-                return;
-            }
-
-            selections = GetResolverAudioSelections(resolver);
-            if (selections.Qualities.Count > 0)
-            {
-                ApplyAudioSelections(selections, keepRows: true);
-            }
-            else
-            {
-                // Nothing is loaded. Keep the list, so the user can try again.
-                MarkSelectedAudioQuality(previousSelectedId);
-                MarkQualityMenu();
-            }
-
-            Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioQualitySwitchFailed), InfoType.Error);
-        }, nativeReplay: true);
-
-        // An audio quality chosen by hand leaves "automatic", which covers the video quality too. The video
-        // quality that plays is kept with it, for this playback only: it is not remembered for other media.
-        void PinQuality()
-        {
-            snapshot.PreferAudioQualityId = quality.Id;
-            if (snapshot.PreferQuality is not > 0 && GetPlayingFormat(resolver) is { } playing)
-            {
-                snapshot.PreferQuality = playing.Quality;
-            }
-        }
+        var videoQuality = GetPlayingFormat(resolver)?.Quality;
+        // Audio choices pin the video for this playback, never the preference for following media.
+        var preferences = new OnDemandSelectionPreferences(snapshot.PreferQuality is > 0 ? snapshot.PreferQuality : videoQuality,
+            quality.Id, snapshot.PreferAudioLanguageId, snapshot.IsAutomaticAudioStandardOnly);
+        return SwitchOnDemandSelectionAsync(new(preferences, videoQuality), quality.Name);
     }
 }

@@ -19,6 +19,15 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     private CancellationToken _initializationCancellation;
     private long _initializationGeneration;
     private PlaybackStreamSelection? _streams;
+    private OnDemandPlaybackSelection? _playingSelection;
+    private OnDemandPlaybackSelection? _loadingSelection;
+    private OnDemandSelectionRequest? _reloadSelection;
+    private long _loadSelectionGeneration;
+    private long _completedSelectionGeneration;
+    private OnDemandSelectionLoad? _activeSelectionLoad;
+    private PlaybackStreamSelection? _beforeLoadStreams;
+    private IReadOnlyList<StreamCandidate> _beforeLoadVideos = [];
+    private IReadOnlyList<StreamCandidate> _beforeLoadAudios = [];
 
     // Every address of the two streams of the source that was served last, in the order they are tried.
     private IReadOnlyList<StreamCandidate> _videoCandidates = [];
@@ -26,6 +35,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
 
     // The deadline of a fresh answer already looked expired: the local clock cannot be trusted with it.
     private bool _ignoreDeadline;
+    private bool _freshPlayDetail = true;
 
     public IntPtr WindowHandle { get; set; }
 
@@ -34,6 +44,162 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     /// current play detail. Safe to read on any thread.
     /// </summary>
     internal PlaybackStreamSelection? CurrentStreams => Volatile.Read(ref _streams);
+
+    internal OnDemandPlaybackSelection? PlayingSelection => Volatile.Read(ref _playingSelection);
+
+    internal virtual Task<OnDemandPlaybackSelection?> DescribeSelectionAsync(OnDemandSelectionRequest request)
+        => Task.FromResult<OnDemandPlaybackSelection?>(null);
+
+    internal void SetReloadSelection(OnDemandSelectionRequest request)
+    {
+        lock (InitializationSync) _reloadSelection = request;
+    }
+
+    protected OnDemandSelectionRequest GetLoadSelection(OnDemandSelectionPreferences initialPreferences)
+        => _reloadSelection ?? _playingSelection?.ForReload() ?? new(initialPreferences);
+
+    protected void ResetPlayingSelection()
+    {
+        _playingSelection = null;
+        _loadingSelection = null;
+        _reloadSelection = null;
+        _loadSelectionGeneration = 0;
+        _completedSelectionGeneration = 0;
+        _activeSelectionLoad = null;
+        _beforeLoadStreams = null;
+        _beforeLoadVideos = [];
+        _beforeLoadAudios = [];
+    }
+
+    protected OnDemandPlaybackSelection DescribeSelection(PlayerFormatInformation format, AudioSelections audioSelections,
+        OnDemandSelectionPreferences preferences, DashSegmentInformation? video, DashSegmentInformation? audio,
+        AudioQualityKind audioKind, IReadOnlyDictionary<string, string> headers)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var excludeP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
+        SeamlessStreamDescription? Describe(DashSegmentInformation? segment, PlayerFormatInformation? videoFormat, AudioQualityKind kind, string? title)
+            => SeamlessStreamDescription.Create(segment, videoFormat, kind, title, headers, excludeP2P, AppToolkit.IsP2PUrl,
+                CdnHostHealth.Session, now, _triedStreamUrls.Contains);
+        return new(format, audioSelections, preferences,
+            Describe(video, format, AudioQualityKind.Standard, format.Description),
+            Describe(audio, null, audioKind, "BiliFluent audio"));
+    }
+
+    protected (string? Video, string? Audio) StageSelection(OnDemandPlaybackSelection selection)
+    {
+        CheckFreshDeadline(selection);
+        _beforeLoadStreams = _streams;
+        _beforeLoadVideos = _videoCandidates;
+        _beforeLoadAudios = _audioCandidates;
+        _loadingSelection = selection;
+        _loadSelectionGeneration++;
+        SetSelectionStreams(selection);
+        return (_streams?.Video?.Url, _streams?.Audio?.Url);
+    }
+
+    internal bool CompleteSelectionLoad()
+    {
+        lock (InitializationSync)
+            return CompleteSelectionLoad(_activeSelectionLoad ?? (_loadingSelection is { } loading ? new OnDemandSelectionLoad(_loadSelectionGeneration, loading) : null));
+    }
+
+    internal void ArmSelectionLoad()
+    {
+        lock (InitializationSync)
+            _activeSelectionLoad = _loadingSelection is { } loading ? new(_loadSelectionGeneration, loading) : null;
+    }
+
+    internal OnDemandSelectionLoad? CaptureSelectionLoad()
+    {
+        lock (InitializationSync) return _activeSelectionLoad;
+    }
+
+    internal bool CompleteSelectionLoad(OnDemandSelectionLoad? load)
+    {
+        lock (InitializationSync)
+        {
+            if (load is not { } loaded || loaded.Generation <= _completedSelectionGeneration) return false;
+            Volatile.Write(ref _playingSelection, loaded.Selection);
+            _completedSelectionGeneration = loaded.Generation;
+            if (loaded.Generation == _loadSelectionGeneration)
+            {
+                _loadingSelection = null;
+                _reloadSelection = null;
+                _beforeLoadStreams = null;
+                _beforeLoadVideos = [];
+                _beforeLoadAudios = [];
+            }
+
+            return true;
+        }
+    }
+
+    internal void AbandonSelectionLoad()
+    {
+        lock (InitializationSync)
+        {
+            _reloadSelection = null;
+            if (_loadingSelection is null) return;
+            _loadingSelection = null;
+            Volatile.Write(ref _streams, _beforeLoadStreams);
+            _videoCandidates = _beforeLoadVideos;
+            _audioCandidates = _beforeLoadAudios;
+            _beforeLoadStreams = null;
+            _beforeLoadVideos = [];
+            _beforeLoadAudios = [];
+        }
+    }
+
+    internal void CommitSelectedStream(PlaybackStreamKind kind, OnDemandPlaybackSelection selection, RelayStreamStatistics? statistics)
+    {
+        lock (InitializationSync)
+        {
+            var current = _playingSelection;
+            if (current is null) return;
+            CheckFreshDeadline(selection);
+            var next = kind == PlaybackStreamKind.Video
+                ? selection with { Video = selection.Video?.WithCurrentUrl(statistics?.Current.Url) }
+                : selection with { Audio = selection.Audio?.WithCurrentUrl(statistics?.Current.Url) };
+            var committed = current.WithStream(kind, next);
+            Volatile.Write(ref _playingSelection, committed);
+            SetSelectionStreams(committed);
+        }
+    }
+
+    internal void CommitSelectionPreferences(OnDemandSelectionPreferences preferences)
+    {
+        lock (InitializationSync)
+        {
+            if (_playingSelection is { } selection) Volatile.Write(ref _playingSelection, selection with { Preferences = preferences });
+        }
+    }
+
+    private void SetSelectionStreams(OnDemandPlaybackSelection selection)
+    {
+        _videoCandidates = selection.Video?.Candidates ?? [];
+        _audioCandidates = selection.Audio?.Candidates ?? [];
+        var video = selection.Video?.CurrentCandidate;
+        var audio = selection.Audio?.CurrentCandidate;
+        Volatile.Write(ref _streams, new(video, audio, CountUntried(_videoCandidates, video), CountUntried(_audioCandidates, audio),
+            selection.Format.Quality, selection.Video?.Segment.Bandwidth ?? 0, selection.Audio?.Segment.Bandwidth ?? 0,
+            GetCurrentDeadline(video, audio)));
+    }
+
+    private void CheckFreshDeadline(OnDemandPlaybackSelection selection)
+    {
+        if (!_freshPlayDetail) return;
+        _freshPlayDetail = false;
+        var deadline = GetCurrentDeadline(selection.Video?.CurrentCandidate, selection.Audio?.CurrentCandidate);
+        if (deadline - DateTimeOffset.UtcNow < PlaybackNetworkPolicy.MinimumUrlLifetime) _ignoreDeadline = true;
+    }
+
+    private DateTimeOffset? GetCurrentDeadline(StreamCandidate? video, StreamCandidate? audio)
+    {
+        if (_ignoreDeadline) return null;
+        var videoDeadline = CdnHost.GetDeadline(video?.Url);
+        var audioDeadline = CdnHost.GetDeadline(audio?.Url);
+        return videoDeadline is null || audioDeadline < videoDeadline ? audioDeadline : videoDeadline;
+    }
 
     /// <summary>
     /// Set before initializing/replacing media. The caller owns, cancels and drains its CTS.
@@ -48,15 +214,19 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
         }
     }
 
-    protected void InvalidateInitialization()
+    protected void InvalidateInitialization(bool keepPlayingStreams = false)
     {
         // Called while holding InitializationSync, together with the derived media reset.
         _initializationGeneration++;
         _triedStreamUrls.Clear();
         _ignoreDeadline = false;
-        _videoCandidates = [];
-        _audioCandidates = [];
-        Volatile.Write(ref _streams, null);
+        _freshPlayDetail = true;
+        if (!keepPlayingStreams)
+        {
+            _videoCandidates = [];
+            _audioCandidates = [];
+            Volatile.Write(ref _streams, null);
+        }
         ResetInitialization();
     }
 
@@ -149,7 +319,7 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
     {
         lock (InitializationSync)
         {
-            InvalidateInitialization();
+            InvalidateInitialization(keepPlayingStreams: true);
         }
     }
 
@@ -262,7 +432,14 @@ internal abstract class MediaSourceResolverBase : IMpvMediaSourceResolver
             Audio = audio,
             VideoRemaining = CountUntried(_videoCandidates, video),
             AudioRemaining = CountUntried(_audioCandidates, audio),
+            Deadline = GetCurrentDeadline(video, audio),
         });
+        if (_playingSelection is { } selection)
+        {
+            Volatile.Write(ref _playingSelection, kind == PlaybackStreamKind.Video
+                ? selection with { Video = selection.Video?.WithCurrentUrl(candidate.Url) }
+                : selection with { Audio = selection.Audio?.WithCurrentUrl(candidate.Url) });
+        }
     }
 
     protected abstract void ResetInitialization();

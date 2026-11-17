@@ -41,6 +41,9 @@ public sealed partial class PlayerViewModel
     private int _relayFailovers;
     private bool _userPausedSample;
     private MpvError? _deferredLoadError;
+    private readonly SelectedRelayWatchdog _selectedVideoWatchdog = new();
+    private readonly SelectedRelayWatchdog _selectedAudioWatchdog = new();
+    private long _selectedStreamEpoch;
 
     // Where and how an automatic reload was to continue, kept until a file has loaded again.
     private (double? Position, bool Paused, double? Speed)? _reloadState;
@@ -73,12 +76,15 @@ public sealed partial class PlayerViewModel
         client.ReachFileEnd += OnNetworkFileEnded;
         client.SeekStarted += OnNetworkSeekStarted;
         client.DataNotify += OnNetworkDataNotify;
-        _networkSampler ??= new NetworkSampler(client, logger, sample => PostNetworkEvent(() => OnNetworkSample(sample)));
+        _networkSampler ??= new NetworkSampler(client, logger, () => Player, () => Interlocked.Read(ref _selectedStreamEpoch),
+            sample => PostNetworkEvent(() => OnNetworkSample(sample)));
     }
 
     // Synchronous, so that nothing of the previous media reaches the policy of the next one.
     private void ResetNetworkFailover()
     {
+        CancelSeamlessSelection();
+        DetachSeamlessPlayback();
         DetachNetworkMonitor();
         _failover.Reset();
         _deferredLoadError = null;
@@ -87,6 +93,9 @@ public sealed partial class PlayerViewModel
         _subtitleToRestore = null;
         _userPausedSample = false;
         _lastResumeRefresh = 0;
+        _onDemandReplayNeedsLoad = false;
+        ResetSelectedRelayObservation();
+        Interlocked.Increment(ref _selectedStreamEpoch);
         Volatile.Write(ref _networkSwitches, 0);
         Volatile.Write(ref _relayFailovers, 0);
         Volatile.Write(ref _forwardCacheBytes, 0);
@@ -97,6 +106,7 @@ public sealed partial class PlayerViewModel
 
     private Task SuspendNetworkMonitorAsync()
     {
+        DetachSeamlessPlayback();
         DetachNetworkMonitor();
         var sampler = _networkSampler;
         _networkSampler = null;
@@ -142,12 +152,17 @@ public sealed partial class PlayerViewModel
 
     private void OnNetworkFileLoading(object? sender, EventArgs e)
     {
+        OnDemandResolver?.ArmSelectionLoad();
         // The cache of the previous file says nothing about this one.
         Volatile.Write(ref _forwardCacheBytes, 0);
         Volatile.Write(ref _rawInputRate, 0);
         Volatile.Write(ref _cacheState, null);
         PostNetworkEvent(() =>
         {
+            _selectedPlaybackState = null;
+            _seamlessVideoSelected = false;
+            ResetSelectedRelayObservation();
+            Interlocked.Increment(ref _selectedStreamEpoch);
             _networkLoads++;
             _deferredLoadError = null;
             _failover.OnFileLoading(NetworkNow);
@@ -155,15 +170,23 @@ public sealed partial class PlayerViewModel
     }
 
     private void OnNetworkFileLoaded(object? sender, EventArgs e)
-        => PostNetworkEvent(() =>
+    {
+        var loadedSelection = OnDemandResolver?.CaptureSelectionLoad();
+        PostNetworkEvent(() =>
         {
             _deferredLoadError = null;
             _reloadState = null;
             _hasLoadedFile = true;
             _failover.OnFileLoaded(NetworkNow);
+            if (OnDemandResolver is { } resolver && resolver.CompleteSelectionLoad(loadedSelection))
+            {
+                _onDemandReplayNeedsLoad = false;
+                ApplyCurrentOnDemandSelection(resolver);
+            }
             RestoreSubtitleAfterReload();
             _ = OwnWork(ConfirmAudioTrackAsync(_networkLoads, Volatile.Read(ref _networkEpoch), _mediaVersion, _activeMediaToken));
         });
+    }
 
     private void OnNetworkFileFailed(object? sender, MpvError e)
     {
@@ -207,8 +230,18 @@ public sealed partial class PlayerViewModel
 
     private void OnNetworkSample(NetworkSample raw)
     {
-        if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver) return;
+        if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver || raw.StreamEpoch != Interlocked.Read(ref _selectedStreamEpoch)) return;
         _userPausedSample = raw.UserPaused;
+        if (raw.SelectedState is { } selected)
+        {
+            _selectedPlaybackState = selected;
+            _seamlessVideoSelected = selected.Video is { IsExternal: true, FragmentIndex: not null };
+        }
+
+        // Preparation can rotate nodes before the application receives its success result.
+        // Samples reconcile the selected node even when that earlier failure event was ignored.
+        NoteSelectedNode(PlaybackStreamKind.Video, raw.VideoRelay);
+        NoteSelectedNode(PlaybackStreamKind.Audio, raw.AudioRelay);
         var streams = resolver.CurrentStreams;
         var cache = Volatile.Read(ref _cacheState);
         var forwardBytes = Volatile.Read(ref _forwardCacheBytes);
@@ -218,7 +251,7 @@ public sealed partial class PlayerViewModel
 
         // The relay counts the bytes of the main file as they arrive from the node, which is the
         // rate mpv can only estimate from what reaches its cache.
-        var relayed = streams is null ? null : Player?.GetRelayStatistics(streams.Video is not null ? MpvRelayStreamKind.Video : MpvRelayStreamKind.Audio);
+        var relayed = streams?.Video is not null ? raw.VideoRelay : raw.AudioRelay;
         var sample = new PlaybackCacheSample(
             raw.UserPaused,
             raw.PausedForCache,
@@ -232,9 +265,42 @@ public sealed partial class PlayerViewModel
             raw.AudioPosition,
             cache?.AudioCacheSeconds,
             Player?.Duration ?? 0);
+        var now = NetworkNow;
+        var utcNow = DateTimeOffset.UtcNow;
+        var videoState = raw.SelectedState?.Video ?? _selectedPlaybackState?.Video;
+        var audioState = raw.SelectedState?.Audio ?? _selectedPlaybackState?.Audio;
+        if (videoState is not null) videoState = videoState with { Statistics = raw.VideoRelay };
+        if (audioState is not null) audioState = audioState with { Statistics = raw.AudioRelay };
+        var videoRelay = _selectedVideoWatchdog.Observe(now, utcNow, videoState, sample, speed);
+        var audioRelay = _selectedAudioWatchdog.Observe(now, utcNow, audioState,
+            sample with { Position = raw.AudioPosition ?? raw.Position }, speed);
+        if (videoRelay is { } externalVideo)
+        {
+            // The root demuxer's zero cache and cache pause do not describe an external video.
+            sample = sample with
+            {
+                PausedForCache = false,
+                CacheSeconds = externalVideo.CacheSeconds ?? 0,
+                CacheIdle = externalVideo.Idle,
+                ForwardBytes = (raw.VideoRelay?.UpstreamBytes ?? 0) + (raw.VideoRelay?.PreloadedBytes ?? 0),
+                DownloadRate = externalVideo.DownloadRate,
+            };
+        }
+        else if (_seamlessVideoSelected)
+        {
+            // An unreadable selected snapshot supplies no cache evidence; never substitute the old demuxer.
+            sample = sample with { PausedForCache = false, CacheSeconds = 0, CacheIdle = true };
+        }
+
+        sample = sample with
+        {
+            AudioCacheSeconds = audioRelay is { } externalAudio ? externalAudio.CacheSeconds : sample.AudioCacheSeconds,
+            SelectedRelayStalled = videoRelay is { Stalled: true } ? PlaybackStreamKind.Video
+                : audioRelay is { Stalled: true } ? PlaybackStreamKind.Audio : null,
+        };
         var decision = streams is null
             ? CdnFailoverDecision.None
-            : _failover.OnSample(NetworkNow, sample, GetStreamAvailability(streams));
+            : _failover.OnSample(now, sample, GetStreamAvailability(streams));
         _networkDiagnostics = new(
             streams?.Video?.Category ?? CdnHost.NoCategory,
             streams?.Audio?.Category ?? CdnHost.NoCategory,
@@ -243,12 +309,25 @@ public sealed partial class PlayerViewModel
             streams?.AudioBandwidth ?? 0,
             mainBandwidth,
             Volatile.Read(ref _rawInputRate),
-            forwardBytes,
+            videoRelay is not null ? raw.VideoRelay?.ForwardBytes ?? 0 : forwardBytes,
             _failover.DownloadRate,
-            cache?.VideoCacheSeconds,
-            cache?.AudioCacheSeconds,
+            videoRelay is { } videoCache ? videoCache.CacheSeconds : cache?.VideoCacheSeconds,
+            sample.AudioCacheSeconds,
             Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers));
         ApplyFailoverDecision(decision, sample);
+        if (decision.Action == CdnFailoverAction.None) ContinueDeferredSelection(raw.UserPaused, raw.Seeking);
+    }
+
+    private void ResetSelectedRelayObservation()
+    {
+        _selectedVideoWatchdog.Reset();
+        _selectedAudioWatchdog.Reset();
+    }
+
+    private void NoteSelectedNode(PlaybackStreamKind kind, RelayStreamStatistics? statistics)
+    {
+        if (statistics is { } selected && OnDemandResolver is { } resolver)
+            resolver.NoteRelayFailover(kind, selected.Current.Url, selected.Current.Url, blame: false);
     }
 
     // mpv measures the cache and the download of the main file only: the video stream, or the audio
@@ -363,7 +442,6 @@ public sealed partial class PlayerViewModel
 
         Volatile.Write(ref _networkSwitches, decision.Attempt);
         var version = _mediaVersion;
-        var rejected = false;
 
         // What is observed while a file plays can be answered inside the relay: mpv keeps its file,
         // its position and its cache. Any other reason has no loaded file to keep.
@@ -377,47 +455,72 @@ public sealed partial class PlayerViewModel
                     return;
                 }
             }
-            else if (player.IsRelaying(ToRelayKind(decision.Stream)))
+            else if (IsSelectedRelaying(player, ToRelayKind(decision.Stream)))
             {
-                if (TrySwitchNodeInPlace(player, resolver, from, decision, reason))
-                {
-                    return;
-                }
-
-                // The address was given up by the attempt; the reload moves on to the next one.
-                rejected = true;
+                _ = ObserveNetworkReloadAsync(OwnWork(SwitchNodeForFailoverAsync(player, resolver, from, decision, reason, version)));
+                return;
             }
         }
 
-        ReloadForFailover(player, resolver, from, decision, reason, version, rejected, refreshed: false);
+        ReloadForFailover(player, resolver, from, decision, reason, version, rejected: false, refreshed: false);
     }
 
     // Moves the stream to its next address inside the relay. The response mpv is reading goes on
     // from that address at the byte it has reached, so nothing is loaded and nothing is dropped.
     // False when no untried address is left or the relay does not know it; the caller reloads.
-    private bool TrySwitchNodeInPlace(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, CdnFailoverDecision decision, string reason)
+    private async Task<bool> TrySwitchNodeInPlaceAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
+        CdnFailoverDecision decision, string reason, long version)
     {
         if (!CanUseOnDemandNetwork) return false;
-        var kind = ToRelayKind(decision.Stream);
-        var left = player.GetRelayStatistics(kind);
-        if (resolver.MoveToNextStream(decision.Stream) is not { } next || !player.TrySwitchRelayNode(kind, next.Url))
+        var epoch = Interlocked.Read(ref _selectedStreamEpoch);
+        var token = _activeMediaToken;
+        var entered = false;
+        try
         {
-            return false;
-        }
+            await _initializationGate.WaitAsync(token);
+            entered = true;
+            if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(resolver, _sourceResolver)) return false;
+            if (epoch != Interlocked.Read(ref _selectedStreamEpoch))
+            {
+                // A new selected stream has already retired the sample that prompted this decision.
+                _failover.OnSwitchedInPlace(NetworkNow);
+                return true;
+            }
 
-        _deferredLoadError = null;
-        _failover.OnSwitchedInPlace(NetworkNow);
-        if (logger.IsEnabled(LogLevel.Information))
-        {
-            var stream = decision.Stream == PlaybackStreamKind.Video ? "video" : "audio";
-            var fromCategory = DescribeStreams(from, decision.Stream);
-            var rate = ((left?.BytesPerSecond ?? 0) * 8 / 1000).ToString("0", CultureInfo.InvariantCulture);
-            var firstByte = (left?.FirstByteTime?.TotalMilliseconds ?? 0).ToString("0", CultureInfo.InvariantCulture);
-            logger.LogInformation("Playback | cdn-switch reason={Reason} from={From} to={To} attempt={Attempt} stream={Stream} mode=relay left-kbps={LeftKbps} left-ttfb-ms={LeftFirstByteMs}",
-                reason, fromCategory, next.Category, decision.Attempt, stream, rate, firstByte);
-        }
+            var kind = ToRelayKind(decision.Stream);
+            var changed = await Task.Run(() =>
+            {
+                var left = player.GetSelectedRelayStatistics(kind);
+                var next = resolver.MoveToNextStream(decision.Stream);
+                return (Left: left, Next: next, Switched: next is not null && player.TrySwitchSelectedRelayNode(kind, next.Url));
+            });
+            if (!IsCurrentPlayback(version) || !changed.Switched || changed.Next is not { } next) return false;
 
-        return true;
+            _deferredLoadError = null;
+            ResetSelectedRelayObservation();
+            _failover.OnSwitchedInPlace(NetworkNow);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                var stream = decision.Stream == PlaybackStreamKind.Video ? "video" : "audio";
+                var fromCategory = DescribeStreams(from, decision.Stream);
+                var rate = ((changed.Left?.BytesPerSecond ?? 0) * 8 / 1000).ToString("0", CultureInfo.InvariantCulture);
+                var firstByte = (changed.Left?.FirstByteTime?.TotalMilliseconds ?? 0).ToString("0", CultureInfo.InvariantCulture);
+                logger.LogInformation("Playback | cdn-switch reason={Reason} from={From} to={To} attempt={Attempt} stream={Stream} mode=relay left-kbps={LeftKbps} left-ttfb-ms={LeftFirstByteMs}",
+                    reason, fromCategory, next.Category, decision.Attempt, stream, rate, firstByte);
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { return false; }
+        finally { if (entered) _initializationGate.Release(); }
+    }
+
+    private async Task SwitchNodeForFailoverAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from,
+        CdnFailoverDecision decision, string reason, long version)
+    {
+        if (await TrySwitchNodeInPlaceAsync(player, resolver, from, decision, reason, version)) return;
+        if (IsCurrentPlayback(version) && ReferenceEquals(player, Player) && ReferenceEquals(resolver, _sourceResolver))
+            ReloadForFailover(player, resolver, from, decision, reason, version, rejected: true, refreshed: false);
     }
 
     // Requests the play URLs again and hands them to the relay; the media is loaded again only
@@ -469,10 +572,32 @@ public sealed partial class PlayerViewModel
                 return (false, false);
             }
 
+            var current = resolver.PlayingSelection;
+            if (current is null) return (false, false);
             resolver.RefreshPlayUrl();
-            var source = await resolver.GetSourceAsync();
             refreshed = true;
-            return (IsCurrentPlayback(version) && await player.TryUpdateRelayAsync(source, token), true);
+            var target = await resolver.DescribeSelectionAsync(current.ForReload());
+            if (!IsCurrentPlayback(version) || target is null || !current.HasSameStream(PlaybackStreamKind.Video, target)
+                || !current.HasSameStream(PlaybackStreamKind.Audio, target)) return (false, true);
+            foreach (var kind in new[] { PlaybackStreamKind.Video, PlaybackStreamKind.Audio })
+            {
+                var stream = kind == PlaybackStreamKind.Video ? target.Video : target.Audio;
+                if (stream is null) continue;
+                if (stream.Target is not { } description) return (false, true);
+                var result = await player.TryUpdateSelectedRelayUrlsAsync(ToRelayKind(kind),
+                    new(description.Upstreams, description.Current), description.Headers, token);
+                if (!IsCurrentPlayback(version) || result != RelayUpdateResult.Updated) return (false, true);
+                var statistics = await Task.Run(() => player.GetSelectedRelayStatistics(ToRelayKind(kind)));
+                if (!IsCurrentPlayback(version)) return (false, true);
+                resolver.CommitSelectedStream(kind, target, statistics);
+                Interlocked.Increment(ref _selectedStreamEpoch);
+            }
+
+            var state = await player.GetSeamlessPlaybackStateAsync(token);
+            if (state.IsSuccess) _selectedPlaybackState = state.Value;
+            ResetSelectedRelayObservation();
+            ApplyCurrentOnDemandSelection(resolver);
+            return (true, true);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -527,6 +652,8 @@ public sealed partial class PlayerViewModel
                     var rate = await player.Client.GetSpeedAsync();
                     if (rate.IsSuccess && double.IsFinite(rate.Value) && rate.Value > 0) speed = rate.Value;
                     if (speed is not > 0) speed = null;
+                    var observation = await ReadPlaybackObservationAsync(player);
+                    if (observation is { } currentState) keepPaused = currentState.Paused;
                     if (!IsCurrentPlayback(version))
                     {
                         _failover.Abandon();
@@ -587,6 +714,11 @@ public sealed partial class PlayerViewModel
             // Every address of an answer that has expired fails alike; that is no failure of a node.
             var expiring = from.Deadline - DateTimeOffset.UtcNow < PlaybackNetworkPolicy.MinimumUrlLifetime;
             var kind = e.Kind == MpvRelayStreamKind.Video ? PlaybackStreamKind.Video : PlaybackStreamKind.Audio;
+            if (_selectedPlaybackState is { } selected)
+            {
+                var selectedKey = kind == PlaybackStreamKind.Video ? selected.Video.RelayKey : selected.Audio.RelayKey;
+                if (selectedKey != e.Failure.Key) return;
+            }
             if (!resolver.NoteRelayFailover(kind, e.Failure.Failed.Url, e.Failure.Current.Url, blame: !expiring))
             {
                 return;
@@ -633,7 +765,7 @@ public sealed partial class PlayerViewModel
         {
             // The relay could not take the new addresses: the media is loaded at the position it has reached.
             var speed = player.PlaybackRate > 0 ? player.PlaybackRate : (double?)null;
-            await ReloadExpiredSourceAsync(player, resolver, from, version, player.Position, speed, refreshed);
+            await ReloadExpiredSourceAsync(player, resolver, from, version, player.Position, speed, refreshed, preservePause: true);
         }
     }
 
@@ -643,11 +775,15 @@ public sealed partial class PlayerViewModel
     private async Task<bool> ReloadForNetworkAsync(MpvPlayer player, double? position, bool resume, double? speed)
     {
         if (!CanUseOnDemandNetwork) return false;
+        CancelSeamlessSelection();
         ResetChapters();
         InitializeVideoChapters();
         ResetCommandDanmakuPlayback();
         _subtitleToRestore = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
-        return await player.ReplayAsync(position, resume, speed);
+        _onDemandReplayNeedsLoad = true;
+        var issued = await player.ReplayAsync(position, resume, speed);
+        if (!issued) OnDemandResolver?.AbandonSelectionLoad();
+        return issued;
     }
 
     private void RestoreSubtitleAfterReload()
@@ -698,7 +834,7 @@ public sealed partial class PlayerViewModel
 
     // Loads the media again at the position from play URLs that are requested again, unless they already were.
     private Task ReloadExpiredSourceAsync(MpvPlayer player, MediaSourceResolverBase resolver, PlaybackStreamSelection from, long version,
-        double position, double? speed, bool refreshed)
+        double position, double? speed, bool refreshed, bool preservePause = false)
         => !CanUseOnDemandNetwork ? Task.CompletedTask : RunWithoutPlayerInputAsync(
             async () =>
             {
@@ -712,10 +848,12 @@ public sealed partial class PlayerViewModel
                     resolver.RefreshPlayUrl();
                 }
 
-                if (!await ReloadForNetworkAsync(player, position, resume: true, speed))
+                var observation = preservePause ? await ReadPlaybackObservationAsync(player) : null;
+                var resume = observation is not { Paused: true };
+                if (!await ReloadForNetworkAsync(player, observation?.Position ?? position, resume, observation?.Speed ?? speed))
                 {
                     // The request failed and nothing was loaded: resume what is there.
-                    if (IsCurrentPlayback(version) && Client is { IsDisposed: false } client)
+                    if (resume && IsCurrentPlayback(version) && Client is { IsDisposed: false } client)
                     {
                         await client.ResumeAsync();
                     }
@@ -806,10 +944,15 @@ public sealed partial class PlayerViewModel
         => kind == PlaybackStreamKind.Video ? MpvRelayStreamKind.Video : MpvRelayStreamKind.Audio;
 
     // Whether every stream of the loaded source is read through the relay.
-    private static bool IsRelayingEvery(MpvPlayer player, PlaybackStreamSelection streams)
+    private bool IsRelayingEvery(MpvPlayer player, PlaybackStreamSelection streams)
         => (streams.Video is not null || streams.Audio is not null)
-            && (streams.Video is null || player.IsRelaying(MpvRelayStreamKind.Video))
-            && (streams.Audio is null || player.IsRelaying(MpvRelayStreamKind.Audio));
+            && (streams.Video is null || IsSelectedRelaying(player, MpvRelayStreamKind.Video))
+            && (streams.Audio is null || IsSelectedRelaying(player, MpvRelayStreamKind.Audio));
+
+    private bool IsSelectedRelaying(MpvPlayer player, MpvRelayStreamKind kind)
+        => _selectedPlaybackState is { } state
+            ? (kind == MpvRelayStreamKind.Video ? state.Video : state.Audio).RelayKey is not null
+            : player.IsRelaying(kind);
 
     // The relay validates the certificate of a node exactly as mpv is told to: not in Debug, always in Release.
     private LoopbackMediaRelayOptions? CreateRelayOptions()
@@ -863,7 +1006,11 @@ public sealed partial class PlayerViewModel
         double CacheSeconds,
         double DownloadRate,
         double Position,
-        double? AudioPosition);
+        double? AudioPosition,
+        MpvSeamlessPlaybackState? SelectedState,
+        RelayStreamStatistics? VideoRelay,
+        RelayStreamStatistics? AudioRelay,
+        long StreamEpoch);
 
     /// <summary>
     /// Reads the cache state of mpv once per <see cref="PlaybackNetworkPolicy.SampleInterval"/>,
@@ -874,15 +1021,19 @@ public sealed partial class PlayerViewModel
         private readonly MpvClient _client;
         private readonly ILogger _logger;
         private readonly Action<NetworkSample> _publish;
+        private readonly Func<MpvPlayer?> _getPlayer;
+        private readonly Func<long> _getStreamEpoch;
         private readonly PeriodicTimer _timer = new(PlaybackNetworkPolicy.SampleInterval);
         private readonly Task _worker;
         private volatile bool _stopped;
 
-        public NetworkSampler(MpvClient client, ILogger samplerLogger, Action<NetworkSample> publish)
+        public NetworkSampler(MpvClient client, ILogger samplerLogger, Func<MpvPlayer?> getPlayer, Func<long> getStreamEpoch, Action<NetworkSample> publish)
         {
             _client = client;
             _logger = samplerLogger;
             _publish = publish;
+            _getPlayer = getPlayer;
+            _getStreamEpoch = getStreamEpoch;
             _worker = Task.Run(SampleAsync);
         }
 
@@ -908,6 +1059,18 @@ public sealed partial class PlayerViewModel
                         return;
                     }
 
+                    var streamEpoch = _getStreamEpoch();
+                    MpvSeamlessPlaybackState? selected = null;
+                    RelayStreamStatistics? videoRelay = null;
+                    RelayStreamStatistics? audioRelay = null;
+                    if (_getPlayer() is { } player && ReferenceEquals(player.Client, _client))
+                    {
+                        var state = await player.GetSeamlessPlaybackStateAsync().ConfigureAwait(false);
+                        if (state.IsSuccess) selected = state.Value;
+                        videoRelay = player.GetSelectedRelayStatistics(MpvRelayStreamKind.Video);
+                        audioRelay = player.GetSelectedRelayStatistics(MpvRelayStreamKind.Audio);
+                    }
+
                     var sample = new NetworkSample(
                         ReadFlag("pause"),
                         ReadFlag("paused-for-cache"),
@@ -916,11 +1079,13 @@ public sealed partial class PlayerViewModel
                         ReadDouble("demuxer-cache-duration") ?? 0,
                         _client.GetProperty("cache-speed", out long speed) == MpvError.Success ? speed : 0,
                         ReadDouble("time-pos") ?? 0,
-                        ReadDouble("audio-pts"));
+                        ReadDouble("audio-pts"), selected, videoRelay, audioRelay, streamEpoch);
                     if (_stopped)
                     {
                         return;
                     }
+
+                    if (streamEpoch != _getStreamEpoch()) continue;
 
                     _publish(sample);
                 }

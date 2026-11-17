@@ -1773,6 +1773,9 @@
   <data name="AudioQualitySwitchFailed" xml:space="preserve">
     <value>这个音质暂时播放不了，已切回原来的音质。</value>
   </data>
+  <data name="SeamlessSwitchingTemplate" xml:space="preserve">
+    <value>正在切换到 {0}…</value>
+  </data>
   <data name="QualityAuto" xml:space="preserve">
     <value>自动</value>
   </data>
