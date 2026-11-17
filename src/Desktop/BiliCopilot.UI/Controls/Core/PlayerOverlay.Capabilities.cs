@@ -3,7 +3,6 @@
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
-using Richasy.MpvKernel.Core.Enums;
 
 namespace BiliCopilot.UI.Controls.Core;
 
@@ -14,8 +13,8 @@ namespace BiliCopilot.UI.Controls.Core;
 /// </summary>
 public sealed partial class PlayerOverlay
 {
-    // The dot of the live status while the media is not playing.
-    private const double LiveStatusIdleOpacity = 0.45;
+    // The volume ceiling of the player when nothing else is configured.
+    private const double DefaultVolumeCeiling = 100;
 
     /// <summary>
     /// Whether an element that needs a capability stays in the layout. It leaves only for an admitted media
@@ -34,50 +33,31 @@ public sealed partial class PlayerOverlay
         => condition && IsCapabilityShown(capability, hasAdmittedMedia) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// The live status takes the place of the timeline: it shows for an admitted media that has none.
+    /// A media without a timeline has nothing to seek, skip or speed up. The transport bars give it one row of
+    /// commands in place of their on-demand rows; that row is created only for an admitted media of this kind.
     /// </summary>
-    internal static Visibility GetLiveStatusVisibility(bool canSeek, bool hasAdmittedMedia)
-        => hasAdmittedMedia && !canSeek ? Visibility.Visible : Visibility.Collapsed;
+    internal static bool IsTimelineFree(bool canSeek, bool hasAdmittedMedia)
+        => hasAdmittedMedia && !canSeek;
 
     /// <summary>
-    /// A room brings its own danmaku: the room delivers the messages and takes what the user sends. The views
-    /// learn it from the connector, the same way the template selectors pick the parts of a room.
+    /// The top of a volume slider. The player reports its ceiling once the media is set up; a ceiling that
+    /// was never set must not leave a slider with no range.
     /// </summary>
-    internal static bool HasRoomDanmaku(IPlayerConnectorViewModel? connector)
-        => connector is LiveConnectorViewModel;
-
-    /// <summary>The connector of the room that plays, or null for a media without a room.</summary>
-    internal static LiveConnectorViewModel? GetRoomConnector(IPlayerConnectorViewModel? connector)
-        => connector as LiveConnectorViewModel;
-
-    /// <summary>The danmaku switch of a bar shows for loaded on-demand danmaku and for a room.</summary>
-    internal static Visibility GetDanmakuSwitchVisibility(bool isDanmakuControlVisible, IPlayerConnectorViewModel? connector)
-        => isDanmakuControlVisible || HasRoomDanmaku(connector) ? Visibility.Visible : Visibility.Collapsed;
+    internal static double GetVolumeCeiling(double maxVolume)
+        => maxVolume > 0 ? maxVolume : DefaultVolumeCeiling;
 
     /// <summary>The danmaku of a room is drawn while its picture plays, not while it loads, pauses or has ended.</summary>
     internal static bool IsRoomPlaying(LiveMediaLoadState state)
         => state == LiveMediaLoadState.Ready;
 
-    /// <summary>
-    /// The stream of a room ended, or its connection dropped, after it had played. While the player is already
-    /// asking for the picture again, the connecting hint stands alone. The state of a room that was left never
-    /// shows over the media that follows it.
-    /// </summary>
-    internal static Visibility GetRoomEndedVisibility(bool isLiveMedia, LiveMediaLoadState state, bool isConnecting)
-        => isLiveMedia && state == LiveMediaLoadState.Ended && !isConnecting ? Visibility.Visible : Visibility.Collapsed;
-
     /// <summary>The title over a playback error. A room whose picture cannot be shown says so in plain words.</summary>
-    internal static string GetErrorTitle(bool isLiveMedia)
-        => ResourceToolkit.GetLocalizedString(isLiveMedia ? StringNames.LiveFailedTitle : StringNames.MpvError);
+    internal static string GetErrorTitle(bool isLiveFailure)
+        => ResourceToolkit.GetLocalizedString(isLiveFailure ? StringNames.LiveFailedTitle : StringNames.MpvError);
 
     /// <summary>
     /// The text under <see cref="GetErrorTitle(bool)"/>. The player words the failure of a room for its log, so a
     /// room shows the same plain advice whatever the failure was; other media show what the player reports.
     /// </summary>
-    internal static string GetErrorDescription(string? errorMessage, bool isLiveMedia)
-        => isLiveMedia ? ResourceToolkit.GetLocalizedString(StringNames.LiveFailedDescription) : errorMessage ?? string.Empty;
-
-    /// <summary>The dot of the live status is full while the media plays and dimmed otherwise.</summary>
-    internal static double GetLiveStatusDotOpacity(MpvPlayerState state)
-        => state is MpvPlayerState.Playing ? 1 : LiveStatusIdleOpacity;
+    internal static string GetErrorDescription(string? errorMessage, bool isLiveFailure)
+        => isLiveFailure ? ResourceToolkit.GetLocalizedString(StringNames.LiveFailedDescription) : errorMessage ?? string.Empty;
 }

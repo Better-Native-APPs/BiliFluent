@@ -613,7 +613,7 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
     private void UpdateSidePanel()
     {
         // A room lays the side column out by its own rules; the result of the other layout is never carried over.
-        var forRoom = HasRoomSidePanel(ViewModel?.Connector);
+        var forRoom = ViewModel?.HasRoomChat == true;
         if (forRoom != _isRoomSidePanel)
         {
             _isRoomSidePanel = forRoom;

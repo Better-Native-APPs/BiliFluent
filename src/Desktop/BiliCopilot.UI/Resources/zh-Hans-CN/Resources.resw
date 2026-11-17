@@ -2151,9 +2151,6 @@
   <data name="WebSignInFailedDescription" xml:space="preserve">
     <value>网页已登录，但应用授权没有完成。请检查网络后重试。</value>
   </data>
-  <data name="PlayerLiveStatus" xml:space="preserve">
-    <value>正在直播</value>
-  </data>
   <data name="LiveComposerPlaceholder" xml:space="preserve">
     <value>发个弹幕…</value>
   </data>
@@ -2175,20 +2172,11 @@
   <data name="LiveSendRejectedTemplate" xml:space="preserve">
     <value>弹幕被拒绝（代码 {0}），内容已保留。</value>
   </data>
-  <data name="LiveQualitySwitching" xml:space="preserve">
-    <value>正在切换…</value>
-  </data>
   <data name="LiveQualityTemplate" xml:space="preserve">
     <value>清晰度：{0}</value>
   </data>
-  <data name="LiveQualityItemCurrentTemplate" xml:space="preserve">
-    <value>{0}，当前清晰度</value>
-  </data>
-  <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
-    <value>{0}，正在切换</value>
-  </data>
   <data name="LiveRefresh" xml:space="preserve">
-    <value>刷新到最新画面</value>
+    <value>刷新到最新直播画面</value>
   </data>
   <data name="LiveEndedTitle" xml:space="preserve">
     <value>直播已结束或连接中断</value>
@@ -2201,5 +2189,14 @@
   </data>
   <data name="LiveFailedDescription" xml:space="preserve">
     <value>可能是网络不稳定，或者直播刚刚结束。可以再试一次。</value>
+  </data>
+  <data name="Volume" xml:space="preserve">
+    <value>音量</value>
+  </data>
+  <data name="LiveDanmakuSwitch" xml:space="preserve">
+    <value>显示或隐藏画面上的弹幕</value>
+  </data>
+  <data name="LiveComposerName" xml:space="preserve">
+    <value>弹幕内容</value>
   </data>
 </root>

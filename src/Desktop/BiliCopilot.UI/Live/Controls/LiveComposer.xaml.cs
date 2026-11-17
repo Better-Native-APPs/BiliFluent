@@ -47,7 +47,7 @@ public sealed partial class LiveComposer : UserControl
     {
         InitializeComponent();
         var sendName = ResourceToolkit.GetLocalizedString(StringNames.SendDanmaku);
-        AutomationProperties.SetName(DraftBox, sendName);
+        AutomationProperties.SetName(DraftBox, ResourceToolkit.GetLocalizedString(StringNames.LiveComposerName));
         AutomationProperties.SetName(SendButton, sendName);
         ToolTipService.SetToolTip(SendButton, sendName);
         Loaded += OnLoaded;

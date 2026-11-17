@@ -483,9 +483,6 @@
   <data name="WebSignInFailedDescription" xml:space="preserve">
     <value>You're signed in on the web page, but the app couldn't finish authorizing. Check your network and try again.</value>
   </data>
-  <data name="PlayerLiveStatus" xml:space="preserve">
-    <value>Live</value>
-  </data>
   <data name="LiveComposerPlaceholder" xml:space="preserve">
     <value>Send a danmaku…</value>
   </data>
@@ -507,17 +504,8 @@
   <data name="LiveSendRejectedTemplate" xml:space="preserve">
     <value>The danmaku was rejected (code {0}). Your text is kept.</value>
   </data>
-  <data name="LiveQualitySwitching" xml:space="preserve">
-    <value>Switching…</value>
-  </data>
   <data name="LiveQualityTemplate" xml:space="preserve">
     <value>Quality: {0}</value>
-  </data>
-  <data name="LiveQualityItemCurrentTemplate" xml:space="preserve">
-    <value>{0}, current quality</value>
-  </data>
-  <data name="LiveQualityItemSwitchingTemplate" xml:space="preserve">
-    <value>{0}, switching</value>
   </data>
   <data name="LiveRefresh" xml:space="preserve">
     <value>Refresh and catch up to live</value>
@@ -533,5 +521,14 @@
   </data>
   <data name="LiveFailedDescription" xml:space="preserve">
     <value>The network may be unstable, or the stream may have just ended. You can try again.</value>
+  </data>
+  <data name="Volume" xml:space="preserve">
+    <value>Volume</value>
+  </data>
+  <data name="LiveDanmakuSwitch" xml:space="preserve">
+    <value>Show or hide danmaku on the picture</value>
+  </data>
+  <data name="LiveComposerName" xml:space="preserve">
+    <value>Danmaku text</value>
   </data>
 </root>

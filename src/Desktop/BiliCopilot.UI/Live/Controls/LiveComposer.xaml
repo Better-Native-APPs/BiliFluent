@@ -7,23 +7,28 @@
     IsTabStop="False">
 
     <!--
-        The danmaku box of a live room: the draft and a send button beside it. Both transport bars host it.
+        The danmaku box of a live room: the draft and a send button beside it. The row of a room on both
+        transport bars hosts it.
         The draft belongs to the room connector; this control edits it and asks for one send per explicit action.
     -->
-    <Grid ColumnSpacing="6">
+    <Grid ColumnSpacing="8">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <TextBox
             x:Name="DraftBox"
+            HorizontalAlignment="Stretch"
             VerticalAlignment="Center"
+            AcceptsReturn="False"
             IsEnabled="False"
+            IsSpellCheckEnabled="False"
             KeyDown="OnDraftKeyDown"
             MaxLength="100"
             TextChanged="OnDraftTextChanged"
             TextCompositionEnded="OnCompositionEnded"
-            TextCompositionStarted="OnCompositionStarted" />
+            TextCompositionStarted="OnCompositionStarted"
+            TextWrapping="NoWrap" />
         <!--  A click sends and leaves the caret in the box, ready for the next line.  -->
         <Button
             x:Name="SendButton"

@@ -13,120 +13,69 @@
 
     <local:PlayerControlBase.Resources>
         <ResourceDictionary>
-            <!--  The list runs edge to edge inside the flyout; the rows carry their own padding.  -->
             <Style
-                x:Key="QualityFlyoutPresenterStyle"
+                x:Key="TransportButtonFlyoutPresenterStyle"
                 BasedOn="{StaticResource DefaultFlyoutPresenterStyle}"
                 TargetType="FlyoutPresenter">
-                <Setter Property="Padding" Value="0" />
-            </Style>
-            <Style
-                x:Key="QualityItemStyle"
-                BasedOn="{StaticResource DefaultListViewItemStyle}"
-                TargetType="ListViewItem">
-                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="0" />
-                <Setter Property="MinHeight" Value="40" />
+                <Setter Property="Padding" Value="12,10" />
             </Style>
         </ResourceDictionary>
     </local:PlayerControlBase.Resources>
 
     <!--
-        The quality of a live room on a transport bar. A click lists the tiers the room offers, with the one that
-        plays marked; there is no automatic entry. While a tier is being switched the icon gives way to a ring.
-        A media without live tiers shows nothing and takes no room.
+        The quality of a live room on a transport bar: the same menu as the on-demand quality button (a caption
+        over a 220px list of card rows, the row that plays selected). There is no automatic entry. A media without
+        live tiers shows nothing and takes no room.
     -->
     <Button
         x:Name="EntryButton"
         VerticalAlignment="Center"
         Visibility="Collapsed">
-        <Grid>
-            <ic:SymbolIcon
-                x:Name="EntryIcon"
-                FontSize="14"
-                Symbol="Hd" />
-            <ProgressRing
-                x:Name="SwitchingRing"
-                Width="16"
-                Height="16"
-                IsActive="False"
-                Visibility="Collapsed" />
-        </Grid>
+        <ic:SymbolIcon FontSize="14" Symbol="Hd" />
         <Button.Flyout>
             <Flyout
                 x:Name="QualityFlyout"
-                FlyoutPresenterStyle="{StaticResource QualityFlyoutPresenterStyle}"
+                FlyoutPresenterStyle="{StaticResource TransportButtonFlyoutPresenterStyle}"
                 Opened="OnFlyoutOpened"
-                Opening="OnFlyoutOpening"
                 Placement="Top"
                 ShouldConstrainToRootBounds="False">
-                <Grid Width="240">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
+                <StackPanel Spacing="4">
                     <TextBlock
-                        Margin="16,12,16,8"
                         HorizontalAlignment="Left"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="{ext:Locale Name=Quality}" />
-                    <!--
-                        No selection: the row of the tier that plays is marked by the item itself, so moving the
-                        keyboard focus through the list never moves the mark. Click, Enter and Space switch.
-                    -->
-                    <ListView
-                        x:Name="QualityList"
-                        Grid.Row="1"
-                        MaxHeight="360"
-                        Padding="0,0,0,6"
+                    <ItemsView
+                        x:Name="QualityView"
+                        Width="220"
                         AutomationProperties.Name="{ext:Locale Name=Quality}"
-                        ContainerContentChanging="OnQualityContainerContentChanging"
-                        IsItemClickEnabled="True"
-                        ItemClick="OnQualityItemClick"
-                        ItemContainerStyle="{StaticResource QualityItemStyle}"
-                        SelectionMode="None">
-                        <ListView.ItemTemplate>
+                        IsItemInvokedEnabled="True"
+                        ItemInvoked="OnQualityItemInvoked"
+                        SelectionChanged="OnQualitySelectionChanged"
+                        SelectionMode="Single">
+                        <ItemsView.ItemTemplate>
                             <DataTemplate x:DataType="items:SourceItemViewModel">
-                                <!--  Inset like the hover fill of the row, so the mark of the current tier and the hover fill line up.  -->
-                                <Grid Margin="4,2">
-                                    <Border
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        CornerRadius="{StaticResource ControlCornerRadius}"
-                                        Visibility="{x:Bind IsSelected, Mode=OneWay}" />
-                                    <Grid Padding="0,6,12,6" ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="3" />
-                                            <ColumnDefinition />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border
-                                            Height="16"
-                                            VerticalAlignment="Center"
-                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                            CornerRadius="1.5"
-                                            Visibility="{x:Bind IsSelected, Mode=OneWay}" />
-                                        <TextBlock
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            FontWeight="{x:Bind local:LiveQualityButton.GetNameWeight(IsSelected), Mode=OneWay}"
-                                            MaxLines="1"
-                                            Text="{x:Bind Name, Mode=OneWay}"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <!--  Two tiers of one name differ by this tag, when the name itself does not say it.  -->
-                                        <Border
-                                            Grid.Column="2"
-                                            Style="{StaticResource TagBorderStyle}"
-                                            Visibility="{x:Bind local:LiveQualityButton.GetHdrTagVisibility(Data)}">
-                                            <TextBlock Style="{StaticResource TagTextStyle}" Text="HDR" />
-                                        </Border>
+                                <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                <ItemContainer
+                                    AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    Style="{StaticResource AppItemContainerStyle}">
+                                    <Grid
+                                        MinHeight="40"
+                                        Padding="12,0"
+                                        Background="Transparent"
+                                        Tag="{x:Bind}"
+                                        Tapped="OnQualityItemTapped">
+                                        <TextBlock VerticalAlignment="Center" Text="{x:Bind Name, Mode=OneWay}" />
                                     </Grid>
-                                </Grid>
+                                </ItemContainer>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Grid>
+                        </ItemsView.ItemTemplate>
+                        <ItemsView.Layout>
+                            <StackLayout Spacing="4" />
+                        </ItemsView.Layout>
+                    </ItemsView>
+                </StackPanel>
             </Flyout>
         </Button.Flyout>
     </Button>

@@ -12,7 +12,7 @@ namespace BiliCopilot.UI.Controls.Player;
 /// <summary>
 /// The live room parts of the page: the room header in the title row and the chat panel as the side column.
 /// This view only places them and keeps the chat switch; the room, its messages and playback belong to the player.
-/// The page tells a room from other media the same way its template selectors do, by the kind of the connector.
+/// The page learns that the media comes with a room from the player, and lays the side column out for it.
 /// </summary>
 public sealed partial class EmbeddedPlayerView
 {
@@ -32,8 +32,6 @@ public sealed partial class EmbeddedPlayerView
     private bool _isChatRequested = true;
     private bool _isChatOpenedWhenNarrow;
 
-    private static bool HasRoomSidePanel(object? connector) => connector is LiveConnectorViewModel;
-
     private static LivePlaybackState GetRoomPlaybackState(PlayerViewModel? owner)
         => owner is null ? LivePlaybackState.Idle
             : owner.IsPlaybackClosing ? LivePlaybackState.Closing
@@ -49,14 +47,14 @@ public sealed partial class EmbeddedPlayerView
             };
 
 #pragma warning disable CA1822 // Instance members: the bindings in the page markup call them on the page.
-    private int GetHeaderColumnSpan(object? connector) => HasRoomSidePanel(connector) ? 2 : 1;
+    private int GetHeaderColumnSpan(bool hasRoomChat) => hasRoomChat ? 2 : 1;
 
-    private Visibility GetSideSplitVisibility(object? connector)
-        => HasRoomSidePanel(connector) ? Visibility.Collapsed : Visibility.Visible;
+    private Visibility GetSideSplitVisibility(bool hasRoomChat)
+        => hasRoomChat ? Visibility.Collapsed : Visibility.Visible;
 
-    private int GetSideBodyRow(object? connector) => HasRoomSidePanel(connector) ? 0 : 2;
+    private int GetSideBodyRow(bool hasRoomChat) => hasRoomChat ? 0 : 2;
 
-    private int GetSideBodyRowSpan(object? connector) => HasRoomSidePanel(connector) ? 3 : 1;
+    private int GetSideBodyRowSpan(bool hasRoomChat) => hasRoomChat ? 3 : 1;
 #pragma warning restore CA1822
 
     private double GetRoomSidePanelWidth()
@@ -94,7 +92,7 @@ public sealed partial class EmbeddedPlayerView
         // Entering or leaving a room swaps the side column rules; inside a room only the header follows playback.
         if (propertyName is null or "" or nameof(PlayerViewModel.Connector))
         {
-            if (HasRoomSidePanel(owner.Connector) || _isRoomSidePanel) UpdateSidePanel();
+            if (owner.HasRoomChat || _isRoomSidePanel) UpdateSidePanel();
         }
         else if (propertyName is nameof(PlayerViewModel.LiveLoadState) or nameof(PlayerViewModel.IsPlaybackClosing))
         {
@@ -149,7 +147,7 @@ public sealed partial class EmbeddedPlayerView
     private async void OnRoomRetryClick(object sender, RoutedEventArgs e)
     {
         var owner = ViewModel;
-        if (!IsCurrentAttachment(owner, _attachmentEpoch) || owner is not { IsPlaybackClosing: false, IsLiveReleaseBlocked: false }) return;
+        if (!IsCurrentAttachment(owner, _attachmentEpoch) || owner is not { CanRefreshLive: true }) return;
         try
         {
             await owner.RefreshLiveAsync();

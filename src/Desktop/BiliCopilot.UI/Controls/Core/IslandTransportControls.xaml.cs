@@ -44,9 +44,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(IslandTransportControls), new PropertyMetadata(false, OnIsActiveChanged));
 
-    // The row width at which the words of the live status still leave the middle content a usable width.
-    private const double LiveStatusCaptionMinRowWidth = 580;
-
     private readonly List<double> _speedChangeList = [];
     private readonly List<double> _progressChangeList = [];
     private readonly DispatcherTimer _speedChangeTimer;
@@ -77,8 +74,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public IslandTransportControls()
     {
         InitializeComponent();
-        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
-        LiveStatus.Visibility = Visibility.Collapsed;
         // 仅在交互后启动的短时防抖计时器，非永动计时器.
         _speedChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
         _progressChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
@@ -155,7 +150,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public bool IsInteracting => _isInteracting;
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
-    internal FrameworkElement PlayPauseTarget => PlayPauseButton;
+    internal FrameworkElement PlayPauseTarget => LiveRow is { IsLoaded: true } row ? row.PlayPauseTarget : PlayPauseButton;
 
     /// <summary>
     /// 交互状态发生变化. 参数为新值，与 <see cref="IsInteracting"/> 一致.
@@ -266,6 +261,13 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             if (cancel) ChapterEntry.CancelPendingInput();
         }
 
+        // The row of a media without a timeline exists only for such a media.
+        if (LiveRow is { } row)
+        {
+            row.IsActive = !IsInputBlocked;
+            if (cancel) row.CancelPendingInput();
+        }
+
         void Update(object? content)
         {
             var active = !IsInputBlocked;
@@ -287,15 +289,17 @@ public sealed partial class IslandTransportControls : PlayerControlBase
                     next.IsActive = active;
                     if (cancel) next.CancelPendingInput();
                     break;
-                case LiveQualityButton quality:
-                    quality.IsActive = active;
-                    if (cancel) quality.CancelPendingInput();
-                    break;
                 case Panel panel:
                     foreach (var child in panel.Children) Update(child);
                     break;
             }
         }
+    }
+
+    // The row is created when a media without a timeline arrives; it starts with the state of this bar.
+    private void OnLiveRowLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is LiveTransportRow row) row.IsActive = !IsInputBlocked;
     }
 
     private static bool IsPaused(MpvPlayerState state)
@@ -315,32 +319,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
     private static bool IsNotBuffering(MpvPlayerState state, bool isLoading)
         => !IsBuffering(state, isLoading);
-
-    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
-    private static bool IsPlayPauseEnabled(MpvPlayerState state, bool isLoading, bool isLiveReleaseBlocked)
-        => IsNotBuffering(state, isLoading) && !isLiveReleaseBlocked;
-
-    // The row follows the card, never its own content, so this cannot feed back. Below this width the words of
-    // the live status would squeeze the box of the room; the refresh button next to them stays.
-    private void OnButtonRowSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        var visibility = e.NewSize.Width >= LiveStatusCaptionMinRowWidth ? Visibility.Visible : Visibility.Collapsed;
-        if (LiveStatusCaption.Visibility != visibility) LiveStatusCaption.Visibility = visibility;
-    }
-
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
-    {
-        if (IsInputBlocked || ViewModel is not { IsLiveReleaseBlocked: false } owner) return;
-        try
-        {
-            await owner.RefreshLiveAsync();
-        }
-        catch (Exception ex)
-        {
-            // The player shows what went wrong with the picture; nothing is retried here.
-            Debug.WriteLine($"Live refresh failed: {ex.Message}");
-        }
-    }
 
     private void SubscribeViewModel(PlayerViewModel? viewModel)
     {

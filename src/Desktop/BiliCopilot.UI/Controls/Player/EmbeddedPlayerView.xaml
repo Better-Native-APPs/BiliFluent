@@ -267,7 +267,7 @@
         <Grid
             x:Name="PlayerHeader"
             Grid.Row="0"
-            Grid.ColumnSpan="{x:Bind GetHeaderColumnSpan(ViewModel.Connector), Mode=OneWay, FallbackValue=1}"
+            Grid.ColumnSpan="{x:Bind GetHeaderColumnSpan(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=1}"
             Padding="16,0"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <Grid.ColumnDefinitions>
@@ -288,7 +288,7 @@
                 IsHide="{x:Bind IsNavColumnManualHide, Mode=TwoWay}"
                 IsInvertDirection="True"
                 ToolTipService.ToolTip="{x:Bind GetSidePanelToggleTip(IsNavColumnManualHide), Mode=OneWay}"
-                Visibility="{x:Bind GetSideSplitVisibility(ViewModel.Connector), Mode=OneWay, FallbackValue=Visible}" />
+                Visibility="{x:Bind GetSideSplitVisibility(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=Visible}" />
         </Grid>
 
         <Border
@@ -324,10 +324,10 @@
                     <TextBlock
                         HorizontalAlignment="Center"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{x:Bind core:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveMedia), Mode=OneWay}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveFailure), Mode=OneWay}"
                         TextAlignment="Center" />
                     <TextBlock
-                        Text="{x:Bind core:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveMedia), Mode=OneWay}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveFailure), Mode=OneWay}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <StackPanel
@@ -337,9 +337,9 @@
                         <Button
                             Click="OnRoomRetryClick"
                             Content="{ext:Locale Name=Retry}"
-                            IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                            IsEnabled="{x:Bind ViewModel.CanRefreshLive, Mode=OneWay}"
                             Style="{StaticResource AccentButtonStyle}"
-                            Visibility="{x:Bind ViewModel.IsLiveMedia, Mode=OneWay}" />
+                            Visibility="{x:Bind ViewModel.IsLiveFailure, Mode=OneWay}" />
                         <Button
                             x:Name="ErrorBackButton"
                             Command="{x:Bind ViewModel.BackCommand, Mode=OneWay}"
@@ -370,8 +370,8 @@
         -->
         <ContentControl
             x:Name="SideBodyHost"
-            Grid.Row="{x:Bind GetSideBodyRow(ViewModel.Connector), Mode=OneWay, FallbackValue=2}"
-            Grid.RowSpan="{x:Bind GetSideBodyRowSpan(ViewModel.Connector), Mode=OneWay, FallbackValue=1}"
+            Grid.Row="{x:Bind GetSideBodyRow(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=2}"
+            Grid.RowSpan="{x:Bind GetSideBodyRowSpan(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=1}"
             Grid.Column="2"
             Margin="-6,0,0,0"
             HorizontalAlignment="Stretch"

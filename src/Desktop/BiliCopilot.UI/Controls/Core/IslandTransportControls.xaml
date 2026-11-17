@@ -161,10 +161,11 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="{x:Bind ViewModel.DurationText, Mode=OneWay}" />
             </Grid>
+            <!--  The commands of a media with a timeline. A media without one shows the single row below instead.  -->
             <Grid
                 Grid.Row="1"
                 ColumnSpacing="8"
-                SizeChanged="OnButtonRowSizeChanged">
+                Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -185,7 +186,7 @@
                         VerticalAlignment="Center"
                         Background="{ThemeResource ButtonBackground}"
                         Command="{x:Bind ViewModel.PlayPauseCommand, Mode=OneWay}"
-                        IsEnabled="{x:Bind local:IslandTransportControls.IsPlayPauseEnabled(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading, ViewModel.IsLiveReleaseBlocked), Mode=OneWay}"
+                        IsEnabled="{x:Bind local:IslandTransportControls.IsNotBuffering(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}"
                         Style="{StaticResource CircleIconButtonStyle}">
                         <Grid>
                             <ic:SymbolIcon
@@ -206,50 +207,6 @@
                     Grid.Column="1"
                     Content="{x:Bind LeftContent, Mode=OneWay}"
                     Style="{StaticResource AppContentControlStyle}" />
-                <!--
-                    Live status: for a media without a timeline it stands where the bar otherwise reads the time,
-                    next to the play button. It is text, not a control: it takes no focus and is read as it is written.
-                -->
-                <StackPanel
-                    x:Name="LiveStatus"
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    Visibility="{x:Bind local:PlayerOverlay.GetLiveStatusVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
-                    <!--  With no timeline to drag, this is the way back to the newest picture. It comes and goes with the status.  -->
-                    <Button
-                        x:Name="RefreshButton"
-                        AutomationProperties.Name="{ext:Locale Name=LiveRefresh}"
-                        Click="OnRefreshClick"
-                        IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                        Style="{StaticResource CircleIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=LiveRefresh}">
-                        <ic:SymbolIcon FontSize="14" Symbol="ArrowClockwise" />
-                    </Button>
-                    <!--  On a narrow card the words give their place to the middle content; the button stays.  -->
-                    <StackPanel
-                        x:Name="LiveStatusCaption"
-                        Margin="2,0,4,0"
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="8">
-                        <Ellipse
-                            Width="8"
-                            Height="8"
-                            VerticalAlignment="Center"
-                            AutomationProperties.AccessibilityView="Raw"
-                            Fill="{ThemeResource SystemFillColorSuccessBrush}"
-                            Opacity="{x:Bind local:PlayerOverlay.GetLiveStatusDotOpacity(ViewModel.Player.PlaybackState), Mode=OneWay}" />
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontWeight="SemiBold"
-                            MaxLines="1"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{ext:Locale Name=PlayerLiveStatus}"
-                            TextWrapping="NoWrap" />
-                    </StackPanel>
-                </StackPanel>
                 <!--
                     中部：当前章节入口（有章节时才出现，点开是章节列表）在前，原中部内容占剩余宽度。
                     没有章节时入口整体折叠、不留间距，这一格与原来一致.
@@ -445,6 +402,18 @@
                     </Button>
                 </StackPanel>
             </Grid>
+            <!--
+                A media without a timeline: one row, created only for such a media. The top margin is the row
+                gap this card keeps under its timeline, so the card is as tall as it was for a live room before.
+            -->
+            <local:LiveTransportRow
+                x:Name="LiveRow"
+                Grid.Row="1"
+                Margin="0,4,0,0"
+                x:Load="{x:Bind local:PlayerOverlay.IsTimelineFree(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}"
+                Layout="Island"
+                Loaded="OnLiveRowLoaded"
+                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Grid>
     </Grid>
 </local:PlayerControlBase>

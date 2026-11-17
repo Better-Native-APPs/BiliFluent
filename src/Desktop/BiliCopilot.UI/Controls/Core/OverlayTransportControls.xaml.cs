@@ -66,8 +66,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         _speedRefreshTimer.Tick += OnSpeedRefreshTick;
         _volumeCorrectionTimer.Tick += OnVolumeCorrectionTick;
         InitializeComponent();
-        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
-        LiveStatus.Visibility = Visibility.Collapsed;
         RegisterPropertyChangedCallback(VisibilityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
@@ -113,7 +111,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         => ProgressBarVisible && (ViewModel is not { } vm || PlayerOverlay.IsCapabilityShown(vm.CanSeek, vm.HasAdmittedMedia));
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
-    internal FrameworkElement PlayPauseTarget => PlayPauseButton;
+    internal FrameworkElement PlayPauseTarget => LiveRow is { IsLoaded: true } row ? row.PlayPauseTarget : PlayPauseButton;
     public event EventHandler<bool>? InteractionStateChanged;
 
     private static void OnIsActiveChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
@@ -296,7 +294,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             ResetProgressPreview();
             _chapterPreview?.Reset();
             ChapterEntry?.CancelPendingInput();
-            LiveQualityEntry?.CancelPendingInput();
+            LiveRow?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
@@ -391,9 +389,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private FluentIcons.Common.Symbol GetFullScreenSymbol(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.FullScreen ? FluentIcons.Common.Symbol.FullScreenMinimize : FluentIcons.Common.Symbol.FullScreenMaximize;
 
-    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
-    private bool IsPlayPauseEnabled(MpvPlayerState state, bool isLiveReleaseBlocked)
-        => state is (MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
+    private bool IsPlayPauseEnabled(MpvPlayerState state)
+        => state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End;
 
     private string GetPlayPauseTip(bool isPlaying)
         => isPlaying ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Pause) : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Play);
@@ -415,10 +412,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private Visibility GetWindowModeButtonVisibility(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.CompactOverlay ? Visibility.Collapsed : Visibility.Visible;
-
-    // The live status stands in the row of the timeline, so a host that hides that row hides it as well.
-    private Visibility GetLiveStatusVisibility(bool rowVisible, bool canSeek, bool hasAdmittedMedia)
-        => rowVisible ? PlayerOverlay.GetLiveStatusVisibility(canSeek, hasAdmittedMedia) : Visibility.Collapsed;
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
@@ -459,20 +452,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         else if (owner.ViewModel.Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
             await ExecuteInputAsync(owner, () => owner.ViewModel.PlayPauseCommand.ExecuteAsync(null));
-    }
-
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
-    {
-        if (CaptureInput() is not { ViewModel.IsLiveReleaseBlocked: false } owner) return;
-        try
-        {
-            await owner.ViewModel.RefreshLiveAsync();
-        }
-        catch (Exception ex)
-        {
-            // The player shows what went wrong with the picture; nothing is retried here.
-            System.Diagnostics.Debug.WriteLine($"Live refresh failed: {ex.Message}");
-        }
     }
 
     private void OnProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
