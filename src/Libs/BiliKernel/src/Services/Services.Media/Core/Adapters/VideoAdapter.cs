@@ -9,6 +9,7 @@ using Richasy.BiliKernel.Models.Base;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.Media.Core.Models;
 using RestDashItem = Richasy.BiliKernel.Services.Media.Core.Models.DashItem;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
@@ -37,29 +38,36 @@ internal static class VideoAdapter
 
     public static VideoInformation ToVideoInformation(this RecommendCard card)
     {
-        var identifier = new MediaIdentifier(card.Args.Aid.ToString(), card.Title, card.Cover.ToVideoCover());
-        var publisher = new PublisherInfo { Publisher = card.Args.UpName, UserId = card.Args.UpId ?? 0 };
-        var communityInfo = new VideoCommunityInformation(card.Args.Aid.ToString(), card.PlayCountText.ToCountNumber(), card.DanmakuCountText.ToCountNumber());
-        var duration = card.DurationText.ToDurationSeconds();
+        var id = card.VideoId.ToString(CultureInfo.InvariantCulture);
+        var identifier = new MediaIdentifier(id, card.Title, card.Cover.ToVideoCover());
+        var publisher = new PublisherInfo { Publisher = card.Args?.UpName ?? string.Empty, UserId = card.Args?.UpId ?? card.Args?.UpMid ?? 0 };
+        var communityInfo = new VideoCommunityInformation(id,
+            string.IsNullOrEmpty(card.PlayCountText) ? null : card.PlayCountText.ToCountNumber(),
+            string.IsNullOrEmpty(card.DanmakuCountText) ? null : card.DanmakuCountText.ToCountNumber());
+        var duration = card.PlayerArgs?.Duration ?? (string.IsNullOrEmpty(card.DurationText) ? (int?)null : card.DurationText.ToDurationSeconds());
         var info = new VideoInformation(
             identifier,
             publisher.ToPublisherProfile(),
-            card.PlayerArgs?.Duration,
+            duration,
             communityInformation: communityInfo);
 
-        var flyoutItems = card.OverflowFlyout.Where(p => p.Reasons != null).Select(p => new VideoOverflowFlyoutItem
+        var flyoutItems = (card.OverflowFlyout ?? Array.Empty<OverflowFlyoutItem>()).Where(p => p.Reasons != null).Select(p => new VideoOverflowFlyoutItem
         {
             Id = p.Type,
             Title = p.Title,
-            Options = p.Reasons.ToDictionary(r => r.Id.ToString() ?? string.Empty, r => r.Name ?? string.Empty),
+            Options = p.Reasons!.Where(r => r.Id.HasValue).GroupBy(r => r.Id.GetValueOrDefault())
+                .ToDictionary(r => r.Key.ToString(CultureInfo.InvariantCulture), r => r.First().Name ?? string.Empty),
         }).ToList();
 
         info.AddExtensionIfNotNull(VideoExtensionDataId.Cid, card.PlayerArgs?.Cid);
         info.AddExtensionIfNotNull(VideoExtensionDataId.MediaType, MediaType.Video);
-        info.AddExtensionIfNotNull(VideoExtensionDataId.RecommendReason, card.RecommendReason);
+        info.AddExtensionIfNotNull(VideoExtensionDataId.RecommendReason, string.IsNullOrEmpty(card.RecommendReason) ? card.RecommendReasonStyle?.Text : card.RecommendReason);
         info.AddExtensionIfNotNull(VideoExtensionDataId.TagId, card.Args?.TagId);
         info.AddExtensionIfNotNull(VideoExtensionDataId.TagName, card.Args?.TagName);
-        info.AddExtensionIfNotNull(VideoExtensionDataId.OverflowFlyout, new VideoOverflowFlyout { Items = flyoutItems });
+        if (flyoutItems.Count > 0)
+        {
+            info.AddExtensionIfNotNull(VideoExtensionDataId.OverflowFlyout, new VideoOverflowFlyout { Items = flyoutItems });
+        }
 
         return info;
     }
