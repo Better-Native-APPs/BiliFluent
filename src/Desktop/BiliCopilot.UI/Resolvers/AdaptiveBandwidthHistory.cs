@@ -27,6 +27,7 @@ internal sealed class AdaptiveBandwidthHistory
     {
         lock (_sync)
         {
+            if (now < _previous.ObservedAt) return default;
             if (!_previous.IsFresh(now))
             {
                 _previous = default;

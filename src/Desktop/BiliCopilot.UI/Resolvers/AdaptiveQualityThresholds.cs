@@ -32,7 +32,7 @@ internal static class AdaptiveQualityThresholds
     public static readonly TimeSpan RebufferCountWindow = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan RebufferDurationWindow = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan DiscontinuitySettle = TimeSpan.FromSeconds(5);
-    public static readonly TimeSpan NodeObservationSettle = TimeSpan.FromSeconds(6);
+    public static readonly TimeSpan NodeObservationSettle = TimeSpan.FromSeconds(8);
     public static readonly TimeSpan ReloadObservationSettle = TimeSpan.FromSeconds(20);
     public static readonly TimeSpan SampleGapReset = TimeSpan.FromSeconds(5);
 }

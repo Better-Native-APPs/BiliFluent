@@ -54,7 +54,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// The download cannot keep up with playback on any node tried for this media, which points
     /// at the connection rather than at a node. Raised on the UI thread, at most once per media.
-    /// It is the signal for lowering the quality automatically; nothing consumes it yet.
+    /// The quality-adaptation partial consumes the same decision after this notification.
     /// </summary>
     internal event EventHandler<PlaybackBandwidthLimitedEventArgs>? BandwidthLimited;
 
@@ -83,6 +83,7 @@ public sealed partial class PlayerViewModel
     // Synchronous, so that nothing of the previous media reaches the policy of the next one.
     private void ResetNetworkFailover()
     {
+        ResetAdaptiveQuality();
         CancelSeamlessSelection();
         DetachSeamlessPlayback();
         DetachNetworkMonitor();
@@ -153,6 +154,7 @@ public sealed partial class PlayerViewModel
     private void OnNetworkFileLoading(object? sender, EventArgs e)
     {
         OnDemandResolver?.ArmSelectionLoad();
+        var loadingSelection = OnDemandResolver?.CaptureSelectionLoad();
         // The cache of the previous file says nothing about this one.
         Volatile.Write(ref _forwardCacheBytes, 0);
         Volatile.Write(ref _rawInputRate, 0);
@@ -166,6 +168,7 @@ public sealed partial class PlayerViewModel
             _networkLoads++;
             _deferredLoadError = null;
             _failover.OnFileLoading(NetworkNow);
+            OnAdaptiveFileLoading(loadingSelection);
         });
     }
 
@@ -183,6 +186,7 @@ public sealed partial class PlayerViewModel
                 _onDemandReplayNeedsLoad = false;
                 ApplyCurrentOnDemandSelection(resolver);
             }
+            OnAdaptiveFileLoaded(loadedSelection);
             RestoreSubtitleAfterReload();
             _ = OwnWork(ConfirmAudioTrackAsync(_networkLoads, Volatile.Read(ref _networkEpoch), _mediaVersion, _activeMediaToken));
         });
@@ -218,7 +222,12 @@ public sealed partial class PlayerViewModel
         });
 
     private void OnNetworkSeekStarted(object? sender, EventArgs e)
-        => PostNetworkEvent(() => _failover.OnSeek(NetworkNow));
+        => PostNetworkEvent(() =>
+        {
+            var now = NetworkNow;
+            _failover.OnSeek(now);
+            OnAdaptiveSeek(now);
+        });
 
     private void OnNetworkDataNotify(object? sender, MpvClientNotifyEventArgs e)
     {
@@ -315,8 +324,15 @@ public sealed partial class PlayerViewModel
             sample.AudioCacheSeconds,
             Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers));
         ApplyFailoverDecision(decision, sample);
+        ObserveAdaptiveQuality(now, raw, sample, decision, speed);
         if (decision.Action == CdnFailoverAction.None) ContinueDeferredSelection(raw.UserPaused, raw.Seeking);
     }
+
+    partial void ResetAdaptiveQuality();
+    partial void OnAdaptiveSeek(TimeSpan now);
+    partial void OnAdaptiveFileLoading(OnDemandSelectionLoad? load);
+    partial void OnAdaptiveFileLoaded(OnDemandSelectionLoad? load);
+    partial void ObserveAdaptiveQuality(TimeSpan now, NetworkSample raw, PlaybackCacheSample sample, CdnFailoverDecision nodeDecision, double speed);
 
     private void ResetSelectedRelayObservation()
     {

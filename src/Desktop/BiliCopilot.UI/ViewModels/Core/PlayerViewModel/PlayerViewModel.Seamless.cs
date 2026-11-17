@@ -44,16 +44,17 @@ public sealed partial class PlayerViewModel
     [ObservableProperty]
     public partial MpvSeamlessSwitchPhase? SeamlessSwitchPhase { get; set; }
 
-    /// <summary>The shared tier/stream entry for menu choices and a future automatic-quality policy.</summary>
-    internal Task SwitchOnDemandSelectionAsync(OnDemandSelectionRequest request, string targetName)
+    /// <summary>The shared tier/stream entry. Automatic changes suppress tips, not existing recovery rules.</summary>
+    internal Task SwitchOnDemandSelectionAsync(OnDemandSelectionRequest request, string targetName, bool silent = false)
     {
         var resolver = OnDemandResolver;
         if (!CanSelectOnDemandQuality || IsPlaybackClosing || IsConnecting || Player is not { } player
             || resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
             return Task.CompletedTask;
 
+        PrepareAdaptiveSelection(ref request, silent);
         CancelSeamlessSelection();
-        var intent = new SelectionIntent(_seamlessRequests.Next(), request, _mediaVersion, player, resolver);
+        var intent = new SelectionIntent(_seamlessRequests.Next(), request, _mediaVersion, player, resolver, silent);
         _selectionIntent = intent;
         SeamlessSwitchTargetName = targetName;
         return _selectionWork = OwnWork(ExecuteSelectionAsync(intent));
@@ -165,6 +166,7 @@ public sealed partial class PlayerViewModel
 
                             var statistics = state.IsSuccess ? (kind == PlaybackStreamKind.Video ? state.Value.Video : state.Value.Audio).Statistics : null;
                             intent.Resolver.CommitSelectedStream(kind, target, statistics);
+                            if (kind == PlaybackStreamKind.Video) OnAdaptiveSelectionCommitted(intent, current.Format.Quality, target.Format.Quality);
                             Interlocked.Increment(ref _selectedStreamEpoch);
                             ResetSelectedRelayObservation();
                             _failover.OnStreamsChanged(NetworkNow);
@@ -237,6 +239,7 @@ public sealed partial class PlayerViewModel
                     if (!IsCurrentPlayback(intent.Version) || !ReferenceEquals(intent.Player, Player)
                         || !ReferenceEquals(intent.Resolver, _sourceResolver)) return;
                     intent.Resolver.SetReloadSelection(target?.ForReload() ?? intent.Request);
+                    OnAdaptiveSelectionReloading(intent, target?.Format.Quality ?? intent.Request.ResolvedVideoQuality);
                     intent.Resolver.RefreshPlayUrl();
                     var current = await ReadPlaybackObservationAsync(intent.Player);
                     var loaded = await ReplayWithSubtitleRestoreAsync(intent.Player, current?.Position ?? intent.Player.Position);
@@ -249,6 +252,9 @@ public sealed partial class PlayerViewModel
                         await ReplayWithSubtitleRestoreAsync(intent.Player, current?.Position ?? intent.Player.Position);
                     }
 
+                    if (loaded && intent.Resolver.PlayingSelection is { } loadedVideo)
+                        OnAdaptiveSelectionCommitted(intent, intent.PreviousQuality, loadedVideo.Format.Quality);
+
                     var actualAudio = intent.Resolver.PlayingSelection?.AudioSelections.QualityId;
                     var requestedAudio = intent.Request.Preferences.AudioQualityId;
                     var audioMatched = requestedAudio is null || actualAudio == requestedAudio
@@ -258,7 +264,7 @@ public sealed partial class PlayerViewModel
                         if (loaded && intent.Resolver.PlayingSelection is { } playing)
                             intent.Resolver.CommitSelectionPreferences(playing.Preferences with
                             { VideoQuality = intent.PreviousPreferences.VideoQuality, AudioQualityId = null });
-                        if (IsCurrentSelection(intent))
+                        if (!intent.Silent && IsCurrentSelection(intent))
                             Window?.ShowTip(ResourceToolkit.GetLocalizedString(StringNames.AudioQualitySwitchFailed), InfoType.Error);
                     }
 
@@ -267,6 +273,7 @@ public sealed partial class PlayerViewModel
             }
             finally
             {
+                OnAdaptiveSelectionFinished(intent, _lastOnDemandReplayIssued);
                 if (IsCurrentSelection(intent))
                 {
                     _selectionIntent = null;
@@ -341,7 +348,7 @@ public sealed partial class PlayerViewModel
 
     private void ShowSelectionTip(SelectionIntent intent)
     {
-        if (intent.TipShown || !IsCurrentSelection(intent)) return;
+        if (intent.Silent || intent.TipShown || !IsCurrentSelection(intent)) return;
         intent.TipShown = true;
         var template = this.Get<IResourceToolkit>().GetLocalizedString("SeamlessSwitchingTemplate");
         Window?.ShowTip(string.Format(CultureInfo.CurrentCulture, template, SeamlessSwitchTargetName), InfoType.Information);
@@ -410,12 +417,19 @@ public sealed partial class PlayerViewModel
 
     private readonly record struct PlaybackObservation(bool Paused, bool Seeking, bool Playing, double Speed, double Position);
 
+    partial void PrepareAdaptiveSelection(ref OnDemandSelectionRequest request, bool silent);
+    partial void OnAdaptiveSelectionCommitted(SelectionIntent intent, int fromQuality, int toQuality);
+    partial void OnAdaptiveSelectionReloading(SelectionIntent intent, int? targetQuality);
+    partial void OnAdaptiveSelectionFinished(SelectionIntent intent, bool loadIssued);
+
     private sealed class SelectionIntent(long id, OnDemandSelectionRequest request, long version,
-        MpvPlayer player, MediaSourceResolverBase resolver)
+        MpvPlayer player, MediaSourceResolverBase resolver, bool silent)
     {
         public long Id { get; } = id;
         public OnDemandSelectionRequest Request { get; } = request;
         public OnDemandSelectionPreferences PreviousPreferences { get; } = resolver.PlayingSelection?.Preferences ?? request.Preferences;
+        public int PreviousQuality { get; } = resolver.PlayingSelection?.Format.Quality ?? 0;
+        public bool Silent { get; } = silent;
         public long Version { get; } = version;
         public MpvPlayer Player { get; } = player;
         public MediaSourceResolverBase Resolver { get; } = resolver;
