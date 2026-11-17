@@ -66,8 +66,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         _speedRefreshTimer.Tick += OnSpeedRefreshTick;
         _volumeCorrectionTimer.Tick += OnVolumeCorrectionTick;
         InitializeComponent();
-        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
-        LiveStatus.Visibility = Visibility.Collapsed;
         RegisterPropertyChangedCallback(VisibilityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
@@ -296,7 +294,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             ResetProgressPreview();
             _chapterPreview?.Reset();
             ChapterEntry?.CancelPendingInput();
-            LiveQualityEntry?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
@@ -393,7 +390,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
     private bool IsPlayPauseEnabled(MpvPlayerState state, bool isLiveReleaseBlocked)
-        => state is (MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
+        => (state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
 
     private string GetPlayPauseTip(bool isPlaying)
         => isPlaying ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Pause) : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Play);
@@ -415,10 +412,6 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private Visibility GetWindowModeButtonVisibility(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.CompactOverlay ? Visibility.Collapsed : Visibility.Visible;
-
-    // The live status stands in the row of the timeline, so a host that hides that row hides it as well.
-    private Visibility GetLiveStatusVisibility(bool rowVisible, bool canSeek, bool hasAdmittedMedia)
-        => rowVisible ? PlayerOverlay.GetLiveStatusVisibility(canSeek, hasAdmittedMedia) : Visibility.Collapsed;
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
@@ -461,17 +454,17 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             await ExecuteInputAsync(owner, () => owner.ViewModel.PlayPauseCommand.ExecuteAsync(null));
     }
 
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
-        if (CaptureInput() is not { ViewModel.IsLiveReleaseBlocked: false } owner) return;
+        if (CaptureInput() is not { } owner || !owner.ViewModel.CanRefreshLive) return;
         try
         {
             await owner.ViewModel.RefreshLiveAsync();
         }
         catch (Exception ex)
         {
-            // The player shows what went wrong with the picture; nothing is retried here.
-            System.Diagnostics.Debug.WriteLine($"Live refresh failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Fullscreen transport refresh failed: {ex.Message}");
         }
     }
 

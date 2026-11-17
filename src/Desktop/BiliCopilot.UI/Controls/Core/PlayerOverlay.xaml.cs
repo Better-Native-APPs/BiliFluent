@@ -133,14 +133,14 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         BottomProgressBar.RegisterPropertyChangedCallback(ProgressBar.MaximumProperty, OnBottomProgressMaximumChanged);
     }
 
-    // A send of the room that did not go through: the draft stays in the box and the tip tells why.
+    // A send of a live room that did not go through: the draft stays in the box and the tip tells why.
     private void OnRoomComposerNoticed(object? sender, BiliCopilot.UI.Live.Controls.LiveComposerNotice notice)
         => ShowTip(notice.Message, notice.Type);
 
     // The button of the ended state: ask for the newest picture of the room once.
     private async void OnRoomRefreshClick(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { IsPlaybackClosing: false, IsLiveReleaseBlocked: false } owner) return;
+        if (ViewModel is not { CanRefreshLive: true } owner) return;
         try
         {
             await owner.RefreshLiveAsync();
@@ -715,7 +715,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
         else if (e.PropertyName == nameof(ViewModel.CurrentVolume))
         {
-            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / ViewModel.MaxVolume);
+            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / GetVolumeCeiling(ViewModel.MaxVolume));
             VolumeThumb?.Height = Math.Max(0, thumbHeight);
         }
         else if (e.PropertyName == nameof(ViewModel.IsWindowDeactivated) && ViewModel.IsWindowDeactivated)
@@ -1423,7 +1423,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (!_loaded || ViewModel?.IsControlsVisible != true || ViewModel.IsWindowDeactivated
             || GetCurrentSourceFlyout() is not { } flyout
             || selectedSource?.IsEnabled != true
-            || !ViewModel.Sources.Any(item => ReferenceEquals(item, selectedSource))) return;
+            || !ViewModel.QualityMenuSources.Any(item => ReferenceEquals(item, selectedSource))) return;
         selectedSource?.ActiveCommand.Execute(default);
         flyout.Hide();
     }

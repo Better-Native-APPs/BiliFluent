@@ -25,11 +25,7 @@
         </ResourceDictionary>
     </core:PlayerControlBase.Resources>
 
-    <!--
-        Store 源 Controls/Danmaku/DanmakuBox.xaml：列间距 8、两列 Auto/*，开关/显示设置/输入框/发送设置原样保留.
-        The display settings, the inline box and the send settings belong to on-demand danmaku and leave for a
-        media without it. A room keeps the switch and puts its own box in the same place.
-    -->
+    <!--  Store 源 Controls/Danmaku/DanmakuBox.xaml：列间距 8、两列 Auto/*，开关/显示设置/输入框/发送设置原样保留  -->
     <Grid ColumnSpacing="8">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -51,6 +47,7 @@
                 IsChecked="{x:Bind RenderViewModel.IsShowDanmaku, Mode=TwoWay}"
                 IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                 ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}" />
+            <!--  The display settings shape the danmaku of an on-demand media.  -->
             <Button
                 x:Name="DanmakuOptionButton"
                 AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
@@ -104,13 +101,15 @@
                 </Flyout>
             </Button.Flyout>
         </Button>
-        <!--  The box of a room. It is created only for a room, so other media never carry it.  -->
+        <!--
+            A live room sends through its own pipeline: the same box in the same place, created only for a room.
+            The send settings of the on-demand box do not apply to it.
+        -->
         <live:LiveComposer
             x:Name="RoomComposer"
             Grid.Column="1"
-            VerticalAlignment="Center"
-            x:Load="{x:Bind core:PlayerOverlay.HasRoomDanmaku(ViewModel.Connector), Mode=OneWay}"
-            Connector="{x:Bind core:PlayerOverlay.GetRoomConnector(ViewModel.Connector), Mode=OneWay}"
+            x:Load="{x:Bind ViewModel.HasRoomChat, Mode=OneWay}"
+            Connector="{x:Bind ViewModel.LiveConnector, Mode=OneWay}"
             IsActive="{x:Bind IsActive, Mode=OneWay}"
             Noticed="OnRoomComposerNoticed" />
     </Grid>

@@ -1,7 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Core;
-using BiliCopilot.UI.Live.Controls;
 using BiliCopilot.UI.ViewModels.Core;
 using System.ComponentModel;
 
@@ -39,10 +38,8 @@ public sealed partial class IslandDanmakuBox : PlayerControlBase
         set => SetValue(IsActiveProperty, value);
     }
 
-    // The box serves on-demand danmaku once it is loaded, and a room for as long as its connector is there.
     private bool CanInteract => _loaded && IsActive && ViewModel is { IsWindowDeactivated: false,
-        IsPlaybackClosing: false, IsConnecting: false }
-        && (ViewModel.IsDanmakuControlVisible || PlayerOverlay.HasRoomDanmaku(ViewModel.Connector))
+        IsPlaybackClosing: false, IsConnecting: false, IsDanmakuSwitchAvailable: true }
         && ViewModel.Player?.IsPlaybackInitialized == true;
 
     /// <summary>
@@ -148,6 +145,10 @@ public sealed partial class IslandDanmakuBox : PlayerControlBase
         SendOptions.Activate(() => CanInteract && _popups.IsCurrent(claim, ViewModel, _epoch));
     }
 
+    // A send of a live room that did not go through: the draft stays in the box and the player tells why.
+    private void OnRoomComposerNoticed(object? sender, Live.Controls.LiveComposerNotice notice)
+        => ViewModel?.Window?.ShowTip(notice.Message, notice.Type);
+
     private void OnDraftChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         => ++_draftRevision;
 
@@ -191,10 +192,6 @@ public sealed partial class IslandDanmakuBox : PlayerControlBase
             }
         }
     }
-
-    // A send of the room that did not go through: the draft stays in the box and the player tells why.
-    private void OnRoomComposerNoticed(object? sender, LiveComposerNotice notice)
-        => ViewModel?.Window?.ShowTip(notice.Message, notice.Type);
 
     private bool IsCurrent(Submission request)
         => CanInteract && ReferenceEquals(_submission, request) && ReferenceEquals(request.ViewModel, ViewModel)

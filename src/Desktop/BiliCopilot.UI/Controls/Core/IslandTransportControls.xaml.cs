@@ -44,9 +44,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public static readonly DependencyProperty IsActiveProperty =
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(IslandTransportControls), new PropertyMetadata(false, OnIsActiveChanged));
 
-    // The row width at which the words of the live status still leave the middle content a usable width.
-    private const double LiveStatusCaptionMinRowWidth = 580;
-
     private readonly List<double> _speedChangeList = [];
     private readonly List<double> _progressChangeList = [];
     private readonly DispatcherTimer _speedChangeTimer;
@@ -77,8 +74,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     public IslandTransportControls()
     {
         InitializeComponent();
-        // The live status shows only once a media without a timeline is known; until then the bar is the ordinary one.
-        LiveStatus.Visibility = Visibility.Collapsed;
         // 仅在交互后启动的短时防抖计时器，非永动计时器.
         _speedChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
         _progressChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.5) };
@@ -287,10 +282,6 @@ public sealed partial class IslandTransportControls : PlayerControlBase
                     next.IsActive = active;
                     if (cancel) next.CancelPendingInput();
                     break;
-                case LiveQualityButton quality:
-                    quality.IsActive = active;
-                    if (cancel) quality.CancelPendingInput();
-                    break;
                 case Panel panel:
                     foreach (var child in panel.Children) Update(child);
                     break;
@@ -320,25 +311,17 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     private static bool IsPlayPauseEnabled(MpvPlayerState state, bool isLoading, bool isLiveReleaseBlocked)
         => IsNotBuffering(state, isLoading) && !isLiveReleaseBlocked;
 
-    // The row follows the card, never its own content, so this cannot feed back. Below this width the words of
-    // the live status would squeeze the box of the room; the refresh button next to them stays.
-    private void OnButtonRowSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        var visibility = e.NewSize.Width >= LiveStatusCaptionMinRowWidth ? Visibility.Visible : Visibility.Collapsed;
-        if (LiveStatusCaption.Visibility != visibility) LiveStatusCaption.Visibility = visibility;
-    }
-
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
-        if (IsInputBlocked || ViewModel is not { IsLiveReleaseBlocked: false } owner) return;
+        if (IsInputBlocked || ViewModel is not { CanRefreshLive: true } owner) return;
         try
         {
             await owner.RefreshLiveAsync();
         }
         catch (Exception ex)
         {
-            // The player shows what went wrong with the picture; nothing is retried here.
-            Debug.WriteLine($"Live refresh failed: {ex.Message}");
+            Debug.WriteLine($"Island transport refresh failed: {ex.Message}");
         }
     }
 

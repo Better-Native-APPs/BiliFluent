@@ -55,7 +55,11 @@
         </Grid.Background>
         <Grid.RowDefinitions>
             <RowDefinition />
-            <RowDefinition Height="Auto" />
+            <!--
+                The timeline. A media without one has no element here, only the room the timeline takes, so the
+                commands above stand where they do for any other media.
+            -->
+            <RowDefinition Height="Auto" MinHeight="{x:Bind local:PlayerOverlay.GetTimelineRoom(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}" />
         </Grid.RowDefinitions>
         <Grid Padding="16,0,8,0">
             <Grid.ColumnDefinitions>
@@ -119,6 +123,12 @@
                                 Symbol="ArrowStepBack" />
                         </Button>
                     </Border>
+                    <!--  As wide as the refresh button after play, so that play stays in the centre. Nothing is drawn.  -->
+                    <Border
+                        x:Name="RefreshBalance"
+                        Width="48"
+                        x:Load="{x:Bind local:PlayerOverlay.IsTimelineFree(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}"
+                        IsHitTestVisible="False" />
                     <Grid>
                         <Button
                             x:Name="PlayPauseButton"
@@ -139,6 +149,21 @@
                             BorderThickness="4"
                             IsActive="{x:Bind IsLoading(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}" />
                     </Grid>
+                    <!--
+                        A media without a timeline: the way back to its newest picture, in the place and with the
+                        look of the buttons after play. It is created only for such a media.
+                    -->
+                    <Button
+                        x:Name="RefreshButton"
+                        Margin="8,0,0,0"
+                        x:Load="{x:Bind local:PlayerOverlay.IsTimelineFree(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}"
+                        AutomationProperties.Name="{ext:Locale Name=LiveRefresh}"
+                        Click="OnRefreshClick"
+                        IsEnabled="{x:Bind ViewModel.CanRefreshLive, Mode=OneWay}"
+                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        ToolTipService.ToolTip="{ext:Locale Name=LiveRefresh}">
+                        <ic:SymbolIcon FontSize="16" Symbol="ArrowSync" />
+                    </Button>
                     <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                         <Button
                             x:Name="ForwardButton"
@@ -197,14 +222,6 @@
                     EntryStyle="{StaticResource ChapterEntryStyle}"
                     IsActive="{x:Bind IsActive, Mode=OneWay}"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-                <!--  The quality of a live room: it appears with the tiers of the room and takes no room otherwise.  -->
-                <local:LiveQualityButton
-                    x:Name="LiveQualityEntry"
-                    Margin="0,0,8,0"
-                    VerticalAlignment="Center"
-                    EntryStyle="{StaticResource BasicPlayerIconButtonStyle}"
-                    IsActive="{x:Bind IsActive, Mode=OneWay}"
-                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                 <StackPanel
                     x:Name="FullVolumeContainer"
                     Margin="0,0,8,0"
@@ -241,7 +258,7 @@
                         VerticalAlignment="Center"
                         IsEnabled="{x:Bind ViewModel.IsMute, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         LargeChange="10"
-                        Maximum="{x:Bind ViewModel.MaxVolume, Mode=OneWay}"
+                        Maximum="{x:Bind local:PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume), Mode=OneWay}"
                         Minimum="0"
                         SmallChange="1"
                         TickFrequency="1"
@@ -304,7 +321,7 @@
                                     VerticalAlignment="Center"
                                     IsEnabled="{x:Bind ViewModel.IsMute, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                                     LargeChange="10"
-                                    Maximum="{x:Bind ViewModel.MaxVolume, Mode=OneWay}"
+                                    Maximum="{x:Bind local:PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume), Mode=OneWay}"
                                     Minimum="0"
                                     SmallChange="1"
                                     TickFrequency="1"
@@ -584,7 +601,7 @@
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
-                    Visibility="{x:Bind local:PlayerOverlay.GetDanmakuSwitchVisibility(ViewModel.IsDanmakuControlVisible, ViewModel.Connector), Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.IsDanmakuSwitchAvailable, Mode=OneWay}">
                     <ToggleButton
                         x:Name="DanmakuToggleButton"
                         Margin="0,0,8,0"
@@ -596,17 +613,22 @@
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         Style="{StaticResource TogglePlayerIconButtonStyle}"
                         ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}" />
-                    <Button
-                        x:Name="DanmakuOptionButton"
-                        Margin="0,0,8,0"
-                        AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
-                        Click="OnDanmakuOptionsButtonClick"
-                        IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
-                        Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
-                        <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
-                    </Button>
+                    <!--
+                        The display settings shape the danmaku of an on-demand media. The narrow state sets the
+                        visibility of the button itself, so the capability lives on a holder around it.
+                    -->
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="DanmakuOptionButton"
+                            Margin="0,0,8,0"
+                            AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
+                            Click="OnDanmakuOptionsButtonClick"
+                            IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                            <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
+                        </Button>
+                    </Border>
                 </StackPanel>
                 <Button
                     x:Name="CompactOverlayButton"
@@ -738,50 +760,6 @@
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind GetTimeText(ViewModel.Player.Duration), Mode=OneWay}" />
         </Grid>
-
-        <!--
-            Live status: for a media without a timeline it takes the place of the timeline, in the same box
-            (the height of the progress slider and the same margin), so the buttons above stay where they are.
-            With no timeline to drag, the button in front of it is the way back to the newest picture.
-        -->
-        <StackPanel
-            x:Name="LiveStatus"
-            Grid.Row="1"
-            Height="32"
-            Margin="16,-32,16,12"
-            HorizontalAlignment="Left"
-            Orientation="Horizontal"
-            RequestedTheme="Dark"
-            Spacing="8"
-            Visibility="{x:Bind GetLiveStatusVisibility(ProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
-            <Button
-                x:Name="RefreshButton"
-                Width="32"
-                Height="32"
-                AutomationProperties.Name="{ext:Locale Name=LiveRefresh}"
-                Click="OnRefreshClick"
-                IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                Style="{StaticResource BasicPlayerIconButtonStyle}"
-                ToolTipService.ToolTip="{ext:Locale Name=LiveRefresh}">
-                <ic:SymbolIcon FontSize="14" Symbol="ArrowClockwise" />
-            </Button>
-            <Ellipse
-                Width="8"
-                Height="8"
-                VerticalAlignment="Center"
-                AutomationProperties.AccessibilityView="Raw"
-                Fill="{ThemeResource SystemFillColorSuccessBrush}"
-                Opacity="{x:Bind local:PlayerOverlay.GetLiveStatusDotOpacity(ViewModel.Player.PlaybackState), Mode=OneWay}" />
-            <TextBlock
-                VerticalAlignment="Center"
-                FontWeight="SemiBold"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                IsTextScaleFactorEnabled="False"
-                MaxLines="1"
-                Style="{StaticResource CaptionTextBlockStyle}"
-                Text="{ext:Locale Name=PlayerLiveStatus}"
-                TextWrapping="NoWrap" />
-        </StackPanel>
 
         <TeachingTip
             x:Name="DanmakuOptionsTip"

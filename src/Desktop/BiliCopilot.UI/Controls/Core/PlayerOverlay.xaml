@@ -68,14 +68,18 @@
         <DataTemplate x:Key="PgcPanelTemplate" x:DataType="core:PgcConnectorViewModel">
             <player:PgcPlayerPanel ViewModel="{x:Bind}" />
         </DataTemplate>
-        <!--  A room puts its danmaku box where other media show what plays. It has no extra panel.  -->
+        <!--
+            The full screen bar has no danmaku box. A room puts its box where other media show what plays, so it
+            comes and goes with the widgets; the bar is a black gradient in every app theme, hence the dark box.
+            A room has no extra panel.
+        -->
         <DataTemplate x:Key="LiveWidgetTemplate" x:DataType="core:LiveConnectorViewModel">
             <live:LiveComposer
+                Width="320"
                 VerticalAlignment="Center"
                 Connector="{x:Bind}"
                 Noticed="OnRoomComposerNoticed"
-                RequestedTheme="Dark"
-                SendButtonStyle="{StaticResource BasicPlayerIconButtonStyle}" />
+                RequestedTheme="Dark" />
         </DataTemplate>
         <DataTemplate x:Key="LivePanelTemplate" x:DataType="core:LiveConnectorViewModel">
             <Grid />
@@ -104,9 +108,10 @@
             <Setter Property="AutomationProperties.AutomationControlType" Value="ListItem" />
         </Style>
         <!--  清晰度列表项：独立播放窗口标题栏与内嵌全屏/小窗标题区共用同一模板  -->
+        <!--  The tiers of a live room are rows of the same template.  -->
         <DataTemplate x:Key="SourceItemTemplate" x:DataType="items:SourceItemViewModel">
             <Button
-                AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind local:PlayerOverlay.GetSourceItemName(Eotf, Name), Mode=OneWay}"
                 Click="OnSourceItemClick"
                 DataContext="{x:Bind}"
                 IsEnabled="{x:Bind IsEnabled, Mode=OneWay}"
@@ -157,7 +162,21 @@
                                 <RowDefinition />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
                             <base:TrimTextBlock MaxLines="2" Text="{x:Bind Name, Mode=OneWay}" />
+                            <!--  The note of an HDR tier of a live room whose name does not say so. No other row has it.  -->
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="HDR"
+                                Visibility="{x:Bind local:PlayerOverlay.GetHdrNoteVisibility(Eotf, Name)}" />
                             <!--<base:TrimTextBlock
                                 Grid.Row="1"
                                 Margin="0,4,0,0"
@@ -285,8 +304,8 @@
             Margin="4"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
-            x:Load="{x:Bind local:PlayerOverlay.HasRoomDanmaku(ViewModel.Connector), Mode=OneWay}"
-            Connector="{x:Bind local:PlayerOverlay.GetRoomConnector(ViewModel.Connector), Mode=OneWay}"
+            x:Load="{x:Bind ViewModel.HasRoomChat, Mode=OneWay}"
+            Connector="{x:Bind ViewModel.LiveConnector, Mode=OneWay}"
             IsDanmakuVisible="{x:Bind ViewModel.Danmaku.IsShowDanmaku, Mode=OneWay}"
             IsPlaying="{x:Bind local:PlayerOverlay.IsRoomPlaying(ViewModel.LiveLoadState), Mode=OneWay}" />
         <Rectangle
@@ -330,7 +349,7 @@
             VerticalAlignment="Center"
             RequestedTheme="Dark"
             Spacing="8"
-            Visibility="{x:Bind local:PlayerOverlay.GetRoomEndedVisibility(ViewModel.IsLiveMedia, ViewModel.LiveLoadState, ViewModel.IsConnecting), Mode=OneWay}">
+            Visibility="{x:Bind ViewModel.IsLiveEnded, Mode=OneWay, FallbackValue=Collapsed}">
             <TextBlock
                 HorizontalAlignment="Center"
                 IsHitTestVisible="False"
@@ -350,7 +369,7 @@
                 HorizontalAlignment="Center"
                 Click="OnRoomRefreshClick"
                 Content="{ext:Locale Name=Refresh}"
-                IsEnabled="{x:Bind ViewModel.IsLiveReleaseBlocked, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                IsEnabled="{x:Bind ViewModel.CanRefreshLive, Mode=OneWay}"
                 Style="{StaticResource AccentButtonStyle}" />
         </StackPanel>
         <Grid>
@@ -428,8 +447,6 @@
                         <StackPanel Orientation="Horizontal">
                             <store:IslandFormatButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                             <store:IslandSubtitleButton ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-                            <!--  The quality of a live room: it appears with the tiers of the room and takes no room otherwise.  -->
-                            <local:LiveQualityButton EntryStyle="{StaticResource CircleIconButtonStyle}" ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                         </StackPanel>
                     </local:IslandTransportControls.RightContent>
                 </local:IslandTransportControls>
@@ -481,11 +498,11 @@
                 </animations:Implicit.HideAnimations>
             </Grid>
             <base:EmptyHolder
-                Title="{x:Bind local:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveMedia), Mode=OneWay}"
+                Title="{x:Bind local:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveFailure), Mode=OneWay}"
                 Grid.RowSpan="2"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Description="{x:Bind local:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveMedia), Mode=OneWay}"
+                Description="{x:Bind local:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveFailure), Mode=OneWay}"
                 Emoji="&#x1F494;"
                 Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
                 <!--<base:EmptyHolder.ActionElement>
@@ -714,7 +731,7 @@
                                 Margin="12,0,0,0"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Center"
-                                x:Load="{x:Bind ViewModel.IsQualityMenuAvailable, Mode=OneWay}">
+                                x:Load="{x:Bind ViewModel.HasQualityMenu, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ic:SymbolIcon
                                         VerticalAlignment="Center"
@@ -725,7 +742,7 @@
                                         MaxWidth="220"
                                         VerticalAlignment="Center"
                                         MaxLines="1"
-                                        Text="{x:Bind ViewModel.SelectedSource.Name, Mode=OneWay}" />
+                                        Text="{x:Bind ViewModel.QualityMenuSelection.Name, Mode=OneWay}" />
                                 </StackPanel>
 
                                 <DropDownButton.Flyout>
@@ -738,7 +755,7 @@
                                             <ItemsRepeater
                                                 x:Name="SourceListView"
                                                 ItemTemplate="{StaticResource SourceItemTemplate}"
-                                                ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
+                                                ItemsSource="{x:Bind ViewModel.QualityMenuSources, Mode=OneWay}">
                                                 <ItemsRepeater.Layout>
                                                     <StackLayout Spacing="4" />
                                                 </ItemsRepeater.Layout>
@@ -898,7 +915,7 @@
                                 VerticalAlignment="Center"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Center"
-                                x:Load="{x:Bind ViewModel.IsQualityMenuAvailable, Mode=OneWay}">
+                                x:Load="{x:Bind ViewModel.HasQualityMenu, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ic:SymbolIcon
                                         VerticalAlignment="Center"
@@ -909,7 +926,7 @@
                                         MaxWidth="160"
                                         VerticalAlignment="Center"
                                         MaxLines="1"
-                                        Text="{x:Bind ViewModel.SelectedSource.Name, Mode=OneWay}" />
+                                        Text="{x:Bind ViewModel.QualityMenuSelection.Name, Mode=OneWay}" />
                                 </StackPanel>
                                 <DropDownButton.Flyout>
                                     <Flyout
@@ -918,7 +935,7 @@
                                         Opened="OnOverlayFlyoutOpened"
                                         Placement="Bottom">
                                         <StackPanel MaxWidth="360" XYFocusKeyboardNavigation="Enabled">
-                                            <ItemsRepeater ItemTemplate="{StaticResource SourceItemTemplate}" ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
+                                            <ItemsRepeater ItemTemplate="{StaticResource SourceItemTemplate}" ItemsSource="{x:Bind ViewModel.QualityMenuSources, Mode=OneWay}">
                                                 <ItemsRepeater.Layout>
                                                     <StackLayout Spacing="4" />
                                                 </ItemsRepeater.Layout>

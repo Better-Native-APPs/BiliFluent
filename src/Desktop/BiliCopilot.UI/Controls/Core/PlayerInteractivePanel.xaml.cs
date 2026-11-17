@@ -453,7 +453,7 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         else if (_gesture.Phase == PlayerSurfaceGesture.Vertical)
         {
             // Retain the existing touch volume scale, now over the whole surface.
-            var volume = Math.Clamp(_startVolume - (_gesture.DeltaY / 10), 0, ViewModel.MaxVolume);
+            var volume = Math.Clamp(_startVolume - (_gesture.DeltaY / 10), 0, PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume));
             ApplyVolume(volume);
         }
     }

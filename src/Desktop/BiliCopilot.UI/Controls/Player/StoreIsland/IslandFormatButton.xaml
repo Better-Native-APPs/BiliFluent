@@ -25,7 +25,8 @@
     </core:PlayerControlBase.Resources>
 
     <!--  Store 源 Controls/Player/VideoPlayerFormatButton.xaml：Hd 图标、Quality 提示、ItemsView(220) 清晰度列表原样保留；媒体带杜比或 Hi-Res 音频时，下方多一段音质列表  -->
-    <Grid Visibility="{x:Bind ViewModel.IsQualityMenuAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+    <!--  A live room uses this same button and menu: its list holds the tiers of the room, without an automatic entry and without audio qualities.  -->
+    <Grid Visibility="{x:Bind ViewModel.HasQualityMenu, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
         <Button
             AutomationProperties.Name="{ext:Locale Name=Quality}"
             Style="{StaticResource CircleIconButtonStyle}"
@@ -55,7 +56,7 @@
                                 <DataTemplate x:DataType="items:SourceItemViewModel">
                                     <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
                                     <ItemContainer
-                                        AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind core:PlayerOverlay.GetSourceItemName(Eotf, Name), Mode=OneWay}"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         IsEnabled="{x:Bind IsEnabled}"
                                         Style="{StaticResource AppItemContainerStyle}">
@@ -65,8 +66,25 @@
                                             Background="Transparent"
                                             Tag="{x:Bind}"
                                             Tapped="OnFormatItemTapped">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
                                             <!--  The automatic entry is renamed after the quality it picks.  -->
                                             <TextBlock VerticalAlignment="Center" Text="{x:Bind Name, Mode=OneWay}" />
+                                            <!--
+                                                A quiet note at the far end, as on an audio quality row: this tier of a live room is HDR and
+                                                its name does not say so. Two tiers of one name differ by it. No other row has it.
+                                            -->
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="HDR"
+                                                Visibility="{x:Bind core:PlayerOverlay.GetHdrNoteVisibility(Eotf, Name)}" />
                                         </Grid>
                                     </ItemContainer>
                                 </DataTemplate>
