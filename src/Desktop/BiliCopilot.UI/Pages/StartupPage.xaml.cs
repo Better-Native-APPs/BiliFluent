@@ -19,12 +19,23 @@ public sealed partial class StartupPage : StartupPageBase
 {
     private const string NoticeActivity = "SignInNotice";
 
+    // The form at its full width (344) with a 32 gutter on each side, the divider and the QR column (300).
+    private const double TwoColumnMinWidth = 712;
+
+    // Title bar zone (32), space above (40), the content at its tallest resting height (348), space below (16)
+    // and the footer (69), rounded up.
+    private const double RegularMinHeight = 506;
+
+    // In the single-column layout the QR code takes the place of the form while this is set.
+    private bool _isQRViewOpen;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="StartupPage"/> class.
     /// </summary>
     public StartupPage()
     {
         InitializeComponent();
+        SizeChanged += OnPageSizeChanged;
     }
 
     /// <inheritdoc/>
@@ -94,6 +105,41 @@ public sealed partial class StartupPage : StartupPageBase
         }
     }
 
+    // Two columns while both fit at full size; below that the form stays and the QR code moves behind a button.
+    private void UpdateLayoutState()
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var isNarrow = ActualWidth < TwoColumnMinWidth;
+        if (!isNarrow)
+        {
+            _isQRViewOpen = false;
+        }
+
+        var columnState = !isNarrow
+            ? nameof(WideState)
+            : _isQRViewOpen ? nameof(NarrowQRState) : nameof(NarrowFormState);
+        VisualStateManager.GoToState(this, columnState, false);
+        VisualStateManager.GoToState(this, ActualHeight < RegularMinHeight ? nameof(ShortState) : nameof(RegularState), false);
+    }
+
+    private void SetQRViewOpen(bool isOpen)
+    {
+        if (_isQRViewOpen == isOpen)
+        {
+            return;
+        }
+
+        _isQRViewOpen = isOpen;
+        UpdateLayoutState();
+    }
+
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs e)
+        => UpdateLayoutState();
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // The message bar announces itself when it opens; these two have no such behavior.
@@ -121,6 +167,9 @@ public sealed partial class StartupPage : StartupPageBase
             StartupSignInField.VerificationSend => SendVerificationCodeButton,
             _ => VerificationCodeBox,
         };
+
+        // The form has to be on screen for any of these to take the focus.
+        SetQRViewOpen(false);
 
         // The request often arrives while the form is still disabled or switching steps; wait for that to settle.
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => target.Focus(FocusState.Programmatic));
@@ -247,6 +296,20 @@ public sealed partial class StartupPage : StartupPageBase
 
     private void OnRefreshQRButtonClick(object sender, RoutedEventArgs e)
         => ViewModel.ReloadQRCodeCommand.Execute(default);
+
+    private void OnQREntryButtonClick(object sender, RoutedEventArgs e)
+    {
+        SetQRViewOpen(true);
+
+        // The button that had the focus is gone now; hand the focus to its counterpart once that one is laid out.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => QRBackButton.Focus(FocusState.Programmatic));
+    }
+
+    private void OnQRBackButtonClick(object sender, RoutedEventArgs e)
+    {
+        SetQRViewOpen(false);
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => QREntryButton.Focus(FocusState.Programmatic));
+    }
 }
 
 /// <summary>
