@@ -219,9 +219,14 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         {
             ResetDanmakuStyle();
         }
+        else if (e.PropertyName == nameof(DanmakuRenderViewModel.DanmakuFontFamily))
+        {
+            _danmakuMaster?.SetFontFamilyName(ViewModel.DanmakuFontFamily);
+            UpdateMpvStyle();
+        }
         else if (_mpvRenderer is not null && e.PropertyName is nameof(DanmakuRenderViewModel.DanmakuOpacity)
             or nameof(DanmakuRenderViewModel.DanmakuFontSize) or nameof(DanmakuRenderViewModel.DanmakuArea)
-            or nameof(DanmakuRenderViewModel.DanmakuSpeed) or nameof(DanmakuRenderViewModel.DanmakuFontFamily)
+            or nameof(DanmakuRenderViewModel.DanmakuSpeed)
             or nameof(DanmakuRenderViewModel.IsDanmakuBold) or nameof(DanmakuRenderViewModel.OutlineSize)
             or nameof(DanmakuRenderViewModel.IsRollingEnabled) or nameof(DanmakuRenderViewModel.IsTopEnabled)
             or nameof(DanmakuRenderViewModel.IsBottomEnabled))

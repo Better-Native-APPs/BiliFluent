@@ -4,7 +4,6 @@ using BiliCopilot.UI.Models.Constants;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.WinUIKernel.Share.Toolkits;
-using System.Collections.ObjectModel;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -79,7 +78,8 @@ public sealed partial class DanmakuRenderViewModel
     /// </summary>
     public bool IsHoverActionsAvailable => Renderer == DanmakuRendererType.Win2D;
 
-    public ObservableCollection<SystemFont> Fonts { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<SystemFont> Fonts { get; set; } = [];
 
     /// <summary>
     /// 速度加成改变时触发的事件.
