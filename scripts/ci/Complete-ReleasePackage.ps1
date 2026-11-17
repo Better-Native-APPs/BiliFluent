@@ -46,8 +46,10 @@ try {
     if ($LASTEXITCODE) { throw "SignTool sign failed ($LASTEXITCODE). See artifacts/release/sign.log." }
 
     # Trust only this public certificate temporarily on the disposable runner, then require platform verification.
+    # The machine store is used on purpose: adding to the current user's Root store raises a confirmation dialog,
+    # which never returns on a non-interactive runner.
     $publicCert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($cert.RawData)
-    $store = [Security.Cryptography.X509Certificates.X509Store]::new('Root', 'CurrentUser')
+    $store = [Security.Cryptography.X509Certificates.X509Store]::new('Root', 'LocalMachine')
     $added = $false
     $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
     try {
