@@ -711,7 +711,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
         else if (e.PropertyName == nameof(ViewModel.CurrentVolume))
         {
-            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / ViewModel.MaxVolume);
+            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / GetVolumeCeiling(ViewModel.MaxVolume));
             VolumeThumb?.Height = Math.Max(0, thumbHeight);
         }
         else if (e.PropertyName == nameof(ViewModel.IsWindowDeactivated) && ViewModel.IsWindowDeactivated)
