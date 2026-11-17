@@ -2265,4 +2265,16 @@
   <data name="CommentVoteRetry" xml:space="preserve">
     <value>重试</value>
   </data>
+  <data name="HomeRecommendationFeedSource" xml:space="preserve">
+    <value>首页推荐流来源</value>
+  </data>
+  <data name="HomeRecommendationFeedSourceDescription" xml:space="preserve">
+    <value>返回首页推荐时自动从头刷新；未登录时使用匿名推荐。</value>
+  </data>
+  <data name="RecommendationFeedWeb" xml:space="preserve">
+    <value>网页版</value>
+  </data>
+  <data name="RecommendationFeedApp" xml:space="preserve">
+    <value>手机 App</value>
+  </data>
 </root>

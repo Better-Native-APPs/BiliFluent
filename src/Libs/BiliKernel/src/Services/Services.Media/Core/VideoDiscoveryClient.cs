@@ -171,7 +171,15 @@ internal sealed class VideoDiscoveryClient
             : (IReadOnlyList<VideoInformation>)responseObj.Data.Items.Select(p => p.ToVideoInformation()).ToList().AsReadOnly();
     }
 
-    public async Task<(IReadOnlyList<VideoInformation> Videos, long Offset)> GetRecommendVideoListAsync(long offset, CancellationToken cancellationToken)
+    public Task<(IReadOnlyList<VideoInformation> Videos, long Offset)> GetRecommendVideoListAsync(RecommendationFeedSource source, long offset, CancellationToken cancellationToken)
+        => source switch
+        {
+            RecommendationFeedSource.App => GetAppRecommendVideoListAsync(offset, cancellationToken),
+            RecommendationFeedSource.Web => GetWebRecommendVideoListAsync(offset, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
+        };
+
+    private async Task<(IReadOnlyList<VideoInformation> Videos, long Offset)> GetAppRecommendVideoListAsync(long offset, CancellationToken cancellationToken)
     {
         var parameters = new Dictionary<string, string>
         {
@@ -183,15 +191,42 @@ internal sealed class VideoDiscoveryClient
         };
 
         var request = BiliHttpClient.CreateRequest(System.Net.Http.HttpMethod.Get, new Uri(BiliApis.Home.Recommend));
-        _authenticator.AuthorizeRestRequest(request, parameters);
+        // The App feed accepts an absent access_key; use an existing token when available.
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { RequireToken = false });
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObject = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseRecommendVideoResponse).ConfigureAwait(false);
-        var nextOffset = responseObject.Data.Items.Last().Idx;
-        var videos = responseObject.Data.Items.Where(p => p.CardGoto is "av")
-            .Select(p => p.ToVideoInformation()).ToList().AsReadOnly();
-        return videos.Count == 0
-            ? throw new KernelException("推荐视频数据为空")
-            : ((IReadOnlyList<VideoInformation> Videos, long Offset))(videos, nextOffset);
+        return responseObject.Data.ToRecommendationPage(offset);
+    }
+
+    private async Task<(IReadOnlyList<VideoInformation> Videos, long Offset)> GetWebRecommendVideoListAsync(long offset, CancellationToken cancellationToken)
+    {
+        var page = (offset + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var parameters = new Dictionary<string, string>
+        {
+            { "version", "1" },
+            { "feed_version", "V8" },
+            { "homepage_ver", "1" },
+            { "ps", "20" },
+            { "fresh_idx", page },
+            { "fresh_idx_1h", page },
+            { "brush", page },
+            { "fresh_type", "4" },
+            { "web_location", "1430650" },
+        };
+
+        await _authenticator.InitializeWbiAsync(cancellationToken).ConfigureAwait(false);
+        var request = BiliHttpClient.CreateRequest(System.Net.Http.HttpMethod.Get, new Uri(BiliApis.Home.WebRecommend));
+        // RequireCookie only attaches existing cookies; the anonymous web feed remains usable.
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.Web,
+            ForceNoToken = true,
+            RequireCookie = true,
+            NeedRID = true,
+        });
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var responseObject = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseWebRecommendVideoResponse).ConfigureAwait(false);
+        return responseObject.Data.ToRecommendationPage(offset);
     }
 
     public async Task<(IReadOnlyList<VideoInformation> Videos, long Offset)> GetHotVideoListAsync(long offset, CancellationToken cancellationToken)

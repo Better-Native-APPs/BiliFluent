@@ -5,6 +5,7 @@ using BiliCopilot.UI.ViewModels.Components;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Media;
+using Richasy.BiliKernel.Models.Media;
 using System.Collections.ObjectModel;
 
 namespace BiliCopilot.UI.ViewModels.View;
@@ -20,7 +21,8 @@ public sealed partial class PopularPageViewModel
     private readonly Dictionary<IPopularSectionItemViewModel, (List<VideoItemViewModel> Videos, long Offset)> _videoCache = new();
     private readonly HashSet<string> _videoIds = new(StringComparer.Ordinal);
 
-    private long _recommendOffset;
+    private readonly Dictionary<RecommendationFeedSource, long> _recommendOffsets = new();
+    private RecommendationFeedSource _recommendSource;
     private long _hotOffset;
     private readonly AccountViewModel _account;
     private long _cacheAccountGeneration;

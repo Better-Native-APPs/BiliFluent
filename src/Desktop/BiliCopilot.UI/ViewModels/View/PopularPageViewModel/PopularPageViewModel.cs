@@ -10,6 +10,7 @@ using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Media;
+using Richasy.BiliKernel.Models.Media;
 
 namespace BiliCopilot.UI.ViewModels.View;
 
@@ -29,6 +30,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
         _logger = logger;
         _account = this.Get<AccountViewModel>();
         _cacheAccountGeneration = _account.AccountGeneration;
+        _recommendSource = ReadRecommendSource();
     }
 
     /// <inheritdoc/>
@@ -40,6 +42,13 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
         if (Sections.Count > 0)
         {
             if (_cacheAccountGeneration != _account.AccountGeneration) await RefreshVideoAsync();
+            else if (_recommendSource != ReadRecommendSource())
+            {
+                if (SelectedSection is PopularSectionItemViewModel { Type: PopularSectionType.Recommend })
+                    await RefreshVideoAsync();
+                else
+                    ResetRecommendSourceIfNeeded();
+            }
             return;
         }
 
@@ -82,7 +91,9 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
             return;
         }
 
-        if (_cacheAccountGeneration == _account.AccountGeneration && _displayedSection is not null && Videos.Count > 0)
+        if (_cacheAccountGeneration == _account.AccountGeneration && _displayedSection is not null && Videos.Count > 0
+            && (_displayedSection is not PopularSectionItemViewModel { Type: PopularSectionType.Recommend }
+                || _recommendSource == ReadRecommendSource()))
         {
             CacheVideos(_displayedSection);
         }
@@ -109,13 +120,14 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 #pragma warning restore VSTHRD003
             if (generation != _videoGeneration) return;
             ResetAccountCacheIfNeeded();
+            ResetRecommendSourceIfNeeded();
             _videoIds.Clear();
             Videos.Clear();
             _displayedSection = vm;
             HasAppendError = false;
             IsPrefetchExhausted = false;
             var hasCache = _videoCache.TryGetValue(vm, out var cache);
-            if (vm is PopularSectionItemViewModel { Type: PopularSectionType.Recommend }) _recommendOffset = cache.Offset;
+            if (vm is PopularSectionItemViewModel { Type: PopularSectionType.Recommend }) _recommendOffsets[_recommendSource] = cache.Offset;
             else if (vm is PopularSectionItemViewModel { Type: PopularSectionType.Hot }) _hotOffset = cache.Offset;
             if (hasCache)
             {
@@ -143,6 +155,11 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
     {
         if (IsVideoLoading || _isSelectingSection || _isRefreshing || SelectedSection is null) return Task.CompletedTask;
         if (_cacheAccountGeneration != _account.AccountGeneration) return RefreshVideoAsync();
+        if (_recommendSource != ReadRecommendSource())
+        {
+            if (SelectedSection is PopularSectionItemViewModel { Type: PopularSectionType.Recommend }) return RefreshVideoAsync();
+            ResetRecommendSourceIfNeeded();
+        }
         if (!ReferenceEquals(SelectedSection, _displayedSection)) return Task.CompletedTask;
         if (Videos.Count > 0 && (SelectedSection is PopularRankPartitionViewModel
             || SelectedSection is PopularSectionItemViewModel { Type: PopularSectionType.Rank })) return Task.CompletedTask;
@@ -204,6 +221,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 #pragma warning restore VSTHRD003
             if (generation != _videoGeneration) return;
             ResetAccountCacheIfNeeded();
+            ResetRecommendSourceIfNeeded();
             _videoIds.Clear();
             Videos.Clear();
             _videoCache.Remove(SelectedSection);
@@ -212,7 +230,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
             IsPrefetchExhausted = false;
             if (SelectedSection is PopularSectionItemViewModel section)
             {
-                if (section.Type == PopularSectionType.Recommend) _recommendOffset = 0;
+                if (section.Type == PopularSectionType.Recommend) _recommendOffsets[_recommendSource] = 0;
                 else if (section.Type == PopularSectionType.Hot) _hotOffset = 0;
             }
         }
@@ -234,7 +252,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
 
         var offset = section switch
         {
-            PopularSectionItemViewModel { Type: PopularSectionType.Recommend } => _recommendOffset,
+            PopularSectionItemViewModel { Type: PopularSectionType.Recommend } => _recommendOffsets.GetValueOrDefault(_recommendSource),
             PopularSectionItemViewModel { Type: PopularSectionType.Hot } => _hotOffset,
             _ => 0L,
         };
@@ -247,9 +265,24 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
         _videoCache.Clear();
         _videoIds.Clear();
         Videos.Clear();
-        _recommendOffset = 0;
+        _recommendOffsets.Clear();
         _hotOffset = 0;
         _cacheAccountGeneration = _account.AccountGeneration;
+    }
+
+    private static RecommendationFeedSource ReadRecommendSource()
+        => SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.App);
+
+    private void ResetRecommendSourceIfNeeded()
+    {
+        var source = ReadRecommendSource();
+        if (source == _recommendSource) return;
+
+        _recommendSource = source;
+        _recommendOffsets[source] = 0;
+        // A cached recommendation list is valid only for the source that produced it.
+        foreach (var section in Sections.OfType<PopularSectionItemViewModel>().Where(p => p.Type == PopularSectionType.Recommend))
+            _videoCache.Remove(section);
     }
 
     [RelayCommand]

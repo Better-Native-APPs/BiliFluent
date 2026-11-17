@@ -150,4 +150,5 @@ public enum SettingNames
     PlaybackStutterDiagnosticsEnabled = 144,
     DisableMpvCurlForDiagnostics = 145,
     UseDisplaySyncForDiagnostics = 146,
+    HomeRecommendationFeedSource = 147,
 }

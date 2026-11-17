@@ -412,6 +412,11 @@ public static class BiliApis
         public const string Recommend = _appBase + "/x/v2/feed/index";
 
         /// <summary>
+        /// Home recommendations from the WBI-signed web feed.
+        /// </summary>
+        public const string WebRecommend = _apiBase + "/x/web-interface/wbi/index/top/feed/rcmd";
+
+        /// <summary>
         /// 精选视频.
         /// </summary>
         public const string CuratedPlaylist = _apiBase + "/x/web-interface/index/top/feed/rcmd";
