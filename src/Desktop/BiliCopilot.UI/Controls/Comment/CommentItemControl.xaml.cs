@@ -62,6 +62,10 @@ public sealed partial class CommentItemControl : CommentItemControlBase
         get => (ContentSurface)GetValue(SponsorSurfaceProperty);
         set => SetValue(SponsorSurfaceProperty, value);
     }
+
+    // Fetch the poll each time it is opened, so the counts and the user's own vote are current.
+    private void OnVoteFlyoutOpening(object sender, object e)
+        => ViewModel?.Vote?.LoadCommand.Execute(default);
 }
 
 /// <summary>

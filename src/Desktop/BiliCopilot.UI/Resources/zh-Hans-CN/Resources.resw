@@ -2202,4 +2202,67 @@
   <data name="LivePlaybackTransitionIncomplete" xml:space="preserve">
     <value>直播或播放切换未完成；如关闭失败，请稍后再次打开重试。</value>
   </data>
+  <data name="CommentVoteLabel" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommentVoteEntryNameTemplate" xml:space="preserve">
+    <value>投票：{0}</value>
+  </data>
+  <data name="CommentVoteEntryNameWithCountTemplate" xml:space="preserve">
+    <value>投票：{0}，{1} 人参与</value>
+  </data>
+  <data name="CommentVoteParticipantsTemplate" xml:space="preserve">
+    <value>{0} 人参与</value>
+  </data>
+  <data name="CommentVoteSingleChoice" xml:space="preserve">
+    <value>单选</value>
+  </data>
+  <data name="CommentVoteMultiChoiceTemplate" xml:space="preserve">
+    <value>最多选 {0} 项</value>
+  </data>
+  <data name="CommentVoteRemainingTemplate" xml:space="preserve">
+    <value>还可以选 {0} 项</value>
+  </data>
+  <data name="CommentVoteLimitReachedTemplate" xml:space="preserve">
+    <value>已选满 {0} 项</value>
+  </data>
+  <data name="CommentVoteDeadlineTemplate" xml:space="preserve">
+    <value>{0} 截止</value>
+  </data>
+  <data name="CommentVoteEnded" xml:space="preserve">
+    <value>已结束</value>
+  </data>
+  <data name="CommentVoteSubmit" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommentVoteAnonymous" xml:space="preserve">
+    <value>匿名投票</value>
+  </data>
+  <data name="CommentVoteLoading" xml:space="preserve">
+    <value>正在加载投票…</value>
+  </data>
+  <data name="CommentVoteLoadFailed" xml:space="preserve">
+    <value>投票没有加载出来</value>
+  </data>
+  <data name="CommentVoteUnavailable" xml:space="preserve">
+    <value>这个投票已被删除，或者暂时无法查看</value>
+  </data>
+  <data name="CommentVoteDone" xml:space="preserve">
+    <value>已投票</value>
+  </data>
+  <data name="CommentVoteOwn" xml:space="preserve">
+    <value>这是你发起的投票</value>
+  </data>
+  <data name="CommentVoteSupporterOnly" xml:space="preserve">
+    <value>充电专属投票，给 UP 主充电后才能参与</value>
+  </data>
+  <data name="CommentVoteFailedReasonTemplate" xml:space="preserve">
+    <value>投票没有成功：{0}</value>
+  </data>
+  <data name="CommentVoteOptionsName" xml:space="preserve">
+    <value>投票选项</value>
+  </data>
+  <data name="CommentVoteRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
 </root>

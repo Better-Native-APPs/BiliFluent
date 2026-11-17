@@ -53,4 +53,30 @@ public interface ICommentService
         string rootId,
         string parentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 获取投票详情（评论里的投票）. 已登录时会带上“我投了哪些”.
+    /// </summary>
+    /// <param name="voteId">投票 Id.</param>
+    /// <param name="cancellationToken">终止令牌.</param>
+    /// <returns>投票详情；投票已被删除或不可展示时返回 null.</returns>
+    Task<CommentVoteDetail?> GetVoteDetailAsync(string voteId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 提交投票.
+    /// </summary>
+    /// <param name="vote">要投的投票（来自 <see cref="GetVoteDetailAsync"/>）.</param>
+    /// <param name="optionIndexes">选中的选项序号（<see cref="CommentVoteOption.Index"/>）.</param>
+    /// <param name="voterId">当前登录用户的 Id.</param>
+    /// <param name="anonymous">是否匿名投票.</param>
+    /// <param name="cancellationToken">终止令牌.</param>
+    /// <returns>投票后的最新详情.</returns>
+    /// <exception cref="UnauthorizedAccessException">未登录.</exception>
+    /// <exception cref="CommentVoteRejectedException">服务端拒绝了这次投票.</exception>
+    Task<CommentVoteDetail> SubmitVoteAsync(
+        CommentVoteDetail vote,
+        IReadOnlyList<int> optionIndexes,
+        string voterId,
+        bool anonymous = false,
+        CancellationToken cancellationToken = default);
 }

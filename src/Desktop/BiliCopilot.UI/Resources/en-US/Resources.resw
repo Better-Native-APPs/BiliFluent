@@ -534,4 +534,67 @@
   <data name="LivePlaybackTransitionIncomplete" xml:space="preserve">
     <value>Playback or switching did not complete. If closing failed, try opening it again shortly.</value>
   </data>
+  <data name="CommentVoteLabel" xml:space="preserve">
+    <value>Poll</value>
+  </data>
+  <data name="CommentVoteEntryNameTemplate" xml:space="preserve">
+    <value>Poll: {0}</value>
+  </data>
+  <data name="CommentVoteEntryNameWithCountTemplate" xml:space="preserve">
+    <value>Poll: {0}, {1} voted</value>
+  </data>
+  <data name="CommentVoteParticipantsTemplate" xml:space="preserve">
+    <value>{0} voted</value>
+  </data>
+  <data name="CommentVoteSingleChoice" xml:space="preserve">
+    <value>Choose one</value>
+  </data>
+  <data name="CommentVoteMultiChoiceTemplate" xml:space="preserve">
+    <value>Choose up to {0}</value>
+  </data>
+  <data name="CommentVoteRemainingTemplate" xml:space="preserve">
+    <value>You can choose {0} more</value>
+  </data>
+  <data name="CommentVoteLimitReachedTemplate" xml:space="preserve">
+    <value>You've chosen all {0}</value>
+  </data>
+  <data name="CommentVoteDeadlineTemplate" xml:space="preserve">
+    <value>Ends {0}</value>
+  </data>
+  <data name="CommentVoteEnded" xml:space="preserve">
+    <value>Ended</value>
+  </data>
+  <data name="CommentVoteSubmit" xml:space="preserve">
+    <value>Vote</value>
+  </data>
+  <data name="CommentVoteAnonymous" xml:space="preserve">
+    <value>Vote anonymously</value>
+  </data>
+  <data name="CommentVoteLoading" xml:space="preserve">
+    <value>Loading poll…</value>
+  </data>
+  <data name="CommentVoteLoadFailed" xml:space="preserve">
+    <value>Couldn't load this poll</value>
+  </data>
+  <data name="CommentVoteUnavailable" xml:space="preserve">
+    <value>This poll was deleted or can't be shown</value>
+  </data>
+  <data name="CommentVoteDone" xml:space="preserve">
+    <value>Your vote is in</value>
+  </data>
+  <data name="CommentVoteOwn" xml:space="preserve">
+    <value>You started this poll</value>
+  </data>
+  <data name="CommentVoteSupporterOnly" xml:space="preserve">
+    <value>Only this creator's paid supporters can vote</value>
+  </data>
+  <data name="CommentVoteFailedReasonTemplate" xml:space="preserve">
+    <value>Couldn't send your vote: {0}</value>
+  </data>
+  <data name="CommentVoteOptionsName" xml:space="preserve">
+    <value>Poll options</value>
+  </data>
+  <data name="CommentVoteRetry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
 </root>

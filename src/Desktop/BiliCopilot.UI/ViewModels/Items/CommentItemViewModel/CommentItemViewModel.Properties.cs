@@ -66,4 +66,14 @@ public sealed partial class CommentItemViewModel
     /// 内容.
     /// </summary>
     public EmoteText Content { get; init; }
+
+    /// <summary>
+    /// 评论附带的投票，没有时为 null.
+    /// </summary>
+    public CommentVoteViewModel? Vote { get; init; }
+
+    /// <summary>
+    /// 评论是否附带投票.
+    /// </summary>
+    public bool HasVote => Vote is not null;
 }
