@@ -1015,7 +1015,9 @@ public sealed partial class PlayerViewModel
         double? DownloadRate,
         double? VideoCacheSeconds,
         double? AudioCacheSeconds,
-        int Switches)
+        int Switches,
+        double AdaptiveEstimate = 0,
+        string AdaptiveMode = "manual")
     {
         public static NetworkDiagnostics Empty { get; } = new(CdnHost.NoCategory, CdnHost.NoCategory, null, 0, 0, 0, 0, 0, null, null, null, 0);
     }

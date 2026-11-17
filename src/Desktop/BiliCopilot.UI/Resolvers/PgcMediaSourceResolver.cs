@@ -94,7 +94,10 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         lock (InitializationSync) return AdaptiveQualitySelection.BuildCandidates(GetPlayableFormats(), GetVideoSegment);
     }
 
-    AdaptiveQualityDecision? IAdaptiveQualityResolver.AdaptiveStartDecision => _adaptiveStartDecision;
+    AdaptiveQualityDecision? IAdaptiveQualityResolver.AdaptiveStartDecision
+    {
+        get { lock (InitializationSync) return _adaptiveStartDecision; }
+    }
 
     /// <summary>
     /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
@@ -263,6 +266,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             var decision = policy.SelectStart(TimeSpan.FromMilliseconds(Environment.TickCount64), candidates, aSeg?.Bandwidth ?? 0,
                 SettingsToolkit.ReadLocalSetting(SettingNames.PlayerSpeed, 1d));
             _adaptiveStartDecision = decision with { FromQuality = PlayingSelection?.Format.Quality ?? 0 };
+            AdaptiveQualityDiagnostics.LogDecision(logger, _adaptiveStartDecision.Value);
             selectedFormat = AdaptiveQualitySelection.PickStartFormat(formats, decision);
         }
 

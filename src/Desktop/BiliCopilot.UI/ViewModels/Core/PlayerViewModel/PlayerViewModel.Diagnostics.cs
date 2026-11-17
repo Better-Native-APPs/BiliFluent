@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
@@ -473,7 +474,7 @@ public sealed partial class PlayerViewModel
                     if (_logger.IsEnabled(LogLevel.Information))
                     {
                         _logger.LogInformation(
-                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs} frame-gap-max-ms={FrameGapMaxMs} frame-gap-over2x={FrameGapOverTwice} frame-probe-polls={FrameProbePolls} frame-probe-read-ms={FrameProbeReadMs} cdn={Cdn} qn={Quality} v-kbps={VideoKbps} a-kbps={AudioKbps} raw-input-rate={RawInputRate} fw-bytes-delta={ForwardBytesDelta} cdn-switches={CdnSwitches} fw-cache-secs={ForwardCacheSecs} dl-kbps={DownloadKbps} need-kbps={RequiredKbps} audio-pts={AudioPts} a-cache-secs={AudioCacheSecs} v-cache-secs={VideoCacheSecs} audio-advancing={AudioAdvancing} since-resume-secs={SinceResumeSecs}",
+                            "PlaybackStutter | sample interval-ms={IntervalMs} frame-drop-count-delta={FrameDropDelta} vo-delayed-frame-count-delta={VoDelayedDelta} mistimed-frame-count-delta={MistimedDelta} decoder-frame-drop-count-delta={DecoderDropDelta} paused-for-cache={PausedForCache} cache-buffering-state={BufferingState} demuxer-cache-duration={CacheDuration} hwdec-current={Hwdec} current-vo={Vo} time-pos-notifications={TimePosNotifications} ui-heartbeat-max-ms={HeartbeatMaxMs} gc0-delta={Gen0Delta} gc1-delta={Gen1Delta} gc2-delta={Gen2Delta} gc-pause-ms={GcPauseMs} alloc-mb={AllocatedMb} ui-posts={UiPosts} renderer={Renderer} danmaku={Danmaku} display-fps={DisplayFps} container-fps={ContainerFps} estimated-vf-fps={FilterFps} estimated-display-fps={EstimatedDisplayFps} video-sync={VideoSync} avsync-ms={AvsyncMs} total-avsync-change-delta-ms={AvsyncChangeDeltaMs} vsync-jitter={VsyncJitter} vsync-ratio={VsyncRatio} vo-fresh-peak-ms={FreshPeakMs} vo-fresh-avg-ms={FreshAverageMs} frame-gap-max-ms={FrameGapMaxMs} frame-gap-over2x={FrameGapOverTwice} frame-probe-polls={FrameProbePolls} frame-probe-read-ms={FrameProbeReadMs} cdn={Cdn} qn={Quality} v-kbps={VideoKbps} a-kbps={AudioKbps} raw-input-rate={RawInputRate} fw-bytes-delta={ForwardBytesDelta} cdn-switches={CdnSwitches} fw-cache-secs={ForwardCacheSecs} dl-kbps={DownloadKbps} need-kbps={RequiredKbps} audio-pts={AudioPts} a-cache-secs={AudioCacheSecs} v-cache-secs={VideoCacheSecs} audio-advancing={AudioAdvancing} since-resume-secs={SinceResumeSecs} abr-est-kbps={AbrEstimateKbps} abr-mode={AbrMode}",
                             intervalText, frameDropDelta, voDelayedDelta, mistimedDelta, decoderDropDelta,
                             pausedForCache, bufferingState, cacheDuration, hwdec, vo, notificationDelta, heartbeatText,
                             gen0Delta, gen1Delta, gen2Delta, gcPauseText, allocatedText, uiPostDelta, renderer, danmaku,
@@ -482,7 +483,8 @@ public sealed partial class PlayerViewModel
                             frameGapMaximum, frameGapOverTwice, probePolls, probeRead,
                             cdn, quality, videoKbps, audioKbps, rawInputRate, forwardBytesDelta, cdnSwitches,
                             cacheDuration, downloadKbps, requiredKbps, audioPositionText, audioCache, videoCache,
-                            audioAdvancing, sinceResume);
+                            audioAdvancing, sinceResume,
+                            FormatNumber(network.AdaptiveEstimate / AdaptiveQualityThresholds.BitsPerKilobit, "0"), network.AdaptiveMode);
                     }
 
                     previousForwardBytes = network.ForwardBytes;
