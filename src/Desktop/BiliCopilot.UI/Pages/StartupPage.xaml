@@ -210,10 +210,15 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition />
                                         </Grid.ColumnDefinitions>
+                                        <!--
+                                            Closed, the box shows a flag and the dialing code and is as wide as the longest
+                                            code needs. The list adds the name; it is wider than the box.
+                                        -->
                                         <ComboBox
                                             x:Name="CountryBox"
-                                            Width="148"
+                                            Width="124"
                                             AutomationProperties.Name="{ext:Locale Name=SignInCountryName}"
+                                            CharacterReceived="OnCountryCharacterReceived"
                                             DropDownOpened="OnCountryBoxDropDownOpened"
                                             IsEnabled="{x:Bind ViewModel.CanSelectCountry, Mode=OneWay}"
                                             ItemsSource="{x:Bind ViewModel.Countries}"
@@ -222,17 +227,64 @@
                                             SelectionChanged="OnCountryBoxSelectionChanged">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate x:DataType="viewmodels:StartupCountryItem">
-                                                    <Grid ColumnSpacing="8">
+                                                    <!--  One template serves the list and the closed box; OnCountryEntryLoaded shows the part that fits.  -->
+                                                    <Grid Loaded="OnCountryEntryLoaded">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBlock Text="{x:Bind DialingCode}" />
+                                                        <Grid
+                                                            Width="20"
+                                                            Height="15"
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            CornerRadius="2">
+                                                            <Image
+                                                                Source="{x:Bind Flag}"
+                                                                Stretch="Fill"
+                                                                Visibility="{x:Bind HasFlag}" />
+                                                            <!--  A hairline keeps a flag with a white edge apart from the background.  -->
+                                                            <Border
+                                                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="2"
+                                                                Visibility="{x:Bind HasFlag}" />
+                                                            <ic:SymbolIcon
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
+                                                                FontSize="16"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Symbol="Globe"
+                                                                Visibility="{x:Bind IsFlagMissing}" />
+                                                        </Grid>
                                                         <TextBlock
+                                                            x:Name="CountryEntryCode"
                                                             Grid.Column="1"
-                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                            Text="{x:Bind Name}"
-                                                            TextTrimming="CharacterEllipsis" />
+                                                            Margin="8,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Text="{x:Bind DialingCode}" />
+                                                        <Grid
+                                                            x:Name="CountryEntryDetail"
+                                                            Grid.Column="2"
+                                                            Width="216"
+                                                            Margin="10,0,0,0"
+                                                            ColumnSpacing="12"
+                                                            Visibility="Collapsed">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock
+                                                                VerticalAlignment="Center"
+                                                                Text="{x:Bind Name}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Text="{x:Bind DialingCode}" />
+                                                        </Grid>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>

@@ -6,6 +6,7 @@ using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Richasy.BiliKernel.Models.Authorization;
 using Richasy.WinUIKernel.Share.Base;
 using Windows.System;
@@ -26,8 +27,14 @@ public sealed partial class StartupPage : StartupPageBase
     // and the footer (69), rounded up.
     private const double RegularMinHeight = 506;
 
+    // Digits typed on the country list within this time of each other are read as one dialing code.
+    private const long CountrySearchTimeout = 1000;
+
     // In the single-column layout the QR code takes the place of the form while this is set.
     private bool _isQRViewOpen;
+
+    private string _countrySearch = string.Empty;
+    private long _countrySearchTime;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StartupPage"/> class.
@@ -198,6 +205,73 @@ public sealed partial class StartupPage : StartupPageBase
 
     private void OnCountryBoxDropDownOpened(object sender, object e)
         => ViewModel.LoadCountriesCommand.Execute(default);
+
+    // The box shows the same template for its closed state and for the entries of its list. Only an entry of
+    // the list sits inside a ComboBoxItem, which is how the two are told apart.
+    private void OnCountryEntryLoaded(object sender, RoutedEventArgs e)
+    {
+        var entry = (FrameworkElement)sender;
+        ComboBoxItem? container = null;
+        for (var parent = VisualTreeHelper.GetParent(entry); parent is not null && container is null; parent = VisualTreeHelper.GetParent(parent))
+        {
+            if (ReferenceEquals(parent, CountryBox))
+            {
+                break;
+            }
+
+            container = parent as ComboBoxItem;
+        }
+
+        var isInList = container is not null;
+        if (entry.FindName("CountryEntryDetail") is UIElement detail)
+        {
+            detail.Visibility = isInList ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (entry.FindName("CountryEntryCode") is UIElement code)
+        {
+            code.Visibility = isInList ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        // While the list is open the keys go to its entries, and from there they do not reach the box.
+        if (container is not null)
+        {
+            container.CharacterReceived -= OnCountryCharacterReceived;
+            container.CharacterReceived += OnCountryCharacterReceived;
+        }
+    }
+
+    // Typing the digits of a dialing code selects the first entry that has it. The box's own search goes by
+    // the text a screen reader is given, which starts with the name, so it cannot do this.
+    private void OnCountryCharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs args)
+    {
+        if (!char.IsAsciiDigit(args.Character))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        var now = Environment.TickCount64;
+        var digit = args.Character.ToString();
+        var search = now - _countrySearchTime > CountrySearchTimeout ? digit : _countrySearch + digit;
+        var match = FindCountry(search);
+        if (match is null && search.Length > 1)
+        {
+            // Not the next digit of the same code, so it starts another one.
+            search = digit;
+            match = FindCountry(search);
+        }
+
+        _countrySearch = search;
+        _countrySearchTime = now;
+        if (match is not null)
+        {
+            CountryBox.SelectedItem = match;
+        }
+    }
+
+    private StartupCountryItem? FindCountry(string dialingDigits)
+        => ViewModel.Countries.FirstOrDefault(p => p.DialingDigits.StartsWith(dialingDigits, StringComparison.Ordinal));
 
     private void OnAccountBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {

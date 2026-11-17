@@ -300,8 +300,11 @@
   <data name="SignInCountryName" xml:space="preserve">
     <value>Country or region</value>
   </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>Region</value>
+  </data>
   <data name="SignInCountryLoading" xml:space="preserve">
-    <value>Loading regions…</value>
+    <value>Loading…</value>
   </data>
   <data name="SignInCountryLoadFailed" xml:space="preserve">
     <value>Couldn't load the region list. Check your network and try again.</value>

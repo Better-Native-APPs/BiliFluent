@@ -1968,8 +1968,11 @@
   <data name="SignInCountryName" xml:space="preserve">
     <value>国家或地区</value>
   </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>地区</value>
+  </data>
   <data name="SignInCountryLoading" xml:space="preserve">
-    <value>正在加载地区…</value>
+    <value>加载中…</value>
   </data>
   <data name="SignInCountryLoadFailed" xml:space="preserve">
     <value>地区列表加载失败，请检查网络后重试</value>

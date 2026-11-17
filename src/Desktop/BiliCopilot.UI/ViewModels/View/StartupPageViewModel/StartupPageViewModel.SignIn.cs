@@ -227,7 +227,7 @@ public sealed partial class StartupPageViewModel
             {
                 _countryAttempt = null;
                 IsCountryLoading = false;
-                CountryPlaceholder = ResourceToolkit.GetLocalizedString(StringNames.SignInCountryName);
+                CountryPlaceholder = ResourceToolkit.GetLocalizedString(StringNames.SignInCountryPlaceholder);
             }
 
             attempt.Complete();
@@ -593,7 +593,7 @@ public sealed partial class StartupPageViewModel
     private void InitializeSignInForm()
     {
         _isPageActive = true;
-        CountryPlaceholder = ResourceToolkit.GetLocalizedString(StringNames.SignInCountryName);
+        CountryPlaceholder = ResourceToolkit.GetLocalizedString(StringNames.SignInCountryPlaceholder);
         UpdateCooldowns();
         if (IsSmsMode)
         {
