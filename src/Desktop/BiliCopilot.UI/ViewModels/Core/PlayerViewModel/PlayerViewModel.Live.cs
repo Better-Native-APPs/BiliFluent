@@ -682,7 +682,10 @@ public sealed partial class PlayerViewModel
             Window.CloseRequested -= OnHostCloseRequested;
             Window.PresentationChanged -= OnHostPresentationChanged;
             if (_pointerSource is not null) _pointerSource.PointerReleased -= OnWindowPointerReleased;
-            await LiveCloseStepAsync("host-dispose", () => Window.DisposeAsync().AsTask());
+            await LiveCloseStepAsync("host-dispose", async () =>
+            {
+                await Window.DisposeAsync();
+            });
         }
         this.Get<AppViewModel>().ReleasePlayer(this);
         ClearLivePlayerOwners();
