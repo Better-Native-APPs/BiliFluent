@@ -8,7 +8,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.WinUIKernel.Share.Base;
-using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Streams;
@@ -276,8 +275,9 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        var fonts = await this.Get<IFontToolkit>().GetFontsAsync();
-        if (!IsCurrentPlayback(version)) return;
+        // The shared font toolkit hands out a list it is still filling; read a private snapshot instead.
+        var fonts = await DanmakuFontCatalog.LoadAsync();
+        if (!IsCurrentPlayback(version) || Fonts.Count > 0) return;
         foreach (var item in fonts)
         {
             Fonts.Add(item);

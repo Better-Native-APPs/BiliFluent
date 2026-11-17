@@ -770,16 +770,6 @@
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                         Symbol="BranchFork" />
                 </Button>
-                <Button
-                    BorderThickness="1"
-                    Click="OnBiliButtonClickAsync"
-                    Style="{StaticResource IconButtonStyle}"
-                    ToolTipService.ToolTip="{ext:Locale Name=BiliHomePage}">
-                    <ic:SymbolIcon
-                        FontSize="14"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                        Symbol="Tv" />
-                </Button>
             </StackPanel>
             <HyperlinkButton
                 Grid.Column="2"
