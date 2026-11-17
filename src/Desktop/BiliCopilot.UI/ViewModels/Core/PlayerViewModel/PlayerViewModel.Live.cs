@@ -6,6 +6,7 @@ using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
+using BiliCopilot.UI.SponsorBlock.Rules;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -642,6 +643,11 @@ public sealed partial class PlayerViewModel
     {
         await _liveCloseRelease.ReleaseAsync(
             () => LiveCloseStepAsync("host-prepare", () => Window is MainPlayerHost host ? host.PrepareForCloseAsync() : Task.CompletedTask),
+            () => LiveCloseStepAsync("sponsor-binding-retire", () =>
+            {
+                RetireSponsorBinding(RetirementReason.Closing);
+                return Task.CompletedTask;
+            }),
             () => LiveCloseStepAsync("player-work-drain", DrainPlayerWorkAsync),
             () => LiveCloseStepAsync("sponsor-cleanup", AwaitSponsorApplicationCleanupAsync),
             () => LiveCloseStepAsync("danmaku-renderers", ReleaseLiveRenderersAsync),

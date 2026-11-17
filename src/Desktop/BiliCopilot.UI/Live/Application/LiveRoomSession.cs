@@ -175,7 +175,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
         try { actual = _chat.SendManuallyAsync(binding, text, linked.Token); }
         catch { actual = Task.FromResult(new LiveSendResult(binding, LiveSendOutcome.Unknown, null, "Message delivery is unknown. Do not resend automatically.")); }
         var completion = FinishSendAsync(scope, binding, actual, linked);
-        scope.Send = Observe(completion, "room-send");
+        scope.Send = Observe(completion, "room-send", shutdown: scope.Token);
         Notify();
         return completion;
     }
@@ -262,7 +262,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
             _cancelShutdown = _shutdown.CancelAsync();
             if (!_tryEnqueue(() => _ = CompleteCloseAsync(completion)))
             {
-                _ = Observe(_cancelShutdown, "room-cancel-shutdown");
+                _ = Observe(_cancelShutdown, "room-cancel-shutdown", shutdown: _shutdown.Token);
                 completion.TrySetException(new InvalidOperationException("Live room dispatcher is unavailable; owned resources are retained."));
             }
             return _close;
@@ -276,7 +276,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
             await CloseStepAsync("room-request-close", () => { RequestClose(); return Task.CompletedTask; });
             // Cancellation callbacks only request/observe close, never wait on this consumer.
             #pragma warning disable VSTHRD003
-            await Observe(_cancelShutdown, "room-cancel-shutdown", closeStep: true);
+            await Observe(_cancelShutdown, "room-cancel-shutdown", closeStep: true, shutdown: _shutdown.Token);
             #pragma warning restore VSTHRD003
             var scopes = _ownedScopes.ToArray();
             foreach (var scope in scopes)
@@ -286,7 +286,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
                 await DrainScopeAsync(scope);
                 // A retained StopAsync may still own an actual disconnect; its failure cannot be overwritten by a no-op.
                 #pragma warning disable VSTHRD003
-                if (scope.Stop is not null) await Observe(scope.Stop, "room-generation-stop", closeStep: true);
+                if (scope.Stop is not null) await Observe(scope.Stop, "room-generation-stop", closeStep: true, shutdown: scope.Token);
                 #pragma warning restore VSTHRD003
             }
             try { await CloseStepAsync("room-chat-dispose", () => _chat.DisposeAsync().AsTask()); }
@@ -318,9 +318,9 @@ public sealed class LiveRoomSession : ILiveRoomSession
     {
         // These tasks were published by their producers before drain; cancellation is not their completion.
         #pragma warning disable VSTHRD003
-        await Observe(scope.Cancellation, "room-generation-cancel", closeStep: true);
-        if (scope.Connect is not null) await Observe(scope.Connect, "room-generation-connect", closeStep: true);
-        await Observe(scope.Send, "room-generation-send", closeStep: true);
+        await Observe(scope.Cancellation, "room-generation-cancel", closeStep: true, shutdown: scope.Token);
+        if (scope.Connect is not null) await Observe(scope.Connect, "room-generation-connect", closeStep: true, shutdown: scope.Token);
+        await Observe(scope.Send, "room-generation-send", closeStep: true, shutdown: scope.Token);
         #pragma warning restore VSTHRD003
     }
 
@@ -502,7 +502,7 @@ public sealed class LiveRoomSession : ILiveRoomSession
         foreach (PropertyChangedEventHandler handler in handlers.GetInvocationList())
             try { handler(this, new PropertyChangedEventArgs(string.Empty)); } catch { RecordFailure("PropertySubscriber"); }
     }
-    private async Task Observe(Task task, string name, bool closeStep = false)
+    private async Task Observe(Task task, string name, bool closeStep = false, CancellationToken shutdown = default)
     {
         var startedAt = Stopwatch.GetTimestamp();
         Exception? failure = null;
@@ -513,12 +513,15 @@ public sealed class LiveRoomSession : ILiveRoomSession
             await task;
             #pragma warning restore VSTHRD003
         }
-        catch (OperationCanceledException error) { failure = error; }
+        catch (OperationCanceledException error)
+        {
+            if (!LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested)) failure = error;
+        }
         catch (Exception error)
         {
-            failure = error;
-            RecordFailure("OwnedTaskFault");
-            try { if (_chat is ILiveChatDiagnosticSink diagnostics) diagnostics.ReportOwnedTaskFault(name, error); }
+            var stopped = LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested);
+            if (!stopped) { failure = error; RecordFailure("OwnedTaskFault"); }
+            try { if (_chat is ILiveChatDiagnosticSink diagnostics) diagnostics.ReportOwnedTaskFault(name, error, stopped); }
             catch { }
         }
         finally { if (closeStep) ReportCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }

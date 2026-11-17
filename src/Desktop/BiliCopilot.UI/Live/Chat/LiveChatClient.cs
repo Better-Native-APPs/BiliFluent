@@ -317,16 +317,16 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
                 {
                     using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                     attempt.Closer = CloseOutputAsync(attempt, closeDeadline.Token);
-                    await ObserveAsync(attempt.Closer, "chat-close-output", LiveFailureCategory.CloseHandshake).ConfigureAwait(false);
+                    await ObserveAsync(attempt.Closer, "chat-close-output", LiveFailureCategory.CloseHandshake, attempt.Stop.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception) { RecordFailure(LiveFailureCategory.CloseHandshake); }
             try { attempt.Socket.Abort(); }
             catch (Exception) { RecordFailure(LiveFailureCategory.SocketAbort); }
-            await ObserveAsync(attempt.Connector, "chat-connect").ConfigureAwait(false);
-            await ObserveAsync(attempt.AuthWriter, "chat-auth-send").ConfigureAwait(false);
-            await ObserveAsync(attempt.Receiver, "chat-receive").ConfigureAwait(false);
-            await ObserveAsync(attempt.Heartbeat, "chat-heartbeat").ConfigureAwait(false);
+            await ObserveAsync(attempt.Connector, "chat-connect", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.AuthWriter, "chat-auth-send", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Receiver, "chat-receive", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Heartbeat, "chat-heartbeat", shutdown: attempt.Stop.Token).ConfigureAwait(false);
             try
             {
                 await CloseStepAsync("chat-socket-dispose", () =>
@@ -432,7 +432,9 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         }
         catch (Exception exception)
         {
-            ReportOwnedTaskFault("chat-receive", exception);
+            var stopped = LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested);
+            ReportOwnedTaskFault("chat-receive", exception, stopped);
+            if (stopped) throw new OperationCanceledException(attempt.Stop.Token);
             var failure = Classify(exception);
             attempt.Auth.TrySetException(failure);
             throw failure;
@@ -455,7 +457,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         }
         catch (Exception exception)
         {
-            ReportOwnedTaskFault("chat-heartbeat", exception);
+            ReportOwnedTaskFault("chat-heartbeat", exception, LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested));
             if (!attempt.Stop.IsCancellationRequested)
             {
                 attempt.CloseReason = LiveFailureCategory.Heartbeat.ToString();
@@ -756,7 +758,8 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
         catch (ObjectDisposedException) { RecordFailure(LiveFailureCategory.CancellationAfterRelease); }
     }
 
-    private async Task ObserveAsync(Task task, string name, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault)
+    private async Task ObserveAsync(Task task, string name, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault,
+        CancellationToken shutdown = default)
     {
         try {
             // T2-09: This observer consumes already-issued owned work; it cannot be the producer of the completion it observes.
@@ -765,18 +768,24 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILi
             #pragma warning restore VSTHRD003
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception error) { RecordFailure(category); ReportOwnedTaskFault(name, error); }
+        catch (Exception error)
+        {
+            var stopped = LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested);
+            if (!stopped) RecordFailure(category);
+            ReportOwnedTaskFault(name, error, stopped);
+        }
     }
 
-    private void ReportOwnedTaskFault(string name, Exception error)
+    private void ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown = false)
         => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
         {
-            if (logger.IsEnabled(LogLevel.Warning))
-                logger.LogWarning("Live | task-fault name={Name:l} error={Error:l} inner={Inner:l}",
-                    name, error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
+            var level = expectedShutdown ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+                logger.Log(level, "Live | task-fault name={Name:l} result={Result:l} error={Error:l} inner={Inner:l}",
+                    name, expectedShutdown ? "stopped" : "failed", error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
         });
 
-    void ILiveChatDiagnosticSink.ReportOwnedTaskFault(string name, Exception error) => ReportOwnedTaskFault(name, error);
+    void ILiveChatDiagnosticSink.ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown) => ReportOwnedTaskFault(name, error, expectedShutdown);
 
     private async Task CloseStepAsync(string name, Func<Task> operation)
     {
