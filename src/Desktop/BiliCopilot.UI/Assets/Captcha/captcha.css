@@ -1,4 +1,4 @@
-/* Host page for the GeeTest challenge. The window chrome and every message are native. */
+/* Host page for the captcha. The window chrome and status messages are native. */
 :root {
     color-scheme: light;
     --page: #f3f3f3;
@@ -38,7 +38,9 @@ body {
     justify-content: center;
 }
 
-#start {
+#start,
+#image-submit,
+#image-code {
     min-width: 160px;
     padding: 6px 16px;
     border: 1px solid var(--button-border);
@@ -49,15 +51,31 @@ body {
     cursor: default;
 }
 
-#start:hover {
+#start:hover,
+#image-submit:hover {
     background: var(--button-hover);
 }
 
-#start:focus-visible {
+#start:focus-visible,
+#image-submit:focus-visible,
+#image-code:focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
 }
 
-#start[hidden] {
+#start[hidden],
+#image-form[hidden] {
     display: none;
+}
+
+#image-form {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+}
+
+#image-code {
+    box-sizing: border-box;
+    width: 200px;
+    user-select: text;
 }

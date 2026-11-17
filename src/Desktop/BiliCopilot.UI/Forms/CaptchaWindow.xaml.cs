@@ -18,7 +18,7 @@ using WinUIEx;
 namespace BiliCopilot.UI.Forms;
 
 /// <summary>
-/// A small window that shows one GeeTest challenge and hands the answer back to the sign-in form.
+/// A small window that shows one Passport captcha and hands the answer back to the sign-in form.
 /// </summary>
 /// <remarks>
 /// The view only ever loads the page shipped in <c>Assets/Captcha</c> plus the GeeTest hosts that page needs.
@@ -29,12 +29,12 @@ public sealed partial class CaptchaWindow : WindowEx
     private const string PageHost = "captcha.bilifluent.example";
     private const string PageUri = "https://" + PageHost + "/index.html";
     private const string NoticeActivity = "SignInCaptchaNotice";
-    private const int MaxMessageLength = 2048;
-    private const int MaxParameterLength = 128;
+    private const int MaxMessageLength = 16 * 1024;
     private const int MaxAnswerLength = 256;
+    private const int MaxV4OutputLength = 8 * 1024;
     private const int MaxErrorCodeLength = 32;
 
-    // GeeTest's published allow-list for its v3 web client.
+    // GeeTest V3 and V4 use these same published domain groups.
     private static readonly string[] _challengeHostSuffixes = [".geetest.com", ".geevisit.com", ".gsensebot.com"];
     private static readonly TimeSpan _loadTimeout = TimeSpan.FromSeconds(30);
     private static CaptchaWindow? _current;
@@ -167,25 +167,6 @@ public sealed partial class CaptchaWindow : WindowEx
         => Uri.TryCreate(uri, UriKind.Absolute, out var target)
             && (target.Scheme == "about" || (target.Scheme == Uri.UriSchemeHttps && IsChallengeHost(target.Host)));
 
-    private static bool IsToken(string? value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length > maxLength)
-        {
-            return false;
-        }
-
-        foreach (var ch in value)
-        {
-            // Printable ASCII without spaces; GeeTest values are hex strings with a few separators.
-            if (ch is < '!' or > '~')
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     private static bool IsErrorCode(string? value)
     {
         if (string.IsNullOrEmpty(value) || value.Length > MaxErrorCodeLength)
@@ -223,13 +204,14 @@ public sealed partial class CaptchaWindow : WindowEx
             var fields = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                if (property.Value.ValueKind != JsonValueKind.String || fields.Count >= 4)
+                if (property.Value.ValueKind != JsonValueKind.String || fields.Count >= 5)
                 {
                     return null;
                 }
 
                 var value = property.Value.GetString();
-                if (value is null || value.Length > MaxAnswerLength || !fields.TryAdd(property.Name, value))
+                var limit = property.Name == "captcha_output" ? MaxV4OutputLength : MaxAnswerLength;
+                if (value is null || value.Length > limit || !fields.TryAdd(property.Name, value))
                 {
                     return null;
                 }
@@ -307,7 +289,10 @@ public sealed partial class CaptchaWindow : WindowEx
         CaptchaView.Close();
 
         // Closing without an answer means the user backed out.
-        _completion.TrySetResult(null);
+        if (_completion.TrySetResult(null) && _logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("SignIn | CaptchaWindow: result=Canceled, branch={Branch}.", _parameters.Type);
+        }
     }
 
     private async void OnCaptchaViewLoadedAsync(object sender, RoutedEventArgs e)
@@ -320,7 +305,7 @@ public sealed partial class CaptchaWindow : WindowEx
             return;
         }
 
-        if (!IsToken(_parameters.Gt, MaxParameterLength) || !IsToken(_parameters.Challenge, MaxParameterLength))
+        if (!HasValidParameters(_parameters))
         {
             ShowError(ResourceToolkit.GetLocalizedString(StringNames.CaptchaErrorGeneric), "parameters");
             return;
@@ -416,8 +401,13 @@ public sealed partial class CaptchaWindow : WindowEx
         {
             writer.WriteStartObject();
             writer.WriteString("type", "init");
+            writer.WriteString("captchaType", _parameters.Type);
             writer.WriteString("gt", _parameters.Gt);
             writer.WriteString("challenge", _parameters.Challenge);
+            if (_parameters.Type == "img")
+            {
+                writer.WriteString("imageData", _parameters.ImageData);
+            }
             writer.WriteString("lang", ApplicationLanguages.Languages[0].StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "zh-cn" : "en");
             writer.WriteString("theme", RootGrid.ActualTheme == ElementTheme.Dark ? "dark" : "light");
             writer.WriteString("startText", ResourceToolkit.GetLocalizedString(StringNames.CaptchaStart));
@@ -425,6 +415,10 @@ public sealed partial class CaptchaWindow : WindowEx
         }
 
         core.PostWebMessageAsJson(Encoding.UTF8.GetString(stream.ToArray()));
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("SignIn | CaptchaWindow: result=Initializing, branch={Branch}.", _parameters.Type);
+        }
     }
 
     private void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
@@ -434,7 +428,7 @@ public sealed partial class CaptchaWindow : WindowEx
             return;
         }
 
-        // Anything that is not one of the four expected shapes is dropped without a reaction.
+        // Only flat, provider-specific messages from our own page can complete a challenge.
         var message = ReadMessage(args.WebMessageAsJson);
         if (message is null || !message.TryGetValue("type", out var type))
         {
@@ -454,23 +448,43 @@ public sealed partial class CaptchaWindow : WindowEx
                 if (code == "error_34")
                 {
                     // This is a GeeTest site-account lookup error, not a network diagnosis.
-                    ShowError($"{ResourceToolkit.GetLocalizedString(StringNames.SignInErrorCaptchaFailed)} ({code})", null);
+                    ShowError($"{ResourceToolkit.GetLocalizedString(StringNames.SignInErrorCaptchaFailed)} ({code})", null, code);
                 }
                 else
                 {
                     ShowError(ResourceToolkit.GetLocalizedString(StringNames.CaptchaErrorGeneric), code);
                 }
                 break;
-            case "success" when message.Count == 4 && _isChallengeShown
+            case "success" when message.Count == 4 && _isChallengeShown && _parameters.Type == "geetest"
                 && message.TryGetValue("challenge", out var challenge) && IsToken(challenge, MaxAnswerLength)
                 && message.TryGetValue("validate", out var validate) && IsToken(validate, MaxAnswerLength)
                 && message.TryGetValue("seccode", out var seccode) && IsToken(seccode, MaxAnswerLength):
-                _completion.TrySetResult(new BiliLoginCaptchaResult(_parameters.Token, challenge, validate, seccode));
-                Close();
+                CompleteCaptcha(new BiliLoginCaptchaResult(_parameters.Token, challenge, validate, seccode));
+                break;
+            case "success_v4" when message.Count == 5 && _isChallengeShown && _parameters.Type == "geetest4"
+                && message.TryGetValue("lot_number", out var lotNumber) && IsToken(lotNumber, MaxAnswerLength)
+                && message.TryGetValue("captcha_output", out var captchaOutput) && IsToken(captchaOutput, MaxV4OutputLength)
+                && message.TryGetValue("pass_token", out var passToken) && IsToken(passToken, MaxAnswerLength)
+                && message.TryGetValue("gen_time", out var genTime) && IsToken(genTime, MaxAnswerLength):
+                CompleteCaptcha(BiliLoginCaptchaResult.FromGeetest4(_parameters.Token, lotNumber, captchaOutput, passToken, genTime));
+                break;
+            case "success_img" when message.Count == 2 && _isChallengeShown && _parameters.Type == "img"
+                && message.TryGetValue("img_code", out var imageCode) && imageCode.Length == 5 && IsToken(imageCode, 5):
+                CompleteCaptcha(BiliLoginCaptchaResult.FromImage(_parameters.Token, imageCode));
                 break;
             default:
                 break;
         }
+    }
+
+    private void CompleteCaptcha(BiliLoginCaptchaResult proof)
+    {
+        _completion.TrySetResult(proof);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("SignIn | CaptchaWindow: result=Success, branch={Branch}.", _parameters.Type);
+        }
+        Close();
     }
 
     private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
@@ -482,19 +496,28 @@ public sealed partial class CaptchaWindow : WindowEx
             if (target?.Scheme is "https" or "http")
             {
                 // Queries contain challenge tickets; only the resource host and path are diagnostic.
-                _logger.LogWarning("Captcha resource blocked: {Host}{Path} ({ResourceContext}).", target.Host, target.AbsolutePath, args.ResourceContext);
+                _logger.LogWarning("SignIn | Captcha resource blocked: {Host}{Path} ({ResourceContext}).", target.Host, target.AbsolutePath, args.ResourceContext);
             }
         }
         else if (!_initialParametersChecked && _isInitSent && target is not null
-            && IsChallengeHost(target.Host) && target.AbsolutePath == "/get.php")
+            && IsChallengeHost(target.Host) && (_parameters.Type == "geetest" ? target.AbsolutePath == "/get.php"
+                : _parameters.Type == "geetest4" && target.AbsolutePath == "/load"))
         {
             _initialParametersChecked = true;
             if (_logger.IsEnabled(LogLevel.Information))
             {
-                _logger.LogInformation(
-                    "Captcha initialization parameters: gt matches issued value={GtMatches}, challenge matches issued value={ChallengeMatches}.",
-                    ReadQueryParameter(target, "gt") == _parameters.Gt,
-                    ReadQueryParameter(target, "challenge") == _parameters.Challenge);
+                if (_parameters.Type == "geetest4")
+                {
+                    _logger.LogInformation("SignIn | Captcha initialization: branch=GeetestV4, captchaIdMatches={CaptchaIdMatches}.",
+                        ReadQueryParameter(target, "captcha_id") == _parameters.Gt);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "SignIn | Captcha initialization: branch=GeetestV3, gtMatches={GtMatches}, challengeMatches={ChallengeMatches}.",
+                        ReadQueryParameter(target, "gt") == _parameters.Gt,
+                        ReadQueryParameter(target, "challenge") == _parameters.Challenge);
+                }
             }
         }
     }
@@ -586,11 +609,16 @@ public sealed partial class CaptchaWindow : WindowEx
         CaptchaView.Focus(FocusState.Programmatic);
     }
 
-    private void ShowError(string description, string? code)
+    private void ShowError(string description, string? code, string? diagnosticCode = null)
     {
         if (_isClosed)
         {
             return;
+        }
+
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("SignIn | CaptchaWindow: result=Failed, error=CaptchaWindow, code={Code}, branch={Branch}.", diagnosticCode ?? code, _parameters.Type);
         }
 
         _loadTimer.Stop();

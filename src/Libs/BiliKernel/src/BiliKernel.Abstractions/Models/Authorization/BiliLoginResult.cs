@@ -60,7 +60,7 @@ public enum BiliLoginErrorKind
     /// <summary>The server requested an unsupported security-center variant; use web login.</summary>
     UnsupportedVerification,
 
-    /// <summary>The captcha is not a supported Geetest V3 challenge; use web login.</summary>
+    /// <summary>The captcha provider is unsupported by the in-app challenge window; use web login.</summary>
     UnsupportedCaptcha,
 
     /// <summary>A response lacks the required fields or authenticated cookies; use web login.</summary>

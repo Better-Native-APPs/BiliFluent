@@ -85,7 +85,11 @@ internal static class WebLoginProtocol
     }
 
     internal static BiliLoginCaptchaResponse ParseCaptcha(JsonElement root, bool securityCenter)
+        => ParseCaptcha(root, securityCenter, out _);
+
+    internal static BiliLoginCaptchaResponse ParseCaptcha(JsonElement root, bool securityCenter, out WebCaptchaDiagnostics diagnostics)
     {
+        diagnostics = new WebCaptchaDiagnostics();
         var failure = ReadFailure(root);
         if (failure is not null)
         {
@@ -93,24 +97,86 @@ internal static class WebLoginProtocol
         }
 
         var data = GetData(root);
-        var type = GetString(data, securityCenter ? "recaptcha_type" : "type");
-        if (securityCenter && string.IsNullOrEmpty(type))
+        if (data.ValueKind == JsonValueKind.Object)
         {
-            type = "geetest";
+            if (data.TryGetProperty("recaptcha_type", out var reportedRecaptchaType))
+            {
+                diagnostics.ReportedRecaptchaType = ReadTypeName(reportedRecaptchaType);
+            }
+
+            if (data.TryGetProperty("type", out var reportedStandardType))
+            {
+                diagnostics.ReportedStandardType = ReadTypeName(reportedStandardType);
+            }
         }
-        var token = GetString(data, securityCenter ? "recaptcha_token" : "token");
-        var geetest = securityCenter ? data
+        // The official risk page only remaps the flat fields when recaptcha_type is truthy.
+        // Otherwise the endpoint already has the standard type/token/geetest envelope.
+        var flat = securityCenter && data.ValueKind == JsonValueKind.Object
+            && data.TryGetProperty("recaptcha_type", out var flatType) && IsTruthy(flatType);
+        var typeField = flat ? "recaptcha_type" : "type";
+        var type = GetString(data, typeField).Trim().ToLowerInvariant();
+        if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty(typeField, out var typeValue))
+        {
+            diagnostics.TypeValue = ReadTypeName(typeValue);
+            diagnostics.TypeShape = typeValue.ValueKind.ToString();
+        }
+        diagnostics.TypeField = typeField;
+        var token = GetString(data, flat ? "recaptcha_token" : "token");
+        var geetest = flat ? data
             : data.ValueKind == JsonValueKind.Object && data.TryGetProperty("geetest", out var gee) ? gee : default;
-        var gt = GetString(geetest, securityCenter ? "gee_gt" : "gt");
-        var challenge = GetString(geetest, securityCenter ? "gee_challenge" : "challenge");
-        if (!string.Equals(type, "geetest", StringComparison.OrdinalIgnoreCase))
+        var gt = GetString(geetest, flat ? "gee_gt" : "gt");
+        var challenge = GetString(geetest, flat ? "gee_challenge" : "challenge");
+        diagnostics.TokenPresent = !string.IsNullOrWhiteSpace(token);
+        diagnostics.GtPresent = !string.IsNullOrWhiteSpace(gt);
+        diagnostics.ChallengePresent = !string.IsNullOrWhiteSpace(challenge);
+        diagnostics.Branch = type switch
+        {
+            "geetest" => "GeetestV3",
+            "geetest4" => "GeetestV4",
+            "img" => "Image",
+            _ => "WebLogin",
+        };
+        if (diagnostics.Branch == "WebLogin")
         {
             return BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.UnsupportedCaptcha, 0));
         }
 
-        return string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(gt) || string.IsNullOrWhiteSpace(challenge)
-            ? BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.InvalidResponse, 0))
-            : BiliLoginCaptchaResponse.Succeeded(new(type, token, gt, challenge));
+        diagnostics.ParametersComplete = diagnostics.TokenPresent && (type switch
+        {
+            "geetest" => diagnostics.GtPresent && diagnostics.ChallengePresent,
+            "geetest4" => diagnostics.GtPresent,
+            _ => true,
+        });
+        return diagnostics.ParametersComplete ? BiliLoginCaptchaResponse.Succeeded(new(type, token, gt, challenge))
+            : BiliLoginCaptchaResponse.Failed(new(BiliLoginErrorKind.InvalidResponse, 0));
+    }
+
+    private static bool IsTruthy(JsonElement value)
+        => value.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrEmpty(value.GetString()),
+            JsonValueKind.False or JsonValueKind.Null or JsonValueKind.Undefined => false,
+            JsonValueKind.Number => !value.TryGetDouble(out var number) || number != 0,
+            _ => true,
+        };
+
+    private static string ReadTypeName(JsonElement value)
+    {
+        if (value.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+        {
+            var scalar = value.GetRawText();
+            return scalar.Length <= 32 ? scalar : "invalid";
+        }
+
+        var name = value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+        var normalized = name.Trim().ToLowerInvariant();
+        if (normalized is "geetest" or "geetest4" or "img")
+        {
+            return normalized;
+        }
+
+        return name.Length == 0 ? "empty" : name.Length <= 32 && name.All(ch => ch is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-')
+            ? name : "invalid";
     }
 
     internal static BiliLoginCountriesResponse ParseCountries(JsonElement root)
@@ -213,24 +279,45 @@ internal static class WebLoginProtocol
     }
 
     internal static Dictionary<string, string> CaptchaFields(BiliLoginCaptchaResult captcha)
-        => new(StringComparer.Ordinal)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal) { ["token"] = captcha.Token };
+        AddCaptchaProof(fields, captcha, securityCenter: false);
+        return fields;
+    }
+
+    private static void AddCaptchaProof(Dictionary<string, string> fields, BiliLoginCaptchaResult captcha, bool securityCenter)
+    {
+        var prefix = securityCenter ? "gee_" : string.Empty;
+        switch (captcha.Type)
         {
-            ["token"] = captcha.Token,
-            ["challenge"] = captcha.Challenge,
-            ["validate"] = captcha.Validate,
-            ["seccode"] = captcha.Seccode,
-        };
+            case "geetest":
+                fields[prefix + "challenge"] = captcha.Challenge;
+                fields[prefix + "validate"] = captcha.Validate;
+                fields[prefix + "seccode"] = captcha.Seccode;
+                break;
+            case "geetest4":
+                fields[prefix + "lot_number"] = captcha.LotNumber;
+                fields[prefix + "captcha_output"] = captcha.CaptchaOutput;
+                fields[prefix + "pass_token"] = captcha.PassToken;
+                fields[prefix + "gen_time"] = captcha.GenTime;
+                break;
+            case "img":
+                fields[securityCenter ? "img_code" : "captcha"] = captcha.ImageCode;
+                break;
+        }
+    }
 
     internal static Dictionary<string, string> VerificationSmsFields(WebVerificationContext context, BiliLoginCaptchaResult captcha)
-        => new(StringComparer.Ordinal)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["sms_type"] = string.IsNullOrEmpty(context.RequestId) ? VerificationWithoutRequestId : VerificationWithRequestId,
             ["tmp_code"] = context.TemporaryToken,
             ["recaptcha_token"] = captcha.Token,
-            ["gee_challenge"] = captcha.Challenge,
-            ["gee_validate"] = captcha.Validate,
-            ["gee_seccode"] = captcha.Seccode,
         };
+        AddCaptchaProof(fields, captcha, securityCenter: true);
+        return fields;
+    }
 
     internal static Dictionary<string, string> VerificationSubmitFields(WebVerificationContext context, WebSmsContext sms, string smsCode)
     {

@@ -12,6 +12,12 @@
 <body>
     <main id="stage">
         <button id="start" type="button" hidden></button>
+        <form id="image-form" hidden>
+            <img id="captcha-image" alt="" />
+            <label id="image-label" for="image-code"></label>
+            <input id="image-code" type="text" maxlength="5" autocomplete="off" spellcheck="false" required />
+            <button id="image-submit" type="submit"></button>
+        </form>
     </main>
     <script src="captcha.js"></script>
 </body>

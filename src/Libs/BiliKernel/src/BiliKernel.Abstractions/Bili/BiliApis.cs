@@ -28,6 +28,9 @@ public static class BiliApis
         /// <summary>Gets the Web Passport captcha parameters.</summary>
         public const string WebCaptcha = _passBase + "/x/passport-login/captcha";
 
+        /// <summary>Gets the image for a Passport image-captcha token.</summary>
+        public const string WebCaptchaImage = _apiBase + "/x/recaptcha/img";
+
         /// <summary>Submits a Web Passport password login.</summary>
         public const string WebPasswordLogin = _passBase + "/x/passport-login/web/login";
 
