@@ -6,15 +6,15 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:media="using:Microsoft.UI.Xaml.Media"
     IsHitTestVisible="False"
     Visibility="Collapsed"
     mc:Ignorable="d">
 
     <!--
-        Laid over the video cover. Both labels share the shape and the 24px height of the duration badge, so the two read as a pair.
-        Partly watched is dark acrylic over the cover with white text. Finished is the accent fill with the on-accent text, the same pairing as an accent button,
-        so the two states differ in color and not only in icon.
+        Laid over the video cover. The watched state reads along the bottom edge, like the bar of a player:
+        a short dark fade, the state on the side the duration badge of the host card leaves free, and the progress bar underneath.
+        The host draws its duration badge above this overlay, so the two share one row and the duration is never repeated.
+        The fade sits on the cover, not on the card, so it is dark in both app themes.
         Nothing is created until a card actually has a mark, so unwatched cards pay nothing for it. The brushes live on the deferred root for the same reason.
     -->
     <Grid
@@ -25,83 +25,59 @@
             <ResourceDictionary>
                 <ResourceDictionary.ThemeDictionaries>
                     <!--
-                        The glass sits on the cover, not on the card, so it is dark in both app themes.
-                        The high luminosity opacity keeps white text readable on a white cover. The fallback is used when the system turns transparency off.
+                        Only as dark and as tall as the text needs. It reaches 70% black where the text starts,
+                        which keeps the white text and the accent icon readable on a white cover, and fades out within a few pixels above it.
                     -->
                     <ResourceDictionary x:Key="Default">
-                        <media:AcrylicBrush
-                            x:Key="WatchMarkGlassBrush"
-                            FallbackColor="#E0202020"
-                            TintColor="#202020"
-                            TintLuminosityOpacity="0.85"
-                            TintOpacity="0.6" />
-                        <SolidColorBrush x:Key="WatchMarkGlassStrokeBrush" Opacity="0.16" Color="White" />
-                        <SolidColorBrush x:Key="WatchMarkGlassTextBrush" Color="White" />
-                        <SolidColorBrush x:Key="WatchMarkGlassIconBrush" Color="{ThemeResource SystemAccentColorLight2}" />
-                        <SolidColorBrush x:Key="WatchMarkAccentStrokeBrush" Opacity="0.28" Color="Black" />
+                        <LinearGradientBrush x:Key="WatchMarkFadeBrush" StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#00000000" />
+                            <GradientStop Offset="0.3" Color="#B3000000" />
+                            <GradientStop Offset="1" Color="#D9000000" />
+                        </LinearGradientBrush>
+                        <SolidColorBrush x:Key="WatchMarkTextBrush" Color="White" />
+                        <SolidColorBrush x:Key="WatchMarkFinishedIconBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="HighContrast">
-                        <SolidColorBrush x:Key="WatchMarkGlassBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                        <SolidColorBrush x:Key="WatchMarkGlassStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                        <SolidColorBrush x:Key="WatchMarkGlassTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                        <SolidColorBrush x:Key="WatchMarkGlassIconBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                        <SolidColorBrush x:Key="WatchMarkAccentStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="WatchMarkFadeBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                        <SolidColorBrush x:Key="WatchMarkTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="WatchMarkFinishedIconBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     </ResourceDictionary>
                 </ResourceDictionary.ThemeDictionaries>
             </ResourceDictionary>
         </Grid.Resources>
-        <!--  Finished: accent fill with on-accent text. The thin dark outline keeps it apart from a cover of a similar color.  -->
         <Border
-            x:Name="FinishedBadge"
-            MinHeight="24"
-            Padding="6,1,8,1"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
-            Background="{ThemeResource AccentFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource WatchMarkAccentStrokeBrush}"
-            BorderThickness="1"
-            CornerRadius="{StaticResource ControlCornerRadius}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-                <ic:SymbolIcon
-                    VerticalAlignment="Center"
-                    FontSize="16"
-                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                    IconVariant="Filled"
-                    Symbol="CheckmarkCircle" />
-                <TextBlock
-                    x:Name="FinishedLabel"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                    TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-        </Border>
-        <!--  Partly watched: dark acrylic with white text and the accent icon, the same tone as the bar below.  -->
-        <Border
-            x:Name="PartialBadge"
-            MinHeight="24"
-            Padding="6,1,8,1"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
-            Background="{ThemeResource WatchMarkGlassBrush}"
-            BorderBrush="{ThemeResource WatchMarkGlassStrokeBrush}"
-            BorderThickness="1"
-            CornerRadius="{StaticResource ControlCornerRadius}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-                <ic:SymbolIcon
-                    VerticalAlignment="Center"
-                    FontSize="16"
-                    Foreground="{ThemeResource WatchMarkGlassIconBrush}"
-                    IconVariant="Filled"
-                    Symbol="History" />
-                <TextBlock
-                    x:Name="PartialLabel"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource WatchMarkGlassTextBrush}"
-                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                    TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-        </Border>
+            x:Name="Fade"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource WatchMarkFadeBrush}" />
+        <!--
+            As tall as the duration badge and placed with the same margin, so both sit on one line.
+            Finished is the filled accent check, partly watched the white outlined clock: the two differ in shape, fill and color, and in the words.
+        -->
+        <StackPanel
+            x:Name="StatusPanel"
+            Height="24"
+            VerticalAlignment="Bottom"
+            Orientation="Horizontal"
+            Spacing="5">
+            <ic:SymbolIcon
+                x:Name="FinishedIcon"
+                VerticalAlignment="Center"
+                FontSize="16"
+                Foreground="{ThemeResource WatchMarkFinishedIconBrush}"
+                IconVariant="Filled"
+                Symbol="CheckmarkCircle" />
+            <ic:SymbolIcon
+                x:Name="PartialIcon"
+                VerticalAlignment="Center"
+                FontSize="16"
+                Foreground="{ThemeResource WatchMarkTextBrush}"
+                Symbol="History" />
+            <TextBlock
+                x:Name="StatusText"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource WatchMarkTextBrush}"
+                Style="{StaticResource BodyStrongTextBlockStyle}" />
+        </StackPanel>
         <Grid
             x:Name="BarTrack"
             Height="5"

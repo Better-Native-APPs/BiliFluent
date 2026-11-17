@@ -629,6 +629,8 @@
                             CornerRadius="{StaticResource ControlCornerRadius}"
                             DecodeWidth="400"
                             Source="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Cover}" />
+                        <!--  Under the duration badge: the watched state takes the left of the same row, the badge keeps the right.  -->
+                        <local:WatchMarkOverlay Mark="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.WatchMark}" />
                         <Border
                             Margin="8"
                             Padding="4"
@@ -643,7 +645,6 @@
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Text="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.Duration}" />
                         </Border>
-                        <local:WatchMarkOverlay Mark="{Binding RelativeSource={RelativeSource Mode=TemplatedParent}, Path=ViewModel.WatchMark}" />
                         <Grid
                             Grid.Column="1"
                             Padding="0,8,12,8"

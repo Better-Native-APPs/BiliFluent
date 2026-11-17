@@ -81,6 +81,17 @@
             DecodeWidth="400"
             Source="{x:Bind ViewModel.VideoCover, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}" />
+        <Border Grid.Row="1" Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}">
+            <!--
+                Under the duration badge, which sits at the bottom left here, 4px above the cover edge:
+                the watched state takes the right of the same row and the bar stays within those 4px.
+            -->
+            <local:WatchMarkOverlay
+                BadgeMargin="4"
+                BarHeight="4"
+                LabelAlignment="Right"
+                Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
+        </Border>
         <Border
             Grid.Row="1"
             Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}"
@@ -96,13 +107,6 @@
                 Foreground="White"
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind ViewModel.VideoDuration, Mode=OneWay}" />
-        </Border>
-        <Border Grid.Row="1" Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}">
-            <!--  The duration badge sits 4px above the cover edge here, so the bar stays within those 4px.  -->
-            <local:WatchMarkOverlay
-                BadgeMargin="4"
-                BarHeight="4"
-                Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
         </Border>
         <TextBlock
             x:Name="VideoTitleBlock"

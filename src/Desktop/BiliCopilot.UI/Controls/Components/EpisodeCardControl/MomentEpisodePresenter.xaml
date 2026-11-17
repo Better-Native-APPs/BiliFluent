@@ -25,6 +25,8 @@
             CornerRadius="{StaticResource ControlCornerRadius}"
             DecodeWidth="400"
             Source="{x:Bind ViewModel.Cover, Mode=OneWay}" />
+        <!--  Under the duration badge: the watched state takes the left of the same row, the badge keeps the right.  -->
+        <local:WatchMarkOverlay Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
         <Border
             Margin="8"
             Padding="4"
@@ -39,7 +41,6 @@
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind ViewModel.Duration, Mode=OneWay}" />
         </Border>
-        <local:WatchMarkOverlay Mark="{x:Bind ViewModel.WatchMark, Mode=OneWay}" />
         <Grid
             Grid.Column="1"
             Padding="0,8,12,8"
