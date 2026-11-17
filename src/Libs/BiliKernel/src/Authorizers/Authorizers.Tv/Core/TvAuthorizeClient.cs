@@ -12,7 +12,7 @@ namespace Richasy.BiliKernel.Authorizers.TV.Core;
 
 internal sealed class TVAuthorizeClient
 {
-    private readonly string _localId;
+    private readonly LoginDeviceIdentity _deviceIdentity;
     private readonly BiliHttpClient _httpClient;
     private readonly IBiliCookiesResolver _localCookiesResolver;
     private readonly IBiliTokenResolver _localTokenResolver;
@@ -23,9 +23,10 @@ internal sealed class TVAuthorizeClient
         BiliHttpClient httpClient,
         IBiliCookiesResolver localCookiesResolver,
         IBiliTokenResolver localTokenResolver,
-        BiliAuthenticator basicAuthenticator)
+        BiliAuthenticator basicAuthenticator,
+        LoginDeviceIdentity deviceIdentity)
     {
-        _localId = Guid.NewGuid().ToString("N");
+        _deviceIdentity = deviceIdentity;
         _httpClient = httpClient;
         _localCookiesResolver = localCookiesResolver;
         _localTokenResolver = localTokenResolver;
@@ -54,13 +55,7 @@ internal sealed class TVAuthorizeClient
 
     public async Task<TVQRCode> GetQRCodeAsync(CancellationToken cancellationToken = default)
     {
-        var parameters = new Dictionary<string, string>
-        {
-            { "local_id", _localId },
-        };
-
-        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Passport.QRCode));
-        _basicAuthenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings() { ForceNoToken = true });
+        using var request = CreateLoginRequest(BiliApis.Passport.QRCode);
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseTVQRCode).ConfigureAwait(false);
         return responseObj.Data;
@@ -129,16 +124,16 @@ internal sealed class TVAuthorizeClient
         using var credentials = new CookieImportCredentials(cookies);
         using var httpClient = new BiliHttpClient();
         var authenticator = new BiliAuthenticator(credentials, credentials);
-        var client = new TVAuthorizeClient(httpClient, credentials, credentials, authenticator);
+        var client = new TVAuthorizeClient(httpClient, credentials, credentials, authenticator, _deviceIdentity);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
         try
         {
             var qrCode = await client.GetQRCodeAsync(timeout.Token).ConfigureAwait(false)
                 ?? throw new KernelException("Cookie session import failed.");
-            using var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Passport.QRCodeConfirm));
             var parameters = new Dictionary<string, string> { ["auth_code"] = qrCode.AuthCode };
-            authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedCSRF = true, RequireCookie = true });
+            using var request = client.CreateLoginRequest(BiliApis.Passport.QRCodeConfirm, parameters,
+                new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedCSRF = true, RequireCookie = true });
             using var response = await httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
             parameters.Clear();
 
@@ -237,17 +232,28 @@ internal sealed class TVAuthorizeClient
         var parameters = new Dictionary<string, string>
         {
             { "auth_code", authCode },
-            { "local_id", _localId },
-            { "guid", Guid.NewGuid().ToString() },
         };
 
-        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Passport.QRCodeCheck));
-        _basicAuthenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings() { ForceNoToken = true });
+        using var request = CreateLoginRequest(BiliApis.Passport.QRCodeCheck, parameters);
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseBiliToken).ConfigureAwait(false);
         var token = responseObj?.Data;
         TrySaveCookiesFromToken(token);
         return token;
+    }
+
+    internal HttpRequestMessage CreateLoginRequest(string endpoint, Dictionary<string, string>? parameters = null, BiliAuthorizeExecutionSettings? settings = null)
+    {
+        var fields = parameters ?? new Dictionary<string, string>();
+        foreach (var identityField in _deviceIdentity.CreateParameters())
+        {
+            fields[identityField.Key] = identityField.Value;
+        }
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(endpoint));
+        _basicAuthenticator.AuthorizeRestRequest(request, fields, settings ?? new BiliAuthorizeExecutionSettings { ForceNoToken = true });
+        _deviceIdentity.ApplyHeaders(request);
+        return request;
     }
 
     private void TrySaveCookiesFromToken(BiliToken? token)

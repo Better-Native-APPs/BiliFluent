@@ -18,6 +18,7 @@ public static class KernelBuilderExtensions
     public static IServiceCollection AddNativeCookiesResolver(this IServiceCollection builder)
     {
         builder.AddSingleton<IBiliCookiesResolver, NativeBiliCookiesResolver>();
+        builder.AddSingleton<IBiliLoginDeviceResolver, NativeBiliLoginDeviceResolver>();
         return builder;
     }
 }

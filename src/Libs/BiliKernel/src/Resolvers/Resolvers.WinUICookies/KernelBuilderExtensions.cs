@@ -18,6 +18,7 @@ public static class KernelBuilderExtensions
     public static IServiceCollection AddWinUICookiesResolver(this IServiceCollection builder)
     {
         builder.AddSingleton<IBiliCookiesResolver, WinUIBiliCookiesResolver>();
+        builder.AddSingleton<IBiliLoginDeviceResolver, WinUIBiliLoginDeviceResolver>();
         return builder;
     }
 }
