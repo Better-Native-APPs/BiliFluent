@@ -47,6 +47,12 @@ public interface ILiveChatClient : IAsyncDisposable
     Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
 }
 
+// Optional same-assembly diagnostics; the public client/room contracts stay unchanged.
+internal interface ILiveChatDiagnosticSink
+{
+    void ReportRoomStatistics(long inboxIn, long inboxDrop, long published, long dispatchFail);
+}
+
 /// <summary>Room/chat ownership, independent of video playback and window presentation.</summary>
 public interface ILiveRoomSession : INotifyPropertyChanged, IAsyncDisposable
 {

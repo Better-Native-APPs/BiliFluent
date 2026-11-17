@@ -68,7 +68,10 @@ internal sealed class LiveHttpApi : IDisposable
                 continue;
             if (TrySocketEndpoint(name.GetString(), number, out var uri))
             {
-                return new LiveDiscovery(uri!, token.GetString()!, buvid!);
+                return new LiveDiscovery(uri!, token.GetString()!, buvid!)
+                {
+                    Preparation = LiveChatPreparation.Capture(cookies, navigation.RootElement, credentials.UserId, hosts.GetArrayLength()),
+                };
             }
         }
         throw Unavailable();
@@ -256,6 +259,7 @@ internal sealed class LiveDiscovery
     internal Uri Endpoint { get; }
     internal string Key { get; }
     internal string Buvid { get; }
+    internal LiveChatPreparation Preparation { get; init; }
 }
 
 // Ephemeral UI-thread snapshot. Only the minimal first-party cookie allowlist is copied.
