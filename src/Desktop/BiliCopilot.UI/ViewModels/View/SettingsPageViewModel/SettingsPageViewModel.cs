@@ -81,7 +81,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         MpvBuiltInProfile = SettingsToolkit.ReadLocalSetting(SettingNames.MpvBuiltInProfile, MpvBuiltInProfile.HighQuality);
         UseIntegrationWhenSinglePlayWindow = SettingsToolkit.ReadLocalSetting(SettingNames.UseIntegrationWhenSinglePlayWindow, true);
         MaxCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 64d); // Default to 64 MiB
-        MaxBackCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d); // Default to 0 MB
+        MaxBackCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, Resolvers.PlaybackNetworkPolicy.DefaultBackCacheMebibytes);
         MaxCacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 60d); // Default to 60 seconds
         HrSeek = SettingsToolkit.ReadLocalSetting(SettingNames.HrSeek, HrSeekType.Default);
         MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
