@@ -51,6 +51,16 @@ public sealed partial class MpvPlayer
     public LoopbackMediaRelayOptions? RelayOptions { get; set; }
 
     /// <summary>
+    /// Whether relay setup is available for the next on-demand load. May start the same relay
+    /// that <c>PrepareLoad</c> will use; known proxy, startup and reachability failures are retained.
+    /// </summary>
+    /// <returns>Whether the next on-demand source can be registered with this player's relay.</returns>
+    public bool WillRelayNextOnDemandLoad()
+    {
+        lock (_relaySync) return EnsureRelay() is not null;
+    }
+
+    /// <summary>
     /// Whether the stream of the loaded source is read through the relay.
     /// </summary>
     public bool IsRelaying(MpvRelayStreamKind kind)

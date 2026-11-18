@@ -14,6 +14,8 @@ internal sealed class RelayThroughputMeter
     internal static readonly TimeSpan MaximumWriteWait = TimeSpan.FromMilliseconds(25);
     internal static readonly TimeSpan ResumeReadWait = TimeSpan.FromMilliseconds(2);
     private static long _sequence;
+    private static long _segmentSequence;
+    private long _segmentId;
     private long _started;
     private long _bytes;
     private long _upstreamWait;
@@ -31,6 +33,7 @@ internal sealed class RelayThroughputMeter
         {
             // Neither the first body read nor the read proving a drained socket is network evidence.
             _started = completed;
+            _segmentId = Interlocked.Increment(ref _segmentSequence);
             _bytes = 0;
             _upstreamWait = 0;
             _active = true;
@@ -68,6 +71,6 @@ internal sealed class RelayThroughputMeter
 
         var wait = Stopwatch.GetElapsedTime(0, _upstreamWait);
         return new(_bytes / duration.TotalSeconds, _bytes, duration, wait,
-            wait >= duration / 2, Interlocked.Increment(ref _sequence), DateTimeOffset.UtcNow);
+            wait >= duration / 2, Interlocked.Increment(ref _sequence), DateTimeOffset.UtcNow) { SegmentId = _segmentId };
     }
 }

@@ -20,4 +20,8 @@ public sealed record RelayThroughputObservation(
     TimeSpan UpstreamWait,
     bool IsNetworkLimited,
     long Sequence,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    /// <summary>Identifies the same contiguous transfer across its cumulative updates.</summary>
+    public long SegmentId { get; init; }
+}
