@@ -195,7 +195,11 @@ public sealed partial class PlayerViewModel
         var pauseVersion = NoteUserPauseRequest(paused);
         if (!paused && sourceWork is not null)
             return CompleteUserPauseRequestAsync(OwnWork(ResumeAfterAudioSourceWorkAsync(sourceWork, _mediaVersion, Interlocked.Read(ref _audioResumeUserIntent))), pauseVersion);
-        if (_sponsor?.CanUseBinding != true) return CompleteUserPauseRequestAsync(Task.CompletedTask, pauseVersion);
+        if (_sponsor?.CanUseBinding != true)
+        {
+            ForgetUnsubmittedPauseRequest(pauseVersion);
+            return Task.CompletedTask;
+        }
         var audioIntent = Interlocked.Read(ref _audioResumeUserIntent);
         var version = _mediaVersion;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Pause);

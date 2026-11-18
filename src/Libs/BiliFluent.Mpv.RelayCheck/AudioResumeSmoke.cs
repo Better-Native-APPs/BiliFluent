@@ -51,6 +51,11 @@ internal static partial class AudioResumeSmoke
         var output = options.GetValueOrDefault("out", Path.Combine(Path.GetTempPath(), "bf-audioresume"));
         Directory.CreateDirectory(output);
         if (options.GetValueOrDefault("native-state") == "1") await RunNativePlayerStateChecksAsync(report, dll, output);
+        if (options.GetValueOrDefault("native-resume-intent") == "1")
+        {
+            try { await RunNativeResumeIntentChecksAsync(report, dll, output, options); }
+            catch (Exception ex) { report.Check("native resume intent: completed", false, ex.GetType().Name); }
+        }
         if (options.GetValueOrDefault("state-only") == "1") return;
         report.Note("audio-resume: anonymous dual DASH through the relay; WASAPI, mute=yes throughout, vo=null; 20 ms samples for 30 s; baseline=" + baseline);
         using var resolution = new TimerResolution();

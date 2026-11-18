@@ -44,6 +44,13 @@ public sealed partial class PlayerViewModel
         return ++_pauseRequestVersion;
     }
 
+    private void ForgetUnsubmittedPauseRequest(long version)
+    {
+        if (version != _pauseRequestVersion) return;
+        _requestedUserPause = null;
+        _pauseRequestCompleted = false;
+    }
+
     private async Task CompleteUserPauseRequestAsync(Task work, long version)
     {
         try

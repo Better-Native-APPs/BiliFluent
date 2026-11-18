@@ -151,7 +151,10 @@ public sealed partial class MpvClient
         {
             if (IsDisposed) return (MpvError.Uninitialized, false, false);
             var error = _handle.GetProperty(MpvClientProperties.Pause, out bool paused);
-            var missingAudioPts = paused && _handle.GetProperty("aid", out long aid) == MpvError.Success && aid > 0
+            // An existing seek already resets both chains. An unreadable seeking property
+            // retains the missing-PTS fallback; recorded output reconstruction is separate.
+            var isSeeking = paused && _handle.GetProperty(MpvClientProperties.Seeking, out bool seeking) == MpvError.Success && seeking;
+            var missingAudioPts = paused && !isSeeking && _handle.GetProperty("aid", out long aid) == MpvError.Success && aid > 0
                 && (_handle.GetProperty("audio-pts", out double pts) != MpvError.Success || !double.IsFinite(pts));
             return (error, paused, missingAudioPts);
         });
