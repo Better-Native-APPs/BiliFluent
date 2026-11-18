@@ -8,6 +8,17 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// <summary>Copies launch preferences; history never owns a player, host, or native stream.</summary>
 internal static class MediaNavigationSnapshot
 {
+    internal static bool IsSameVisit(MediaSnapshot? left, MediaSnapshot? right)
+        => ReferenceEquals(left, right) || left is not null && right is not null && left.Type == right.Type
+            && (left.Type switch
+            {
+                BiliMediaType.Video => left.Video?.Identifier.Id == right.Video?.Identifier.Id,
+                BiliMediaType.Pgc => left.Season?.Identifier.Id == right.Season?.Identifier.Id
+                    && left.Episode?.Identifier.Id == right.Episode?.Identifier.Id,
+                BiliMediaType.Live => left.Live?.Identifier.Id == right.Live?.Identifier.Id,
+                _ => false,
+            });
+
     internal static MediaSnapshot Copy(MediaSnapshot source)
     {
         var copy = source.Type switch

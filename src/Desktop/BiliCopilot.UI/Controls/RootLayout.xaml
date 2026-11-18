@@ -184,7 +184,8 @@
                         IsEnabled="False"
                         SizeChanged="OnChromePartSizeChanged"
                         Style="{StaticResource RootChromeBackButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Back}" />
+                        ToolTipService.ToolTip="{ext:Locale Name=Back}"
+                        Visibility="Collapsed" />
 
                     <Viewbox
                         Grid.Column="1"

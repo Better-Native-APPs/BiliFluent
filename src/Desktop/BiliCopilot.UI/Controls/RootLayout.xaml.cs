@@ -429,8 +429,9 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private void UpdateChromeBackButtonVisibility()
     {
-        ChromeBackButton.Visibility = Visibility.Visible;
-        ChromeBackButton.IsEnabled = ViewModel.CanGoBack;
+        var canGoBack = ViewModel.CanGoBack;
+        ChromeBackButton.Visibility = canGoBack ? Visibility.Visible : Visibility.Collapsed;
+        ChromeBackButton.IsEnabled = canGoBack;
         _chromeRegions.Request();
     }
 
