@@ -20,6 +20,7 @@ public sealed partial class MpvClient
     /// <returns><see cref="Task"/>.</returns>
     public async Task PlayAsync(string filePath, MpvPlayOptions? options = null)
     {
+        _audioResumeRecovery.ResetMedia();
         if (!Uri.IsWellFormedUriString(filePath, UriKind.Absolute))
         {
             filePath = filePath.Replace("\\", "/");
@@ -156,6 +157,7 @@ public sealed partial class MpvClient
     /// <returns><see cref="Task"/>.</returns>
     public async Task<MpvResult> PauseAsync()
     {
+        _audioResumeRecovery.Cancel();
         var errorCode = MpvError.Success;
         await Task.Run(() => errorCode = _handle.SetProperty(Pause, true));
         return WrapAsResult(errorCode, "Mpv | set pause failed");
@@ -167,9 +169,7 @@ public sealed partial class MpvClient
     /// <returns><see cref="Task"/>.</returns>
     public async Task<MpvResult> ResumeAsync()
     {
-        var errorCode = MpvError.Success;
-        await Task.Run(() => errorCode = _handle.SetProperty(Pause, false));
-        return WrapAsResult(errorCode, "Mpv | set pause failed");
+        return await ResumeWithAudioRecoveryAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -178,6 +178,7 @@ public sealed partial class MpvClient
     /// <returns><see cref="Task"/>.</returns>
     public async Task<MpvResult> StopAsync()
     {
+        _audioResumeRecovery.ResetMedia();
         var errorCode = MpvError.Success;
         await Task.Run(() => errorCode = _handle.SetProperty(Stop, true));
         return WrapAsResult(errorCode, "Mpv | set stop failed");
@@ -189,6 +190,7 @@ public sealed partial class MpvClient
     /// <returns>是否暂停.</returns>
     public async Task<MpvResult<MpvPlayerState>> GetPlayerStateAsync()
     {
+        if (_audioResumeRecovery.IsResumeBuffering) return MpvPlayerState.Buffering;
         var errorCode = MpvError.Success;
         bool result = default;
         await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(CoreIdle, out result));
@@ -256,7 +258,7 @@ public sealed partial class MpvClient
             return MpvPlayerState.Idle;
         }
 
-        return MpvPlayerState.Paused;
+        return PresentAudioRecoveryState(MpvPlayerState.Paused);
     }
 
     /// <summary>
@@ -283,6 +285,7 @@ public sealed partial class MpvClient
     /// <returns><see cref="Task"/>.</returns>
     public async Task<MpvResult> SetCurrentPositionAsync(double position)
     {
+        _audioResumeRecovery.Cancel();
         var errorCode = MpvError.Success;
         await Task.Run(() => errorCode = _handle.SetProperty(TimePosition, position));
         return WrapAsResult(errorCode, "Mpv | set time-pos failed");

@@ -562,7 +562,9 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private async void OnPlayerPreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
         if (args.Handled || !_loaded || ViewModel is not { } owner || owner.IsPlaybackClosing || owner.IsConnecting
-            || owner.IsWindowDeactivated || owner.IsPlayerInputCancellationPending || owner.Client?.IsDisposed != false
+            || owner.IsWindowDeactivated
+            || (args.Key == VirtualKey.Space ? owner.IsPlayerPauseOrSeekInputCancellationPending : owner.IsPlayerInputCancellationPending)
+            || owner.Client?.IsDisposed != false
             || owner.Player?.IsPlaybackInitialized != true || owner.IsPopupVisible || owner.IsSubtitleSettingsVisible
             || !AppToolkit.NotModifierKeyPressed() || IsEditingText(args.OriginalSource)) return;
         IAsyncRelayCommand? command = args.Key switch

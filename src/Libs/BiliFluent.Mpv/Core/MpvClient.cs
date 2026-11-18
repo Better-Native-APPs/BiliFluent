@@ -186,6 +186,8 @@ public sealed partial class MpvClient : IAsyncDisposable
             _disposeTask = completion.Task;
         }
 
+        _audioResumeRecovery.ResetMedia();
+
         // Cancellation and wakeup do not block; native stop/destroy remain pool operations.
         // Start them now instead of inserting another pool hop before the stop command.
         _ = CompleteDisposalAsync(callbacksDrained, completion);
@@ -429,6 +431,6 @@ public sealed partial class MpvClient : IAsyncDisposable
         IsInitialized = true;
     }
 
-    private void SendNotify(MpvClientEventId id, object? data)
-        => RunClientCallback(() => DataNotify?.Invoke(this, new(id, data)));
+    private void SendNotify(MpvClientEventId id, object? data, long? audioResumePresentation = null)
+        => RunClientCallback(() => DataNotify?.Invoke(this, new(id, data) { AudioResumePresentationVersion = audioResumePresentation }));
 }

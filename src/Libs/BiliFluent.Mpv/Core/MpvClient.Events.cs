@@ -74,10 +74,12 @@ public sealed partial class MpvClient
         switch (@event->EventId)
         {
             case NativeEventId.StartFile:
+                _audioResumeRecovery.ResetMedia();
                 TraceSubtitleState("start-file", "event");
                 ReachFileLoading?.Invoke(this, EventArgs.Empty);
                 break;
             case NativeEventId.EndFile:
+                _audioResumeRecovery.ResetMedia();
                 TraceSubtitleState("end-file", "event");
                 // mpv_event_end_file begins with the reason the file ended, followed by the error code.
                 if (@event->Data != null && *(int*)@event->Data == EndFileReasonError)
@@ -106,6 +108,7 @@ public sealed partial class MpvClient
                 NotifyPlayerState();
                 break;
             case NativeEventId.Seek:
+                _audioResumeRecovery.SeekStarted();
                 SeekStarted?.Invoke(this, EventArgs.Empty);
                 NotifyPlayerState();
                 break;
@@ -117,7 +120,14 @@ public sealed partial class MpvClient
 
                 break;
             case NativeEventId.PlaybackRestart:
+                _audioResumeRecovery.PlaybackRestarted();
                 SendNotify(MpvClientEventId.PlaybackRestart, default);
+                NotifyPlayerState();
+                break;
+
+            case NativeEventId.EventAudioReconfig:
+                HandlePausedAudioOutputReconfiguration();
+                _logger.LogInformation("[MPV] Event received: EventAudioReconfig");
                 break;
             case NativeEventId.CommandReply:
                 CompleteTrackCommand(@event->ReplyUserData, error);
@@ -202,6 +212,7 @@ public sealed partial class MpvClient
 
     private async Task NotifyPlayerStateAsync()
     {
+        var presentation = _audioResumeRecovery.PresentationVersion;
         try
         {
             Task<MpvResult<MpvPlayerState>> pending;
@@ -212,8 +223,8 @@ public sealed partial class MpvClient
             }
 
             var stateResult = await pending.ConfigureAwait(false);
-            if (stateResult.IsSuccess && !IsDisposed)
-                SendNotify(MpvClientEventId.StateChanged, stateResult.Value);
+            if (stateResult.IsSuccess && !IsDisposed && presentation == _audioResumeRecovery.PresentationVersion)
+                SendNotify(MpvClientEventId.StateChanged, PresentAudioRecoveryState(stateResult.Value), presentation);
         }
         catch (Exception ex) { MpvCallbackError.Log(_logger, "player-state", ex); }
     }

@@ -149,7 +149,10 @@ public sealed partial class PlayerViewModel
 
     private void RetireSponsorBinding(RetirementReason reason)
     {
+        // Native retirement also occurs inside the source refresh owned by the same
+        // resume request. Media replacement/close cancel its user intent separately.
         RetireSponsorCache();
+        Client?.CancelPendingAudioOutputRecovery();
         _sponsor?.BeginNativeRetirement(reason);
     }
 
@@ -186,16 +189,37 @@ public sealed partial class PlayerViewModel
     private Task SetUserPausedAsync(bool paused)
     {
         if (IsLiveMedia) return paused ? PauseLiveAsync() : PlayLiveAsync();
-        if (_sponsor?.CanUseBinding != true) return Task.CompletedTask;
-        if (!paused && TryReloadExpiredSourceOnResume(out var reload)) return reload;
+        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
+        if (Client?.EnablePausedAudioOutputRecovery == true) CancelAudioResumeUserIntent();
+        _audioResumeSourceResumeWanted = !paused;
+        var pauseVersion = NoteUserPauseRequest(paused);
+        if (!paused && sourceWork is not null)
+            return CompleteUserPauseRequestAsync(OwnWork(ResumeAfterAudioSourceWorkAsync(sourceWork, _mediaVersion, Interlocked.Read(ref _audioResumeUserIntent))), pauseVersion);
+        if (_sponsor?.CanUseBinding != true)
+        {
+            ForgetUnsubmittedPauseRequest(pauseVersion);
+            return Task.CompletedTask;
+        }
+        var audioIntent = Interlocked.Read(ref _audioResumeUserIntent);
+        var version = _mediaVersion;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Pause);
-        return OwnWork(ApplyAsync());
+        return CompleteUserPauseRequestAsync(OwnWork(ApplyAsync()), pauseVersion);
         async Task ApplyAsync()
         {
             try
             {
+                if (!paused)
+                {
+                    if (!await PreflightExpiredAudioResumeAsync(version, audioIntent)) return;
+                    if (TryReloadExpiredSourceOnResume(out var reload))
+                    {
+                        await reload;
+                        return;
+                    }
+                }
                 await RestorePhysicalPlayerInputAsync();
                 await _sponsor.SetPausedAsync(ticket, paused);
+                if (!paused) await ResumeDeferredForAudioSourceAsync(version, audioIntent);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }
@@ -215,9 +239,18 @@ public sealed partial class PlayerViewModel
 
     private Task SeekUserAsync(double position)
     {
-        if (!CanSeek || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
+        var resumeAfterRecovery = IsAudioResumeRequested;
+        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
+        if (!CanSeek || _sponsor?.CanUseBinding != true && sourceWork is null) return Task.CompletedTask;
+        CancelAudioResumeUserIntent();
         var version = _mediaVersion;
         var request = NoteUserPosition(position);
+        var audioIntent = Interlocked.Read(ref _audioResumeUserIntent);
+        if (sourceWork is not null)
+        {
+            _audioResumeSourceResumeWanted = resumeAfterRecovery;
+            return OwnWork(SeekAfterAudioSourceWorkAsync(sourceWork, position, version, audioIntent, resumeAfterRecovery));
+        }
         var selectionDrain = CancelAndDrainSeamlessSelectionAsync();
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Seek);
         return OwnWork(ApplyAsync());
@@ -231,6 +264,8 @@ public sealed partial class PlayerViewModel
 #pragma warning restore VSTHRD003
                 if (CanSeek && IsCurrentPlayback(version))
                     await SeekSelectedOnDemandAsync(position, version, () => _sponsor.SeekAsync(ticket, position), request);
+                if (resumeAfterRecovery && audioIntent == Interlocked.Read(ref _audioResumeUserIntent) && IsCurrentPlayback(version))
+                    await SetUserPausedAsync(false);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }

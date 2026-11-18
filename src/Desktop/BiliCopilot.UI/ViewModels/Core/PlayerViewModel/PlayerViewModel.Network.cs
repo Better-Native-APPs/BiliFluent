@@ -70,6 +70,7 @@ public sealed partial class PlayerViewModel
 
         DetachNetworkMonitor();
         _networkClient = client;
+        client.EnablePausedAudioOutputRecovery = true;
         client.ReachFileLoading += OnNetworkFileLoading;
         client.ReachFileLoaded += OnNetworkFileLoaded;
         client.FileFailed += OnNetworkFileFailed;
@@ -125,6 +126,7 @@ public sealed partial class PlayerViewModel
 
     private void DetachNetworkMonitor()
     {
+        CancelAudioResumeUserIntent();
         Interlocked.Increment(ref _networkEpoch);
         if (_networkClient is not { } client)
         {
@@ -137,6 +139,7 @@ public sealed partial class PlayerViewModel
         client.ReachFileEnd -= OnNetworkFileEnded;
         client.SeekStarted -= OnNetworkSeekStarted;
         client.DataNotify -= OnNetworkDataNotify;
+        client.EnablePausedAudioOutputRecovery = false;
         _networkClient = null;
     }
 
@@ -884,19 +887,29 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var resolver = OnDemandResolver;
         var now = Environment.TickCount64;
+        // The resume entry point has checked native pause/audio PTS before this snapshot.
+        // Only a recovery that rereads streams bypasses ordinary background refresh policy.
+        var audioRecovery = Client?.NeedsPausedAudioOutputRecovery == true;
         if (!CanUseOnDemandNetwork || player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
             || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime
             || IsPlaybackClosing || IsConnecting
-            || (_lastResumeRefresh != 0 && now - _lastResumeRefresh < PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
+            || (!audioRecovery && _lastResumeRefresh != 0 && now - _lastResumeRefresh < PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
         {
             return false;
         }
 
         _lastResumeRefresh = now;
+        if (Client?.EnablePausedAudioOutputRecovery == true) Client.AllowPausedAudioOutputRecovery = false;
         var version = _mediaVersion;
+        if (audioRecovery)
+        {
+            Client!.PreparePausedAudioOutputRecoveryResume();
+            reload = ObserveNetworkReloadAsync(OwnWork(StartAudioResumeSourceRefresh(player, resolver, from, version, _activeMediaToken)));
+            return true;
+        }
         if (IsRelayingEvery(player, from))
         {
-            _ = ObserveNetworkReloadAsync(OwnWork(RefreshRelayAsync(player, resolver, from, version, _activeMediaToken, "resume-expired", reloadOnFailure: true)));
+            _ = ObserveNetworkReloadAsync(OwnWork(StartAudioResumeBackgroundSourceRefresh(player, resolver, from, version, _activeMediaToken)));
             return false;
         }
 
