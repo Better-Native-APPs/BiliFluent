@@ -41,6 +41,8 @@ internal sealed class FakeNode : IAsyncDisposable
     private readonly ConcurrentBag<Task> _connections = [];
     private readonly Task _loop;
     private long _served;
+    private long _firstBodyAt;
+    private long _lastBodyAt;
     private int _requests;
     private int _open;
 
@@ -79,6 +81,8 @@ internal sealed class FakeNode : IAsyncDisposable
     public ReadOnlyMemory<byte>? Content { get; init; }
 
     public long Served => Interlocked.Read(ref _served);
+
+    public TimeSpan BodyDuration => Stopwatch.GetElapsedTime(Interlocked.Read(ref _firstBodyAt), Interlocked.Read(ref _lastBodyAt));
 
     public int Requests => Volatile.Read(ref _requests);
 
@@ -224,7 +228,9 @@ internal sealed class FakeNode : IAsyncDisposable
                         if (wait > TimeSpan.Zero) await Task.Delay(wait, token);
                     }
 
+                    Interlocked.CompareExchange(ref _firstBodyAt, Stopwatch.GetTimestamp(), 0);
                     await stream.WriteAsync(buffer.AsMemory(0, count), token);
+                    Interlocked.Exchange(ref _lastBodyAt, Stopwatch.GetTimestamp());
                     offset += count;
                     sent += count;
                     Interlocked.Add(ref _served, count);

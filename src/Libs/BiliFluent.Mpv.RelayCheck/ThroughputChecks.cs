@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using BiliCopilot.UI.Resolvers;
 using Richasy.MpvKernel.Relay;
 
 namespace BiliFluent.Mpv.RelayCheck;
@@ -23,6 +24,8 @@ internal static class ThroughputChecks
         await report.RunAsync("throughput: pause and drain", () => PauseAsync(report));
         await report.RunAsync("throughput: short response", () => ShortAsync(report));
         await report.RunAsync("throughput: fast response", () => FastAsync(report));
+        await report.RunAsync("throughput: fast loopback response", () => FastLoopbackAsync(report));
+        await report.RunAsync("throughput: managed read suspension", () => SuspensionAsync(report));
         await report.RunAsync("throughput: changed upstream", () => SwitchAsync(report));
     }
 
@@ -128,7 +131,16 @@ internal static class ThroughputChecks
 
     private static async Task FastAsync(Report report)
     {
-        using var source = new MemoryStream(new byte[16 * 1024 * 1024], writable: false);
+        var (latest, elapsed) = await CopyMemoryAsync(16 * 1024 * 1024, 30);
+        report.Check("throughput: fast fixture delivers 16 MiB within 100 ms", elapsed <= 100,
+            string.Create(CultureInfo.InvariantCulture, $"elapsed-ms={elapsed:0.0}"));
+        report.Check("throughput: fast 16 MiB response is observed with a finite rate", latest is not null && double.IsFinite(latest.BytesPerSecond),
+            Describe(latest));
+    }
+
+    private static async Task<(RelayThroughputObservation? Observation, double ElapsedMilliseconds)> CopyMemoryAsync(int length, int suspensionMilliseconds)
+    {
+        using var source = new MemoryStream(new byte[length], writable: false);
         var meter = new RelayThroughputMeter();
         var buffer = new byte[64 * 1024];
         RelayThroughputObservation? latest = null;
@@ -138,7 +150,7 @@ internal static class ThroughputChecks
         {
             var started = Stopwatch.GetTimestamp();
             // A real timed fake stream avoids measuring this host's loopback socket ceiling.
-            if (bytes == 8 * 1024 * 1024) await Task.Delay(30);
+            if (bytes == length / 2) await Task.Delay(suspensionMilliseconds);
             var count = await source.ReadAsync(buffer);
             var completed = Stopwatch.GetTimestamp();
             meter.ReadCompleted(count, started, completed);
@@ -149,11 +161,45 @@ internal static class ThroughputChecks
         }
 
         latest = meter.End(Stopwatch.GetTimestamp()) ?? latest;
-        var elapsed = clock.Elapsed.TotalMilliseconds;
-        report.Check("throughput: fast fixture delivers 16 MiB within 100 ms", elapsed <= 100,
-            string.Create(CultureInfo.InvariantCulture, $"elapsed-ms={elapsed:0.0}"));
-        report.Check("throughput: fast 16 MiB response is observed with a finite rate", latest is not null && double.IsFinite(latest.BytesPerSecond),
-            Describe(latest));
+        return (latest, clock.Elapsed.TotalMilliseconds);
+    }
+
+    private static async Task FastLoopbackAsync(Report report)
+    {
+        await using var node = Node("fast-loopback", 8 * 1024 * 1024, 256 * 1024 * 1024, 1024 * 1024);
+        await using var relay = LoopbackMediaRelay.Start();
+        using var reader = await Reader.OpenAsync(Register(relay, node), receiveBuffer: 4 * 1024 * 1024);
+        var clock = Stopwatch.StartNew();
+        var observations = await CaptureAsync(relay, () => reader.ReadAsync(node.Length));
+        var elapsed = node.BodyDuration.TotalMilliseconds;
+        var detail = string.Create(CultureInfo.InvariantCulture,
+            $"body-ms={elapsed:0.0} player-ms={clock.Elapsed.TotalMilliseconds:0.0} updates={observations.Count} segments={observations.DistinctBy(o => o.SegmentId).Count()} {Describe(observations.LastOrDefault())}");
+        if (elapsed is < 20 or > 200)
+        {
+            report.NotApplicable("throughput: fast loopback response outside 20-200 ms", detail);
+            return;
+        }
+
+        report.Check("throughput: 20-200 ms real loopback yields exactly one cumulative observation of at least 2 MiB",
+            observations.DistinctBy(o => o.SegmentId).Count() == 1
+            && observations.LastOrDefault() is { Bytes: >= 2 * 1024 * 1024 } latest
+            && latest.Duration >= TimeSpan.FromMilliseconds(20) && latest.Duration < TimeSpan.FromMilliseconds(200), detail);
+    }
+
+    private static async Task SuspensionAsync(Report report)
+    {
+        var (prior, _) = await CopyMemoryAsync(16 * 1024 * 1024, 30);
+        var policy = new AdaptiveQualityPolicy(new AdaptiveBandwidthHistory());
+        policy.ObserveThroughput(TimeSpan.Zero, prior);
+        var before = policy.GetEstimate(TimeSpan.Zero).BitsPerSecond;
+        var (observation, elapsed) = await CopyMemoryAsync(4 * 1024 * 1024, 120);
+        report.Check("throughput: a 120 ms managed read suspension cannot produce two-second network evidence",
+            observation is not null && (!observation.IsNetworkLimited || observation.Duration < TimeSpan.FromSeconds(2)),
+            string.Create(CultureInfo.InvariantCulture, $"elapsed-ms={elapsed:0.0} {Describe(observation)}"));
+        policy.ObserveThroughput(TimeSpan.FromSeconds(1), observation);
+        report.Check("throughput: the production adaptive policy does not lower existing evidence after a managed read suspension",
+            before > 0 && policy.GetEstimate(TimeSpan.FromSeconds(1)).BitsPerSecond >= before,
+            string.Create(CultureInfo.InvariantCulture, $"before-kbps={before / 1000:0} after-kbps={policy.GetEstimate(TimeSpan.FromSeconds(1)).BitsPerSecond / 1000:0}"));
     }
 
     private static async Task SwitchAsync(Report report)

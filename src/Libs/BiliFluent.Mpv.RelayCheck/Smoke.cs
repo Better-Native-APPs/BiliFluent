@@ -16,8 +16,8 @@ namespace BiliFluent.Mpv.RelayCheck;
 /// </summary>
 internal static class Smoke
 {
-    private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69";
-    private const string Referer = "https://www.bilibili.com";
+    internal const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69";
+    internal const string Referer = "https://www.bilibili.com";
 
     public static async Task RunAsync(Report report, Dictionary<string, string> options)
     {
@@ -229,7 +229,7 @@ internal static class Smoke
         return true;
     }
 
-    private static async Task<(List<DashStream> Video, List<DashStream> Audio, double Duration)> FetchAsync(string bvid, string cid)
+    internal static async Task<(List<DashStream> Video, List<DashStream> Audio, double Duration)> FetchAsync(string bvid, string cid)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&fnval=4048&fourk=1&qn=127&try_look=1");
@@ -271,7 +271,7 @@ internal static class Smoke
             => Console.WriteLine("     " + formatter(state, exception));
     }
 
-    private sealed record DashStream(int Id, int Codec, long Bandwidth, List<string> Urls);
+    internal sealed record DashStream(int Id, int Codec, long Bandwidth, List<string> Urls);
 
     /// <summary>
     /// What the position did during a stretch of playback.
