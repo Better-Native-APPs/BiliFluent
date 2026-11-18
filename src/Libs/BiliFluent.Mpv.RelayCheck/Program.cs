@@ -44,6 +44,7 @@ internal static class Program
             case "drain-smoke":
                 await SeamlessSmoke.RunDrainAsync(report, options);
                 break;
+            case "audio-resume": await AudioResumeSmoke.RunAsync(report, options); break;
             default:
                 Console.WriteLine("usage: unit | relay | all | drain | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..]");
                 return 2;
