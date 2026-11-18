@@ -190,10 +190,8 @@ public sealed partial class PlayerViewModel
     {
         try
         {
-            // Native boundaries still respect the runtime cadence, and join this restoration
-            // before the next load or core disposal can inherit the enlarged allowance.
-            var remaining = SponsorCachePolicy.MinimumUpdateInterval - (NetworkNow - _sponsorCacheLastUpdate);
-            if (remaining > TimeSpan.Zero) await Task.Delay(remaining);
+            // Boundary and failure recovery bypass playback debounce. The native boundary
+            // still joins this restoration before the next load or core disposal.
             if (client.IsDisposed) return;
             await client.UpdateCacheLimitsAsync(baseline.MaxBytes, baseline.ReadAheadSeconds, baseline.CacheSeconds);
             _sponsorCacheApplied = baseline;
