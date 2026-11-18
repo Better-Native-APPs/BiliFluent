@@ -67,7 +67,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         var preferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
         PreferQuality = preferQuality == PreferQualityType.High ? PreferQualityType.Auto : preferQuality;
         HomeRecommendationFeedSourceCollection = [RecommendationFeedSource.Web, RecommendationFeedSource.App];
-        HomeRecommendationFeedSource = SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.App);
+        HomeRecommendationFeedSource = SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.Web);
         IsPopularNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(PopularPage).Name}Visible", true);
         IsMomentNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(MomentPage).Name}Visible", true);
         IsVideoNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(VideoPartitionPage).Name}Visible", true);

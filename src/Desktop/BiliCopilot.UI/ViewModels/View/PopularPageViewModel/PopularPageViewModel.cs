@@ -271,7 +271,7 @@ public sealed partial class PopularPageViewModel : LayoutPageViewModelBase
     }
 
     private static RecommendationFeedSource ReadRecommendSource()
-        => SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.App);
+        => SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.Web);
 
     private void ResetRecommendSourceIfNeeded()
     {
