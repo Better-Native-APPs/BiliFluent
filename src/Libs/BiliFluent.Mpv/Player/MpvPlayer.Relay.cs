@@ -57,7 +57,15 @@ public sealed partial class MpvPlayer
     /// <returns>Whether the next on-demand source can be registered with this player's relay.</returns>
     public bool WillRelayNextOnDemandLoad()
     {
-        lock (_relaySync) return EnsureRelay() is not null;
+        lock (_relaySync)
+        {
+            if (EnsureRelay() is null) return false;
+            if (!Array.Exists(ProxyVariables, name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)))) return true;
+            // A proxy can be set after the cached relay started. PrepareLoad must also skip it.
+            _relayUnusable = true;
+            _logger.LogInformation("Playback | relay off reason=env-proxy");
+            return false;
+        }
     }
 
     /// <summary>

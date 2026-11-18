@@ -1090,6 +1090,8 @@ public sealed partial class PlayerViewModel
         public double WatchableCacheSeconds { get; init; }
         public double SkippedAheadSeconds { get; init; }
         public double CacheExtraMegabytes { get; init; }
+        public double? AdaptiveObservation { get; init; }
+        public string AdaptiveObservationKind { get; init; } = "n/a";
     }
 
     // What the sampler reads from mpv on its own thread.

@@ -129,6 +129,8 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         get { lock (InitializationSync) return _adaptiveStartDecision; }
     }
 
+    public Func<bool>? WillRelayNextLoad { get; set; }
+
     /// <summary>
     /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
     /// </summary>
@@ -321,7 +323,20 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         var aSeg = audioQuality?.Segment
             ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
         var selectedFormat = ResolveFormat(request.ResolvedVideoQuality ?? request.Preferences.VideoQuality);
-        if (AdaptiveQualitySelection.IsEnabled(request, SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto)))
+        var preference = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        if (preference == PreferQualityType.Auto && request.Preferences.VideoQuality is not > 0 && WillRelayNextLoad?.Invoke() == false)
+        {
+            selectedFormat = VideoQualityPreference.PickAutomatic(GetPlayableFormats(), PreferQualityType.Auto);
+            if (selectedFormat is not null)
+            {
+                _adaptiveStartDecision = new(AdaptiveQualityAction.Start, PlayingSelection?.Format.Quality ?? 0, selectedFormat.Quality,
+                    AdaptiveQualityReason.Direct, AdaptiveBandwidthHistory.Session.Read(TimeSpan.FromMilliseconds(Environment.TickCount64)),
+                    ((double)(GetVideoSegment(selectedFormat.Quality)?.Bandwidth ?? 0) + (aSeg?.Bandwidth ?? 0))
+                        * SettingsToolkit.ReadLocalSetting(SettingNames.PlayerSpeed, 1d) * AdaptiveQualityThresholds.InitialBandwidthRatio, 0);
+                AdaptiveQualityDiagnostics.LogDecision(logger, _adaptiveStartDecision.Value);
+            }
+        }
+        else if (AdaptiveQualitySelection.IsEnabled(request, preference))
         {
             var formats = GetPlayableFormats().ToList();
             var candidates = AdaptiveQualitySelection.BuildCandidates(formats, GetVideoSegment);
