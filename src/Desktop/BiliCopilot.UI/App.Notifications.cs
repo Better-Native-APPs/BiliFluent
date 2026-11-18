@@ -153,6 +153,7 @@ public partial class App
         }
         // Transfer has actually settled (success or observed failure). Preserve the DI-free
         // secondary's existing owned exit, without forcing exit or changing its drain rules.
+        TraceExitReason("activation-redirect-complete");
         await RequestExitAsync();
     }
 }

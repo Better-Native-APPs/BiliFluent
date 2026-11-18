@@ -53,6 +53,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     {
         if (!IsCurrentEmbeddedHost(host, expectedOwner)) return false;
         // Avoid internal programmatic base Close() path; route explicit close requests directly to App.RequestExitAsync.
+        App.TraceExitReason("embedded-owner-close-button");
         _ = App.Current.RequestExitAsync();
         return true;
     }
@@ -223,6 +224,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // Cancel caption close button / Alt+F4 to keep the main window & dispatcher VISIBLE during cleanup.
         args.Cancel = true;
+        App.TraceExitReason("main-window-close-request");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -236,6 +238,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // An already-destroyed HWND cannot be restored; finish the owned exit path.
         this.Get<ILogger<App>>().LogWarning("MainWindow.Closed triggered without terminal exit permission; requesting app exit.");
+        App.TraceExitReason("main-window-already-closed");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -249,6 +252,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             || !_appClosedMarked || !_handlersUnregistered)
             throw new InvalidOperationException("Main window final teardown is incomplete.");
         _isTerminalClosePermitted = true;
+        App.TraceExitReason("main-window-finalization");
         Close();
     }
 
