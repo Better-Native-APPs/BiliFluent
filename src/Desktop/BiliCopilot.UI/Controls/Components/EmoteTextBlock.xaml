@@ -58,6 +58,16 @@
             TextTrimming="CharacterEllipsis"
             TextWrapping="Wrap" />
 
+        <!--
+            Never shown. It holds the colour a short link takes while the app finds out where it
+            leads, so that the colour follows the theme of this control.
+        -->
+        <TextBlock
+            x:Name="PendingLinkTone"
+            AutomationProperties.AccessibilityView="Raw"
+            Foreground="{ThemeResource AccentTextFillColorDisabledBrush}"
+            Visibility="Collapsed" />
+
         <ItemsRepeater
             x:Name="Gallery"
             Grid.Row="1"

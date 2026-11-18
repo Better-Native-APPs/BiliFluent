@@ -2310,6 +2310,9 @@
   <data name="TextLinkNameTemplate" xml:space="preserve">
     <value>{0}，{1}</value>
   </data>
+  <data name="TextLinkShortLink" xml:space="preserve">
+    <value>打开哔哩哔哩短链接</value>
+  </data>
   <data name="TextLinkOpenFailed" xml:space="preserve">
     <value>链接没有打开，请再试一次</value>
   </data>

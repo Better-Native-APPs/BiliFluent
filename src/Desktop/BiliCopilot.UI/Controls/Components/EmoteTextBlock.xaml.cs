@@ -167,6 +167,12 @@ public sealed partial class EmoteTextBlock : LayoutUserControlBase
     private static string DescribeDestination(TextSegment segment)
     {
         var destination = segment.Destination!;
+        if (destination.IsShortLink)
+        {
+            // Where it leads is only known once it is opened: say what it is rather than guess.
+            return ResourceToolkit.GetLocalizedString(StringNames.TextLinkShortLink);
+        }
+
         if (destination.IsExternal)
         {
             // Say which site the browser will show: the words of a link need not match where it leads.
@@ -222,11 +228,37 @@ public sealed partial class EmoteTextBlock : LayoutUserControlBase
 
         // The name a user space or an article opens under until its own data arrives.
         var name = segment.Link?.Kind == TextLinkKind.Mention ? segment.Text.TrimStart('@') : segment.Link?.Title;
-        link.Click += (_, _) =>
+        var isAsking = false;
+        link.Click += async (_, _) =>
         {
             // The link may sit in the "show all" flyout, which would otherwise stay open over the new page.
             OverflowButton.Flyout?.Hide();
-            _ = TextLinkNavigator.OpenAsync(destination, name);
+            if (!destination.IsShortLink)
+            {
+                await TextLinkNavigator.OpenAsync(destination, name);
+                return;
+            }
+
+            // A short link takes a moment to find out where it leads. The link dims meanwhile, pressing
+            // it again changes nothing, and the answer is only used if this text is still what is shown
+            // when it comes.
+            if (isAsking)
+            {
+                return;
+            }
+
+            isAsking = true;
+            var text = Text;
+            link.Foreground = PendingLinkTone.Foreground;
+            try
+            {
+                await TextLinkNavigator.OpenAsync(destination, name, link, () => IsLoaded && ReferenceEquals(Text, text));
+            }
+            finally
+            {
+                link.ClearValue(TextElement.ForegroundProperty);
+                isAsking = false;
+            }
         };
         para.Inlines.Add(link);
 
