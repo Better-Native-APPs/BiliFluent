@@ -83,6 +83,7 @@ public sealed partial class PlayerViewModel
     // Synchronous, so that nothing of the previous media reaches the policy of the next one.
     private void ResetNetworkFailover()
     {
+        RetireSponsorCache();
         ResetAdaptiveQuality();
         CancelSeamlessSelection();
         DetachSeamlessPlayback();
@@ -108,6 +109,7 @@ public sealed partial class PlayerViewModel
 
     private Task SuspendNetworkMonitorAsync()
     {
+        RetireSponsorCache();
         DetachSeamlessPlayback();
         DetachNetworkMonitor();
         var sampler = _networkSampler;
@@ -294,16 +296,23 @@ public sealed partial class PlayerViewModel
         var audioState = raw.SelectedState?.Audio ?? _selectedPlaybackState?.Audio;
         if (videoState is not null) videoState = videoState with { Statistics = raw.VideoRelay };
         if (audioState is not null) audioState = audioState with { Statistics = raw.AudioRelay };
-        var videoRelay = _selectedVideoWatchdog.Observe(now, utcNow, videoState, sample, speed);
+        double Watchable(double seconds, double position)
+        {
+            TransformSponsorCacheSeconds(position, ref seconds);
+            return seconds;
+        }
+        var videoRelay = _selectedVideoWatchdog.Observe(now, utcNow, videoState, sample, speed,
+            seconds => Watchable(seconds, raw.PositionKnown ? raw.Position : double.NaN));
         var audioRelay = _selectedAudioWatchdog.Observe(now, utcNow, audioState,
-            sample with { Position = raw.AudioPosition ?? raw.Position }, speed);
+            sample with { Position = raw.AudioPosition ?? raw.Position }, speed,
+            seconds => Watchable(seconds, raw.AudioPosition ?? (raw.PositionKnown ? raw.Position : double.NaN)));
         if (videoRelay is { } externalVideo)
         {
             // The root demuxer's zero cache and cache pause do not describe an external video.
             sample = sample with
             {
                 PausedForCache = false,
-                CacheSeconds = externalVideo.CacheSeconds ?? 0,
+                CacheSeconds = externalVideo.RawCacheSeconds ?? 0,
                 CacheIdle = externalVideo.Idle,
                 ForwardBytes = (raw.VideoRelay?.UpstreamBytes ?? 0) + (raw.VideoRelay?.PreloadedBytes ?? 0),
                 DownloadRate = externalVideo.DownloadRate,
@@ -317,10 +326,14 @@ public sealed partial class PlayerViewModel
 
         sample = sample with
         {
-            AudioCacheSeconds = audioRelay is { } externalAudio ? externalAudio.CacheSeconds : sample.AudioCacheSeconds,
+            AudioCacheSeconds = audioRelay is { } externalAudio ? externalAudio.RawCacheSeconds : sample.AudioCacheSeconds,
             SelectedRelayStalled = videoRelay is { Stalled: true } ? PlaybackStreamKind.Video
                 : audioRelay is { Stalled: true } ? PlaybackStreamKind.Audio : null,
         };
+        var rawForwardSeconds = sample.CacheSeconds;
+        var rawAudioSeconds = sample.AudioCacheSeconds;
+        double skippedSeconds = 0, extraMegabytes = 0;
+        AccountSponsorCache(raw, ref sample, ref skippedSeconds, ref extraMegabytes);
         var decision = streams is null
             ? CdnFailoverDecision.None
             : _failover.OnSample(now, sample, GetStreamAvailability(streams));
@@ -334,9 +347,15 @@ public sealed partial class PlayerViewModel
             Volatile.Read(ref _rawInputRate),
             videoRelay is not null ? raw.VideoRelay?.ForwardBytes ?? 0 : forwardBytes,
             _failover.DownloadRate,
-            videoRelay is { } videoCache ? videoCache.CacheSeconds : cache?.VideoCacheSeconds,
-            sample.AudioCacheSeconds,
-            Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers));
+            videoRelay is { } videoCache ? videoCache.RawCacheSeconds : cache?.VideoCacheSeconds,
+            rawAudioSeconds,
+            Volatile.Read(ref _networkSwitches) + Volatile.Read(ref _relayFailovers))
+        {
+            RawForwardCacheSeconds = rawForwardSeconds,
+            WatchableCacheSeconds = sample.CacheSeconds,
+            SkippedAheadSeconds = skippedSeconds,
+            CacheExtraMegabytes = extraMegabytes,
+        };
         ApplyFailoverDecision(decision, sample);
         ObserveAdaptiveQuality(now, raw with { Seeking = sample.Seeking }, sample, decision, speed);
         if (decision.Action == CdnFailoverAction.None) ContinueDeferredSelection(raw.UserPaused, sample.Seeking);
@@ -347,6 +366,8 @@ public sealed partial class PlayerViewModel
     partial void OnAdaptiveFileLoading(OnDemandSelectionLoad? load);
     partial void OnAdaptiveFileLoaded(OnDemandSelectionLoad? load);
     partial void ObserveAdaptiveQuality(TimeSpan now, NetworkSample raw, PlaybackCacheSample sample, CdnFailoverDecision nodeDecision, double speed);
+    partial void TransformSponsorCacheSeconds(double position, ref double seconds);
+    partial void AccountSponsorCache(NetworkSample raw, ref PlaybackCacheSample sample, ref double skippedSeconds, ref double extraMegabytes);
 
     private void ResetSelectedRelayObservation()
     {
@@ -1052,6 +1073,10 @@ public sealed partial class PlayerViewModel
         string AdaptiveMode = "manual")
     {
         public static NetworkDiagnostics Empty { get; } = new(CdnHost.NoCategory, CdnHost.NoCategory, null, 0, 0, 0, 0, 0, null, null, null, 0);
+        public double RawForwardCacheSeconds { get; init; }
+        public double WatchableCacheSeconds { get; init; }
+        public double SkippedAheadSeconds { get; init; }
+        public double CacheExtraMegabytes { get; init; }
     }
 
     // What the sampler reads from mpv on its own thread.

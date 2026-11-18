@@ -9,7 +9,11 @@ internal readonly record struct SponsorCacheInterval(double StartSeconds, double
 internal readonly record struct SponsorCacheLimits(long MaxBytes, double ReadAheadSeconds, double CacheSeconds);
 
 /// <summary>A bounded allowance for media that will not be watched.</summary>
-internal readonly record struct SponsorCacheBudget(SponsorCacheLimits Limits, long ExtraBytes, double SkipSeconds, int Segments, int CappedSegments);
+internal readonly record struct SponsorCacheBudget(SponsorCacheLimits Limits, long ExtraBytes, double SkipSeconds, int Segments, int CappedSegments,
+    double CappedSkipSeconds = 0);
+
+internal enum SponsorCacheSwitchWaitDecision { Wait, Proceed, Cancelled }
+internal readonly record struct SponsorCacheSwitchObservation(double Position, bool Settled, bool SkipExpectedOrPending);
 
 /// <summary>Pure accounting shared by playback and the headless libmpv check.</summary>
 internal static class SponsorCachePolicy
@@ -22,6 +26,7 @@ internal static class SponsorCachePolicy
     public static readonly TimeSpan MinimumUpdateInterval = TimeSpan.FromSeconds(1);
     public const double SwitchLookAheadSeconds = 8;
     public static readonly TimeSpan MaximumSwitchWait = TimeSpan.FromSeconds(12);
+    public static readonly TimeSpan SwitchPollInterval = TimeSpan.FromMilliseconds(100);
 
     public static bool IsEnabled(bool onDemand, bool customConfig, bool assistantAvailable)
         => onDemand && !customConfig && assistantAvailable;
@@ -39,7 +44,7 @@ internal static class SponsorCachePolicy
         var end = positionSeconds + coverage;
         var cap = (long)Math.Min(MaximumExtraBytes, (double)baseline.MaxBytes * MaximumBaseMultiples);
         long extra = 0;
-        double skipped = 0;
+        double skipped = 0, cappedSeconds = 0;
         int segments = 0, capped = 0;
         foreach (var interval in intervals)
         {
@@ -50,6 +55,7 @@ internal static class SponsorCachePolicy
             if (estimate > cap)
             {
                 capped++;
+                cappedSeconds += seconds;
                 continue;
             }
 
@@ -62,12 +68,13 @@ internal static class SponsorCachePolicy
             if (accepted < estimate)
             {
                 capped++;
+                cappedSeconds += seconds - acceptedSeconds;
                 break;
             }
         }
 
         return new(new(baseline.MaxBytes + extra, baseline.ReadAheadSeconds + skipped, baseline.CacheSeconds + skipped),
-            extra, skipped, segments, capped);
+            extra, skipped, segments, capped, cappedSeconds);
     }
 
     public static IReadOnlyList<SponsorCacheInterval> Merge(IEnumerable<SponsorCacheInterval> intervals)
@@ -102,9 +109,41 @@ internal static class SponsorCachePolicy
     public static double WatchableSeconds(double positionSeconds, double rawForwardSeconds, IReadOnlyList<SponsorCacheInterval> intervals)
         => Math.Max(0, rawForwardSeconds - SkippedAheadSeconds(positionSeconds, rawForwardSeconds, intervals));
 
-    public static bool ShouldDeferSwitch(double positionSeconds, IReadOnlyList<SponsorCacheInterval> intervals)
-        => double.IsFinite(positionSeconds) && intervals.Any(interval => interval.EndSeconds > positionSeconds
-            && interval.StartSeconds <= positionSeconds + SwitchLookAheadSeconds);
+    public static bool ProjectionChanged(IReadOnlyList<SponsorCacheInterval> current, IReadOnlyList<SponsorCacheInterval> next)
+        => !current.SequenceEqual(next);
+
+    public static double? SwitchSkipEnd(double positionSeconds, IReadOnlyList<SponsorCacheInterval> intervals, double playbackRate = 1)
+    {
+        if (!double.IsFinite(positionSeconds) || !double.IsFinite(playbackRate) || playbackRate <= 0) return null;
+        foreach (var interval in intervals)
+            if (interval.EndSeconds > positionSeconds && interval.StartSeconds <= positionSeconds + SwitchLookAheadSeconds * playbackRate)
+                return interval.EndSeconds;
+        return null;
+    }
+
+    public static bool ShouldDeferSwitch(double positionSeconds, IReadOnlyList<SponsorCacheInterval> intervals, double playbackRate = 1)
+        => SwitchSkipEnd(positionSeconds, intervals, playbackRate).HasValue;
+
+    public static SponsorCacheSwitchWaitDecision DecideSwitchWait(double skipEnd, SponsorCacheSwitchObservation observation,
+        TimeSpan elapsed, bool cancelled)
+        => cancelled ? SponsorCacheSwitchWaitDecision.Cancelled
+            : elapsed >= MaximumSwitchWait || (observation.Settled && observation.Position >= skipEnd)
+                || !observation.SkipExpectedOrPending ? SponsorCacheSwitchWaitDecision.Proceed : SponsorCacheSwitchWaitDecision.Wait;
+
+    public static async Task WaitForSkipAsync(double skipEnd, Func<Task<SponsorCacheSwitchObservation>> read,
+        Func<TimeSpan> elapsed, Func<TimeSpan, CancellationToken, Task> delay, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (elapsed() >= MaximumSwitchWait) return;
+            var observation = await read();
+            var decision = DecideSwitchWait(skipEnd, observation, elapsed(), cancellationToken.IsCancellationRequested);
+            if (decision == SponsorCacheSwitchWaitDecision.Cancelled) cancellationToken.ThrowIfCancellationRequested();
+            if (decision == SponsorCacheSwitchWaitDecision.Proceed) return;
+            await delay(SwitchPollInterval, cancellationToken);
+        }
+    }
 
     public static bool ShouldUpdate(SponsorCacheLimits applied, SponsorCacheLimits target, SponsorCacheLimits baseline, TimeSpan sinceLastUpdate)
         => applied != target && sinceLastUpdate >= MinimumUpdateInterval

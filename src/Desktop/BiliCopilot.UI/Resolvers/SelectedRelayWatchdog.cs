@@ -5,7 +5,10 @@ using Richasy.MpvKernel.Player.Models;
 
 namespace BiliCopilot.UI.Resolvers;
 
-internal readonly record struct SelectedRelayCacheSample(bool Stalled, double? CacheSeconds, long ForwardBytes, double DownloadRate, bool Idle);
+internal readonly record struct SelectedRelayCacheSample(bool Stalled, double? CacheSeconds, long ForwardBytes, double DownloadRate, bool Idle)
+{
+    public double? RawCacheSeconds { get; init; }
+}
 
 /// <summary>
 /// External tracks have their own demuxer. A highest delivered offset is an upper bound, not a
@@ -31,7 +34,7 @@ internal sealed class SelectedRelayWatchdog
     }
 
     public SelectedRelayCacheSample? Observe(TimeSpan now, DateTimeOffset utcNow, MpvSeamlessStreamState? stream,
-        PlaybackCacheSample playback, double speed)
+        PlaybackCacheSample playback, double speed, Func<double, double>? watchableSeconds = null)
     {
         if (stream is not { IsExternal: true, FragmentIndex: { } index, Statistics: { } statistics })
         {
@@ -49,7 +52,8 @@ internal sealed class SelectedRelayWatchdog
         var latestByte = statistics.LastDeliveredAt;
         if (statistics.LastByteReceivedAt is { } received && (latestByte is null || received > latestByte)) latestByte = received;
         var fresh = latestByte is { } last && utcNow - last <= PlaybackNetworkPolicy.SelectedRelayFreshness;
-        var upperSeconds = offset is { } forward ? Math.Max(0, CompleteFragmentEnd(index, forward) - playback.Position) : 0;
+        var rawUpperSeconds = offset is { } forward ? Math.Max(0, CompleteFragmentEnd(index, forward) - playback.Position) : 0;
+        var upperSeconds = watchableSeconds?.Invoke(rawUpperSeconds) ?? rawUpperSeconds;
 
         if (!reset && offset is { } next && _offset is { } previous && next > previous)
         {
@@ -78,8 +82,8 @@ internal sealed class SelectedRelayWatchdog
         // A frozen audio timeline does not rule out starvation of both external streams.
         var timeout = cacheSeconds is null ? PlaybackNetworkPolicy.SlowWaitTimeout : PlaybackNetworkPolicy.StallTimeout;
         var stalled = _waitingSince is { } since && now - since >= timeout;
-        return new(stalled, cacheSeconds, statistics.ForwardBytes, statistics.BytesPerSecond,
-            cacheSeconds is null || statistics.ActiveRequests == 0);
+        return new SelectedRelayCacheSample(stalled, cacheSeconds, statistics.ForwardBytes, statistics.BytesPerSecond,
+            cacheSeconds is null || statistics.ActiveRequests == 0) { RawCacheSeconds = _canEstimate ? rawUpperSeconds : null };
     }
 
     private static double CompleteFragmentEnd(DashIndex index, long offset)

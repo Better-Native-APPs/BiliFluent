@@ -331,6 +331,7 @@ public sealed partial class PlayerViewModel
             await AwaitInitializationStepAsync(() => Client.SetTlsVerifyAsync(true));
 #endif
             await AwaitInitializationStepAsync(() => Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No));
+            ConfigureSponsorCacheClient(Client, !IsLiveMedia && string.IsNullOrEmpty(configPath) && decodeType != PreferDecodeType.Custom);
             _clientConfigured = true;
         }
 
@@ -343,6 +344,8 @@ public sealed partial class PlayerViewModel
             _tripleTimer.Tick += OnTripleTimerTick;
         }
     }
+
+    partial void ConfigureSponsorCacheClient(MpvClient client, bool managed);
 
     // Stops managed initialization continuations after close; this does not
     // cancel a native operation that has already been issued.
