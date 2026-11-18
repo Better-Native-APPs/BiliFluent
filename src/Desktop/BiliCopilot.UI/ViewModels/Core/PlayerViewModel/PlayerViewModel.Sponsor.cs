@@ -146,7 +146,13 @@ public sealed partial class PlayerViewModel
         return !string.IsNullOrEmpty(cid) && MediaIdentity.TryParse(bvId + "+" + cid, out var identity) ? identity : null;
     }
 
-    private void RetireSponsorBinding(RetirementReason reason) => _sponsor?.BeginNativeRetirement(reason);
+    private void RetireSponsorBinding(RetirementReason reason)
+    {
+        // Native retirement also occurs inside the source refresh owned by the same
+        // resume request. Media replacement/close cancel its user intent separately.
+        Client?.CancelPendingAudioOutputRecovery();
+        _sponsor?.BeginNativeRetirement(reason);
+    }
 
     private Task DrainInputAndSponsorAsync(bool seal)
     {
@@ -170,7 +176,12 @@ public sealed partial class PlayerViewModel
 
     private Task SetUserPausedAsync(bool paused)
     {
+        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
+        CancelAudioResumeUserIntent();
+        _audioResumeSourceResumeWanted = !paused;
         if (IsLiveMedia) return paused ? PauseLiveAsync() : PlayLiveAsync();
+        if (!paused && sourceWork is not null)
+            return OwnWork(ResumeAfterAudioSourceWorkAsync(sourceWork, _mediaVersion, Interlocked.Read(ref _audioResumeUserIntent)));
         if (_sponsor?.CanUseBinding != true) return Task.CompletedTask;
         if (!paused && TryReloadExpiredSourceOnResume(out var reload)) return reload;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Pause);
@@ -200,9 +211,18 @@ public sealed partial class PlayerViewModel
 
     private Task SeekUserAsync(double position)
     {
-        if (!CanSeek || _sponsor?.CanUseBinding != true) return Task.CompletedTask;
+        var resumeAfterRecovery = IsAudioResumeRequested;
+        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
+        if (!CanSeek || _sponsor?.CanUseBinding != true && sourceWork is null) return Task.CompletedTask;
+        CancelAudioResumeUserIntent();
         var version = _mediaVersion;
         var request = NoteUserPosition(position);
+        var audioIntent = Interlocked.Read(ref _audioResumeUserIntent);
+        if (sourceWork is not null)
+        {
+            _audioResumeSourceResumeWanted = resumeAfterRecovery;
+            return OwnWork(SeekAfterAudioSourceWorkAsync(sourceWork, position, version, audioIntent, resumeAfterRecovery));
+        }
         var selectionDrain = CancelAndDrainSeamlessSelectionAsync();
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Seek);
         return OwnWork(ApplyAsync());
@@ -216,6 +236,8 @@ public sealed partial class PlayerViewModel
 #pragma warning restore VSTHRD003
                 if (CanSeek && IsCurrentPlayback(version))
                     await SeekSelectedOnDemandAsync(position, version, () => _sponsor.SeekAsync(ticket, position), request);
+                if (resumeAfterRecovery && audioIntent == Interlocked.Read(ref _audioResumeUserIntent) && IsCurrentPlayback(version))
+                    await SetUserPausedAsync(false);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }

@@ -181,7 +181,7 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task PlayPauseAsync()
     {
         if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
@@ -196,7 +196,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        if (Player.PlaybackState == MpvPlayerState.Playing)
+        if (Player.PlaybackState == MpvPlayerState.Playing || IsAudioResumeRequested)
         {
             await SetUserPausedAsync(true);
         }

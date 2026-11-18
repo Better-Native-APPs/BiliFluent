@@ -543,6 +543,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        ObserveAudioResumeSourcePresentation(e.PropertyName);
         var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
         var handlerStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
         long synchronousTicks = -1;

@@ -49,7 +49,7 @@ public sealed partial class PlayerViewModel
 
     internal void FocusPlayerInput() => _playerOverlay?.Focus(FocusState.Pointer);
 
-    internal bool IsPlayerInputCancellationPending => _inputCancellations != 0;
+    internal bool IsPlayerInputCancellationPending => _inputCancellations != 0 && !IsAudioResumeSourceWaiting;
 
     // A mouse double-click restores an explicit pre-click state, never another toggle based on a delayed mpv event.
     internal Task RestoreMouseClickPlaybackAsync(long generation, bool wasPlaying)
