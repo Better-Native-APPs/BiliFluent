@@ -429,10 +429,28 @@ public sealed partial class RootLayout : RootLayoutBase
 
     private void UpdateChromeBackButtonVisibility()
     {
-        var canGoBack = ViewModel.CanGoBack;
+        var canGoBack = ViewModel.CanGoBack || HasNavigationPaneToDismiss;
         ChromeBackButton.Visibility = canGoBack ? Visibility.Visible : Visibility.Collapsed;
         ChromeBackButton.IsEnabled = canGoBack;
         _chromeRegions.Request();
+    }
+
+    internal bool HasNavigationPaneToDismiss => _stateLoaded && IsLoaded
+        && TitleBarPresentation == PlayerPresentationMode.Normal && NavView.IsPaneOpen
+        && NavView.DisplayMode is NavigationViewDisplayMode.Compact or NavigationViewDisplayMode.Minimal;
+
+    internal bool TryDismissNavigationPane()
+    {
+        if (!HasNavigationPaneToDismiss) return false;
+        NavView.IsPaneOpen = false; // The temporary overlay pane never adds or consumes a history visit.
+        UpdateChromeBackButtonVisibility();
+        return true;
+    }
+
+    private void OnNavigationPanePresentationChanged(NavigationView sender, object args)
+    {
+        if (!_stateLoaded || !IsLoaded) return;
+        UpdateChromeBackButtonVisibility();
     }
 
     /// <summary>

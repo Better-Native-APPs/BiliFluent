@@ -466,6 +466,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             var navigation = RootLayout.ViewModel;
             if (navigation.CanGoBack || navigation.CanGoForward || !navigation.LastNavigationTask.IsCompleted
                 || app.HasEmbeddedWork || app.HasLiveWork
+                || RootLayout.HasNavigationPaneToDismiss
                 || root.XamlRoot is { } xamlRoot && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Count > 0)
             {
                 if (point.Properties.IsXButton1Pressed) navigation.Back();
@@ -566,6 +567,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         if (WalkVisualTree(playerRoot).OfType<PlayerOverlay>().FirstOrDefault()?.TryDismissNavigationTransient() == true)
             return true;
+        if (RootLayout.TryDismissNavigationPane()) return true;
         if (player?.IsSubtitleSettingsVisible == true)
         {
             player.IsSubtitleSettingsVisible = false;
