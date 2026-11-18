@@ -9,6 +9,7 @@ using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using Humanizer;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -23,8 +24,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using Windows.Media;
-using Windows.Storage.Streams;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -70,7 +69,8 @@ public sealed partial class PlayerViewModel
         _lastCacheSpeedTextUpdate = 0;
         Volatile.Write(ref _forceSponsorPositionObservation, 1);
         if (Connector is not null && !(_snapshot.Type == BiliMediaType.Video && Connector is VideoConnectorViewModel)
-            && !(_snapshot.Type == BiliMediaType.Pgc && Connector is PgcConnectorViewModel))
+            && !(_snapshot.Type == BiliMediaType.Pgc && Connector is PgcConnectorViewModel)
+            && !(_snapshot.Type == BiliMediaType.Live && Connector is LiveConnectorViewModel live && ReferenceEquals(live.Room, _liveRoom)))
         {
             Connector.InvalidateRequests();
             Connector.PlaylistInitialized -= OnConnectorPlaylistInitialized;
@@ -85,6 +85,7 @@ public sealed partial class PlayerViewModel
             {
                 BiliMediaType.Video => new VideoConnectorViewModel(this),
                 BiliMediaType.Pgc => new PgcConnectorViewModel(this),
+                BiliMediaType.Live => new LiveConnectorViewModel(_liveRoom!, () => IsLiveMedia && !IsConnecting && !_liveMediaPending && !IsPlaybackClosing && !IsLiveReleaseBlocked),
                 _ => default,
             };
 
@@ -107,22 +108,16 @@ public sealed partial class PlayerViewModel
             await MpvShutdownHelper.QuitCoreAsync(Client, logger, TimeSpan.FromSeconds(3));
             await Client.DisposeAsync();
             Client = null;
+            ReleaseSystemMediaTransportControls(_smtc);
             _nativeMp?.Dispose();
             _nativeMp = null;
-            if (_smtc is not null) _smtc.ButtonPressed -= OnSmtcButtonPressed;
             _smtc = null;
             CheckMediaAdmission();
         }
 
         if (Client?.IsDisposed != false)
         {
-            _nativeMp = new Windows.Media.Playback.MediaPlayer();
-            _nativeMp.CommandManager.IsEnabled = false; // 禁用原生播放器的命令管理器.
-            _smtc = _nativeMp.SystemMediaTransportControls;
-            _smtc.IsEnabled = true; // 启用系统媒体控制.
-            _smtc.IsPlayEnabled = true;
-            _smtc.IsPauseEnabled = true;
-            _smtc.ButtonPressed += OnSmtcButtonPressed;
+            InitializeSystemMediaTransportControls();
             var gpuNames = await Task.Run(AppToolkit.GetGpuNames);
             CheckMediaAdmission();
             HasNvidiaGpu = gpuNames.Any(p => p.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
@@ -135,7 +130,8 @@ public sealed partial class PlayerViewModel
             }
 
             var configPath = string.Empty;
-            var decodeType = DecodeOverride ?? SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
+            var decodeType = IsLiveMedia ? PreferDecodeType.Auto
+                : DecodeOverride ?? SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
             if (decodeType == PreferDecodeType.Custom)
             {
                 configPath = await AppToolkit.EnsureMpvConfigExistAsync();
@@ -146,8 +142,14 @@ public sealed partial class PlayerViewModel
             {
                 UseConfig = false,
                 LoadScripts = true,
+                DisableCurl = !IsLiveMedia && SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                    && SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false),
+                UseDisplayResample = !IsLiveMedia && SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false)
+                    && SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false),
             };
-            var client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
+            _curlDisableRequested = options.DisableCurl;
+            _displaySyncRequested = options.UseDisplayResample;
+            var client = await MpvClient.CreateAsync(mpvPath, options, logger: IsLiveMedia ? NullLogger.Instance : logger);
             Client = client;
             CheckMediaAdmission();
             if (options.UseConfig != true && string.IsNullOrEmpty(configPath))
@@ -249,7 +251,7 @@ public sealed partial class PlayerViewModel
 
                 await AwaitInitializationStepAsync(() => Client.SetConfigFileAsync(configPath));
             }
-            else
+            else if (!IsLiveMedia)
             {
                 // 未使用自定义配置文件时，使用附加设置.
                 var preferAudioChannelLayout = SettingsToolkit.ReadLocalSetting(SettingNames.PreferAudioChannelLayout, Richasy.MpvKernel.Core.Enums.AudioChannelLayoutType.Auto);
@@ -271,6 +273,8 @@ public sealed partial class PlayerViewModel
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBytesAsync($"{Convert.ToInt32(cacheSize)}MiB"));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerReadheadSecondsAsync(Convert.ToInt32(cacheSeconds)));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB"));
+                if (CanUseOnDemandNetwork)
+                    await AwaitInitializationStepAsync(() => Client.SetCachePauseWaitAsync(PlaybackNetworkPolicy.CachePauseWaitSeconds));
 
                 var useCacheOnDisk = SettingsToolkit.ReadLocalSetting(SettingNames.CacheOnDisk, false);
                 await AwaitInitializationStepAsync(() => Client.SetCacheOnDiskAsync(useCacheOnDisk));
@@ -301,7 +305,7 @@ public sealed partial class PlayerViewModel
                 }
 
                 var hrSeek = SettingsToolkit.ReadLocalSetting(SettingNames.HrSeek, HrSeekType.Default);
-                await AwaitInitializationStepAsync(() => Client.SetHrSeekAsync(hrSeek));
+                if (CanSeek) await AwaitInitializationStepAsync(() => Client.SetHrSeekAsync(hrSeek));
 
                 MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
                 await AwaitInitializationStepAsync(() => Client.SetMaxVolumeAsync(Convert.ToInt32(MaxVolume)));
@@ -309,15 +313,29 @@ public sealed partial class PlayerViewModel
                 var audioExclusive = SettingsToolkit.ReadLocalSetting(SettingNames.AudioExclusiveEnabled, false);
                 await AwaitInitializationStepAsync(() => Client.SetAudioExclusiveAsync(audioExclusive));
             }
+            else
+            {
+                // 直播不套用点播的解码与缓存偏好，但音量上限仍按用户设置；上限留在 0 时音量滑块、快捷键与手势都调不动.
+                MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
+                await AwaitInitializationStepAsync(() => Client.SetMaxVolumeAsync(Convert.ToInt32(MaxVolume)));
+            }
 
-            var logLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+            // Native messages can contain signed live URLs and credentials, including in DEBUG output.
+            var logLevel = IsLiveMedia ? MpvLogLevel.None : SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
             await AwaitInitializationStepAsync(() => Client.SetLogLevelAsync(logLevel));
             await AwaitInitializationStepAsync(() => Client.UseIdleAsync(true));
             await AwaitInitializationStepAsync(() => Client.UseKeepOpenAsync(true));
+#if DEBUG
             await AwaitInitializationStepAsync(() => Client.SetTlsVerifyAsync(false));
+#else
+            await AwaitInitializationStepAsync(() => Client.SetTlsVerifyAsync(true));
+#endif
             await AwaitInitializationStepAsync(() => Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No));
+            ConfigureSponsorCacheClient(Client, !IsLiveMedia && string.IsNullOrEmpty(configPath) && decodeType != PreferDecodeType.Custom);
             _clientConfigured = true;
         }
+
+        RefreshPlaybackDiagnostics(startCurrentPlayback: false);
 
         if (_tripleTimer == null)
         {
@@ -326,6 +344,8 @@ public sealed partial class PlayerViewModel
             _tripleTimer.Tick += OnTripleTimerTick;
         }
     }
+
+    partial void ConfigureSponsorCacheClient(MpvClient client, bool managed);
 
     // Stops managed initialization continuations after close; this does not
     // cancel a native operation that has already been issued.
@@ -350,53 +370,6 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    private void OnConnectorPropertiesUpdated(object? sender, PlayerInformationUpdatedEventArgs e)
-    {
-        if (!IsCurrentPlayback(_mediaVersion) || _smtc is null || !ReferenceEquals(sender, Connector))
-        {
-            return;
-        }
-
-        var updater = _smtc!.DisplayUpdater;
-        //updater.AppMediaId = GetSnapshotItemId();
-        updater.Type = MediaPlaybackType.Video;
-        updater.VideoProperties.Title = e.Title;
-        updater.VideoProperties.Subtitle = e.Subtitle;
-        if (e.Cover is RandomAccessStreamReference streamRef)
-        {
-            updater.Thumbnail = streamRef;
-        }
-        else if (e.Cover is Uri uri)
-        {
-            updater.Thumbnail = RandomAccessStreamReference.CreateFromUri(uri);
-        }
-        else
-        {
-            updater.Thumbnail = null;
-        }
-
-        updater.Update();
-    }
-
-    private void OnSmtcButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
-    {
-        queue.TryEnqueue(() =>
-        {
-            if (args.Button is SystemMediaTransportControlsButton.Play or SystemMediaTransportControlsButton.Pause)
-            {
-                PlayPauseCommand.Execute(default);
-            }
-            else if (args.Button == SystemMediaTransportControlsButton.Next && IsNextButtonEnabled)
-            {
-                PlayNextCommand.Execute(default);
-            }
-            else if (args.Button == SystemMediaTransportControlsButton.Previous && IsPrevButtonEnabled)
-            {
-                PlayPreviousCommand.Execute(default);
-            }
-        });
-    }
-
     private readonly object _cacheStateUpdateLock = new();
     private MpvCacheStateEventArgs? _pendingCacheState;
     private long _pendingCacheStateMediaVersion;
@@ -404,6 +377,9 @@ public sealed partial class PlayerViewModel
 
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
     {
+        Volatile.Write(ref _forwardCacheBytes, e.FwBytes);
+        Volatile.Write(ref _rawInputRate, e.RawInputRate);
+        Volatile.Write(ref _cacheState, e);
         lock (_cacheStateUpdateLock)
         {
             _pendingCacheState = e;
@@ -439,7 +415,7 @@ public sealed partial class PlayerViewModel
             queue.TryEnqueue(() => { if (IsCurrentPlayback(version)) OnClientErrorOccurred(sender, e); });
             return;
         }
-        if (!IsCurrentPlayback(_mediaVersion) || Player is null) return;
+        if (!IsCurrentPlayback(_mediaVersion) || Player is null || !ReferenceEquals(sender, Client) || IsLiveMedia) return;
         var mediaVersion = _mediaVersion;
         if (e == MpvError.TlsError)
         {
@@ -451,7 +427,12 @@ public sealed partial class PlayerViewModel
 
             return;
         }
-        else if (Player.Duration < 1 && !_isBroken)
+        else if (TryDeferLoadError(e))
+        {
+            // The automatic node switch answers for this load once it has succeeded or failed.
+            return;
+        }
+        else if (CanAutoReplay && Player.Duration < 1 && !_isBroken)
         {
             _isBroken = true;
             try { await ReplayAsync(); }
@@ -531,7 +512,7 @@ public sealed partial class PlayerViewModel
     }
 
     private void CheckBlackBackgroundVisible()
-        => IsBlackBackgroundVisible = Player?.IsPlaybackInitialized != true || !string.IsNullOrEmpty(ErrorMessage);
+        => IsBlackBackgroundVisible = (IsLiveMedia ? !IsLiveReady : Player?.IsPlaybackInitialized != true) || !string.IsNullOrEmpty(ErrorMessage);
 
     private void OnWindowSizeChanged(object? sender, Size e)
     {
@@ -565,6 +546,12 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+        var handlerStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
+        long synchronousTicks = -1;
+        if (e.PropertyName is nameof(Player.Position) or nameof(Player.IsPlaybackInitialized) or nameof(Player.PlaybackState))
+            UpdateCommandDanmakuPosition(Player.Position);
+
         // Notifications are reread prompts only; never feed this event's old payload into Sponsor.
         if (e.PropertyName == nameof(Player.Position))
         {
@@ -585,6 +572,7 @@ public sealed partial class PlayerViewModel
 
         if (e.PropertyName == nameof(Player.Position) && !ShouldFanOutPlayerPosition())
         {
+            if (diagnostics) ReportSlowPlayerPropertyChanged(e.PropertyName, handlerStarted, synchronousTicks);
             return;
         }
 
@@ -598,7 +586,11 @@ public sealed partial class PlayerViewModel
         var mediaVersion = _mediaVersion;
         try
         {
-            await OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
+            ObserveSystemMediaPlayerPropertyChanged(e.PropertyName);
+            var work = OwnWork(HandlePlayerPropertyChangedAsync(e, mediaVersion));
+            // The UI thread has been held up to here; anything after the await may have yielded.
+            if (diagnostics) synchronousTicks = Stopwatch.GetTimestamp() - handlerStarted;
+            await work;
             if (flushPendingPosition && _pendingFanOutPosition.HasValue && IsCurrentPlayback(mediaVersion))
             {
                 ShouldFanOutPlayerPosition(force: true);
@@ -616,6 +608,17 @@ public sealed partial class PlayerViewModel
                 logger.LogError(ex, "Stale playback event failed.");
             }
         }
+
+        if (diagnostics) ReportSlowPlayerPropertyChanged(e.PropertyName, handlerStarted, synchronousTicks);
+    }
+
+    private static void ReportSlowPlayerPropertyChanged(string? propertyName, long started, long synchronousTicks)
+    {
+        if (!PlaybackStutterDiagnostics.IsSlow(started, out var milliseconds)) return;
+        // sync-ms is the part before the first await, which is what blocks the UI thread.
+        var synchronous = synchronousTicks < 0 ? milliseconds : synchronousTicks * 1000d / Stopwatch.Frequency;
+        PlaybackStutterDiagnostics.ReportSlow("PlayerPropertyChanged", milliseconds,
+            "property=" + (propertyName ?? "n/a") + " sync-ms=" + PlaybackStutterDiagnostics.FormatMilliseconds(synchronous));
     }
 
     private bool ShouldFanOutPlayerPosition(bool force = false)
@@ -682,8 +685,9 @@ public sealed partial class PlayerViewModel
 
     private void UpdateChapterFlags(double position)
     {
+        if (!CanUseChapters) return;
         if (_chapterFlagsCount == Chapters.Count && (_chapterFlagsPosition == position
-            || (position > _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
+            || (position >= _chapterFlagsLowerBound && position < _chapterFlagsUpperBound)))
         {
             return;
         }
@@ -692,15 +696,18 @@ public sealed partial class PlayerViewModel
         _chapterFlagsPosition = position;
         _chapterFlagsLowerBound = double.NegativeInfinity;
         _chapterFlagsUpperBound = double.PositiveInfinity;
-        foreach (var chapter in Chapters)
+        ChapterItemViewModel? current = null;
+        for (var i = 0; i < Chapters.Count; i++)
         {
-            chapter.IsPlayed = chapter.Position <= position;
-            chapter.IsPlaying = Math.Abs(chapter.Position - position) < 2;
-            // Preserve the ±2s start window used by previous/next chapter commands.
-            UpdateChapterBoundary(chapter.Position - 2, position);
-            UpdateChapterBoundary(chapter.Position, position);
-            UpdateChapterBoundary(chapter.Position + 2, position);
+            var chapter = Chapters[i];
+            chapter.IsPlayed = chapter.Start <= position;
+            if (current is null && chapter.Start <= position && position < chapter.End) current = chapter;
+            chapter.IsPlaying = ReferenceEquals(current, chapter);
+            UpdateChapterBoundary(chapter.Start, position);
+            UpdateChapterBoundary(chapter.End, position);
         }
+
+        CurrentChapter = current;
     }
 
     private void UpdateChapterBoundary(double boundary, double position)
@@ -710,7 +717,7 @@ public sealed partial class PlayerViewModel
             _chapterFlagsLowerBound = Math.Max(_chapterFlagsLowerBound, boundary);
         }
 
-        if (boundary >= position)
+        else
         {
             _chapterFlagsUpperBound = Math.Min(_chapterFlagsUpperBound, boundary);
         }
@@ -751,19 +758,23 @@ public sealed partial class PlayerViewModel
             IsPreviewProgressChanging = false;
             var position = _pendingFanOutPosition ?? Player.Position;
             _pendingFanOutPosition = null;
-            var positionTime = TimeSpan.FromSeconds(position);
-            var positionSecond = positionTime.Ticks / TimeSpan.TicksPerSecond;
-            if (_positionTextSecond != positionSecond)
+            if (CanSeek)
             {
-                _positionTextSecond = positionSecond;
-                PositionText = positionTime.ToString(@"hh\:mm\:ss");
+                var positionTime = TimeSpan.FromSeconds(position);
+                var positionSecond = positionTime.Ticks / TimeSpan.TicksPerSecond;
+                if (_positionTextSecond != positionSecond)
+                {
+                    _positionTextSecond = positionSecond;
+                    PositionText = positionTime.ToString(@"hh\:mm\:ss");
+                }
+
+                ProgressChanged?.Invoke(this, position);
             }
 
-            ProgressChanged?.Invoke(this, position);
-            Danmaku.UpdatePosition(Convert.ToInt32(position));
+            if (CanLoadOnDemandDanmaku) Danmaku.UpdatePosition(Convert.ToInt32(position));
             UpdateChapterFlags(position);
 
-            if (Player.Duration > 5)
+            if (CanNavigatePlaylist && Player.Duration > 5)
             {
                 IsEnd = false;
                 var isShowTip = !_playNextWithoutTip;
@@ -831,8 +842,8 @@ public sealed partial class PlayerViewModel
         }
         else if (e.PropertyName == nameof(Player.Duration))
         {
-            DurationText = TimeSpan.FromSeconds(Player.Duration).ToString(@"hh\:mm\:ss");
-            ChapterInitialized?.Invoke(this, EventArgs.Empty);
+            if (CanSeek) DurationText = TimeSpan.FromSeconds(Player.Duration).ToString(@"hh\:mm\:ss");
+            UpdateChapterDuration();
         }
         else if (e.PropertyName == nameof(Player.IsFullScreen))
         {
@@ -869,7 +880,7 @@ public sealed partial class PlayerViewModel
             _positionTextSecond = -1;
             _chapterFlagsCount = -1;
             CheckHardwareDecode();
-            ErrorMessage = default;
+            if (!IsLiveMedia || IsLiveReady) ErrorMessage = default;
             _prevPosition = 0;
             CheckBlackBackgroundVisible();
             CheckBottomProgressBarVisible();
@@ -888,7 +899,7 @@ public sealed partial class PlayerViewModel
             IsStatsOverlayShown = false;
 
             // Make sure playing.
-            if (Player.PlaybackState != MpvPlayerState.Playing)
+            if (!IsLiveMedia && Player.PlaybackState != MpvPlayerState.Playing)
             {
                 if (_sponsor?.CanUseBinding == true) await SetUserPausedAsync(false);
                 else if (_sponsor?.HasBinding != true) await Client!.ResumeAsync();
@@ -942,31 +953,25 @@ public sealed partial class PlayerViewModel
                 }
             }
 
-            if (Player.PlaybackState is MpvPlayerState.Buffering or MpvPlayerState.Seeking && !string.IsNullOrEmpty(ErrorMessage))
+            if (!IsLiveMedia && Player.PlaybackState is MpvPlayerState.Buffering or MpvPlayerState.Seeking && !string.IsNullOrEmpty(ErrorMessage))
             {
                 ErrorMessage = default;
                 CheckBlackBackgroundVisible();
             }
 
-            _smtc?.PlaybackStatus = Player.PlaybackState switch
-            {
-                MpvPlayerState.Playing => MediaPlaybackStatus.Playing,
-                MpvPlayerState.Paused => MediaPlaybackStatus.Paused,
-                MpvPlayerState.Buffering or MpvPlayerState.Buffering => MediaPlaybackStatus.Changing,
-                _ => MediaPlaybackStatus.Stopped,
-            };
         }
     }
 
     private async void OnConnectorNewMediaRequest(object? sender, MediaSnapshot e)
     {
-        if (_snapshot == e || IsPlaybackClosing || !ReferenceEquals(sender, Connector))
+        if (!CanNavigatePlaylist || _snapshot == e || IsPlaybackClosing || !ReferenceEquals(sender, Connector))
         {
             return;
         }
 
         try
         {
+            CarryAudioSelectionToEpisode(e);
             await InitializeAsync(e);
         }
         catch (Exception ex)
@@ -982,16 +987,12 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        IsPrevButtonEnabled = e.CanPrev;
-        IsNextButtonEnabled = e.CanNext;
+        IsPrevButtonEnabled = CanNavigatePlaylist && e.CanPrev;
+        IsNextButtonEnabled = CanNavigatePlaylist && e.CanNext;
         PrevButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.PrevVideoTemplate), e.PrevTitle);
         NextButtonToolTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.NextVideoTemplate), e.NextTitle);
-        IsVideoNavigationAvailable = e.CanPrev || e.CanNext;
-        if (_smtc != null)
-        {
-            _smtc.IsNextEnabled = IsNextButtonEnabled;
-            _smtc.IsPreviousEnabled = IsPrevButtonEnabled;
-        }
+        IsVideoNavigationAvailable = CanNavigatePlaylist && (e.CanPrev || e.CanNext);
+        NotifySystemMediaPlaylistInitialized();
     }
 
     private void OnRequestOpenExtraPanel(object? sender, EventArgs e)
@@ -1016,33 +1017,35 @@ public sealed partial class PlayerViewModel
 
     private async Task VerifyChaptersAsync()
     {
-        if (Client is null || Player is null)
+        if (!CanUseChapters || !IsCurrentPlayback(_mediaVersion) || !_chapterFileLoaded || Client is null || Player is not { Duration: > 0 } || _usingBilibiliChapters
+            || TryApplyVideoChapters() || Chapters.Count > 0)
         {
             return;
         }
 
         var mediaVersion = _mediaVersion;
-        var chapters = await Client.GetChaptersAsync();
-        if (!IsCurrentPlayback(mediaVersion))
+        var revision = _chapterRevision;
+        try
         {
-            return;
-        }
-
-        if (chapters.IsSuccess && Chapters.Count == 0 && chapters.Value.Count > 1)
-        {
-            var index = 0;
-            foreach (var chapter in chapters.Value)
+            var chapters = await Client.GetChaptersAsync();
+            if (!IsCurrentChapterRequest(mediaVersion, revision) || _usingBilibiliChapters || Chapters.Count > 0) return;
+            if (chapters.IsSuccess && chapters.Value.Count >= 2)
             {
-                Chapters.Add(new ChapterItemViewModel(index, chapter.Title, chapter.Time));
-                index++;
+                var items = chapters.Value.OrderBy(chapter => chapter.Time)
+                    .Select((chapter, index) => new ChapterItemViewModel(index, chapter.Title, chapter.Time))
+                    .ToArray();
+                SetChapters(items, fromBilibili: false);
             }
-
-            ChapterInitialized?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrentChapterRequest(mediaVersion, revision)) logger.LogWarning(ex, "Failed to load embedded chapters.");
         }
     }
 
     private async Task LoadSourcesAsync()
     {
+        if (!CanSelectOnDemandQuality) return;
         var version = _mediaVersion;
         try
         {
@@ -1051,26 +1054,7 @@ public sealed partial class PlayerViewModel
                 var sources = await videoResolver.GetSourcesAsync();
                 if (!IsCurrentPlayback(version)) return;
 
-                IsSourceSelectable = sources?.Count > 1;
-                Sources.Clear();
-                if (sources != null)
-                {
-                    var currentSource = videoResolver.GetCurrentFormat();
-                    foreach (var source in sources)
-                    {
-                        var vm = new SourceItemViewModel(source, item => IsCurrentPlayback(version)
-                            ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask);
-                        if (currentSource != null)
-                        {
-                            vm.IsSelected = source.Quality == currentSource.Quality;
-                        }
-
-                        Sources.Add(vm);
-                    }
-
-                    SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
-                }
-
+                ResetSources(sources, version);
                 var c = ((VideoConnectorViewModel)Connector);
                 DanmakuSend.ResetData(c._view.Information.Identifier.Id, c._part.Identifier.Id);
             }
@@ -1079,26 +1063,7 @@ public sealed partial class PlayerViewModel
                 var sources = await pgcResolver.GetSourcesAsync();
                 if (!IsCurrentPlayback(version)) return;
 
-                IsSourceSelectable = sources?.Count > 1;
-                Sources.Clear();
-                if (sources != null)
-                {
-                    var currentSource = pgcResolver.GetCurrentFormat();
-                    foreach (var source in sources)
-                    {
-                        var vm = new SourceItemViewModel(source, item => IsCurrentPlayback(version)
-                            ? OwnWork(SelectSourceAsync(item)) : Task.CompletedTask);
-                        if (currentSource != null)
-                        {
-                            vm.IsSelected = source.Quality == currentSource.Quality;
-                        }
-
-                        Sources.Add(vm);
-                    }
-
-                    SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
-                }
-
+                ResetSources(sources, version);
                 var c = ((PgcConnectorViewModel)Connector);
                 var aid = c._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Aid).ToString();
                 var cid = c._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString();
@@ -1111,8 +1076,33 @@ public sealed partial class PlayerViewModel
         }
     }
 
+    // Fills the quality list: the automatic entry first, then the qualities of the media.
+    private void ResetSources(List<PlayerFormatInformation>? sources, long version)
+    {
+        if (!CanSelectOnDemandQuality) return;
+        IsSourceSelectable = sources?.Count > 1;
+        Sources.Clear();
+        if (sources is not { Count: > 0 })
+        {
+            SelectedSource = default;
+            return;
+        }
+
+        Task Activate(SourceItemViewModel item)
+            => IsCurrentPlayback(version) ? OwnWork(SelectQualityEntryAsync(item)) : Task.CompletedTask;
+
+        Sources.Add(SourceItemViewModel.CreateAuto(Activate));
+        foreach (var source in sources)
+        {
+            Sources.Add(new SourceItemViewModel(source, Activate));
+        }
+
+        MarkQualityMenu();
+    }
+
     private async Task LoadSubtitlesAsync()
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         try
@@ -1165,6 +1155,7 @@ public sealed partial class PlayerViewModel
 
     private async Task SelectSubtitleAsync(SubtitleItemViewModel vm)
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         var entered = false;
@@ -1185,7 +1176,7 @@ public sealed partial class PlayerViewModel
 
     private async Task SelectSubtitleCoreAsync(SubtitleItemViewModel vm, long version, CancellationToken token)
     {
-        if (!IsCurrentPlayback(version) || !Subtitles.Any(item => ReferenceEquals(item, vm)) || Client is null) return;
+        if (!CanUseSubtitles || !IsCurrentPlayback(version) || !Subtitles.Any(item => ReferenceEquals(item, vm)) || Client is null) return;
 
         if (string.IsNullOrEmpty(vm._srtFilePath))
         {
@@ -1209,6 +1200,7 @@ public sealed partial class PlayerViewModel
 
     private async Task DeselectSubtitleAsync(SubtitleItemViewModel vm)
     {
+        if (!CanUseSubtitles) return;
         var version = _mediaVersion;
         var token = _activeMediaToken;
         var entered = false;
@@ -1216,7 +1208,7 @@ public sealed partial class PlayerViewModel
         {
             await _initializationGate.WaitAsync(token);
             entered = true;
-            if (!IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
+            if (!CanUseSubtitles || !IsCurrentPlayback(version) || !Subtitles.Contains(vm) || Client is null) return;
 
             var result = await Client.SetSubtitleTrackAsync(default, token);
             if (!IsCurrentPlayback(version)) return;

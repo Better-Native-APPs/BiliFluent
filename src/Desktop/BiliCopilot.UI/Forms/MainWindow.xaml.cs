@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
@@ -9,6 +10,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.Graphics;
@@ -36,6 +39,9 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     private bool _handlersUnregistered;
     private bool _windowStatsSaved;
     private bool _isTerminalClosePermitted;
+    private InputKeyboardSource? _keyboardSource;
+    private UIElement? _embeddedNavigationRoot;
+    private PlayerViewModel? _embeddedNavigationOwner;
 
     internal bool IsCurrentEmbeddedHost(MainPlayerHost host, PlayerViewModel? expectedOwner = null)
     {
@@ -49,6 +55,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     {
         if (!IsCurrentEmbeddedHost(host, expectedOwner)) return false;
         // Avoid internal programmatic base Close() path; route explicit close requests directly to App.RequestExitAsync.
+        App.TraceExitReason("embedded-owner-close-button");
         _ = App.Current.RequestExitAsync();
         return true;
     }
@@ -64,40 +71,15 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     internal void HideEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.HideEmbeddedPlayer(expectedViewModel);
     internal void ClearEmbeddedPlayer(PlayerViewModel expectedViewModel) => RootLayout.ClearEmbeddedPlayer(expectedViewModel);
 
-    internal bool TryShowEmbeddedLive(object ownerKey, BiliCopilot.UI.Live.Controls.LiveView liveView)
-        => RootLayout.TryShowEmbeddedLive(ownerKey, liveView);
-
-    internal bool HideEmbeddedLive(object expectedOwner)
-        => RootLayout.HideEmbeddedLive(expectedOwner);
-
-    internal bool ClearEmbeddedLive(object expectedOwner)
-        => RootLayout.ClearEmbeddedLive(expectedOwner);
-
-    internal bool IsEmbeddedLiveShown => RootLayout.IsEmbeddedLiveShown;
-
-    internal object? CurrentEmbeddedLiveOwner => RootLayout.CurrentEmbeddedLiveOwner;
-
-    internal bool IsEmbeddedLiveVisible => IsEmbeddedLiveShown && !_playerOcclusion.IsSuspended;
-
-    internal event EventHandler<object>? EmbeddedLiveBackRequested
-    {
-        add => RootLayout.EmbeddedLiveBackRequested += value;
-        remove => RootLayout.EmbeddedLiveBackRequested -= value;
-    }
-
-    internal event Action<object, bool>? LivePresentationChanged
-    {
-        add => RootLayout.LivePresentationChanged += value;
-        remove => RootLayout.LivePresentationChanged -= value;
-    }
-
-    /// <summary>
-    /// 当主窗口渲染遮挡状态（如弹出弹窗/浮层）变化时触发，通知 Live 后端调整底层 Surface 呈现.
-    /// </summary>
-    internal event Action? LiveOcclusionChanged;
-
     internal void ReportEmbeddedHostFailure(Exception exception)
     {
+        var app = this.Get<AppViewModel>();
+        if (app.EmbeddedPlayer is { } live && app.IsSharedLivePlayer(live))
+        {
+            SafeFailureContext.TryWrite(FailureStage.EmbeddedOpen, exception, () => this.Get<ILogger<App>>());
+            app.ReportLiveFailure();
+            return;
+        }
         this.Get<ILogger<App>>().LogError(exception, "Embedded native host layout failed.");
         if (this.Get<AppViewModel>().EmbeddedPlayer is { } vm) vm.ErrorMessage = exception.Message;
     }
@@ -109,7 +91,6 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     private void OnRenderingOcclusionChanged()
     {
         UpdateEmbeddedPlayerOcclusion();
-        LiveOcclusionChanged?.Invoke();
     }
 
     private void UpdateEmbeddedPlayerOcclusion()
@@ -132,6 +113,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
         _windowStatsTimer.Tick += OnWindowStatsTimerTick;
         RootLayout.SetEmbeddedPlayerRenderingSuspensionFactory(SuspendEmbeddedPlayerRendering);
         RootLayout.ActiveTitleBarChanged += OnActiveTitleBarChanged;
+        RootLayout.PreviewKeyDown += OnNavigationKeyDown;
         ApplyActiveTitleBar();
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
         this.SetIcon("Assets/logo.ico");
@@ -224,6 +206,10 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
         _windowStatsTimer.Stop();
         _windowStatsTimer.Tick -= OnWindowStatsTimerTick;
         this.Get<AppViewModel>().PlaybackActivityChanged -= OnPlaybackActivityChanged;
+        RootLayout.PreviewKeyDown -= OnNavigationKeyDown;
+        if (_keyboardSource is not null) _keyboardSource.KeyUp -= OnWindowKeyUp;
+        _keyboardSource = null;
+        if (_embeddedNavigationOwner is { } player) DetachEmbeddedNavigationInput(player);
         SetEfficiencyMode(false);
         Activated -= OnActivated;
         Closed -= OnClosed;
@@ -240,6 +226,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // Cancel caption close button / Alt+F4 to keep the main window & dispatcher VISIBLE during cleanup.
         args.Cancel = true;
+        App.TraceExitReason("main-window-close-request");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -253,6 +240,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // An already-destroyed HWND cannot be restored; finish the owned exit path.
         this.Get<ILogger<App>>().LogWarning("MainWindow.Closed triggered without terminal exit permission; requesting app exit.");
+        App.TraceExitReason("main-window-already-closed");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -266,6 +254,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             || !_appClosedMarked || !_handlersUnregistered)
             throw new InvalidOperationException("Main window final teardown is incomplete.");
         _isTerminalClosePermitted = true;
+        App.TraceExitReason("main-window-finalization");
         Close();
     }
 
@@ -464,26 +453,175 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+        => HandleNavigationPointer((UIElement)sender, e);
+
+    private void HandleNavigationPointer(UIElement root, PointerRoutedEventArgs e)
     {
-        var point = e.GetCurrentPoint((UIElement)sender);
+        if (e.Handled || _isTerminalClosePermitted) return;
+        var point = e.GetCurrentPoint(root);
         if (point.Properties.IsXButton1Pressed || point.Properties.IsXButton2Pressed)
         {
             e.Handled = true;
-            if (IsEmbeddedLiveShown && CurrentEmbeddedLiveOwner is { } liveOwner)
+            var app = this.Get<AppViewModel>();
+            var navigation = RootLayout.ViewModel;
+            if (navigation.CanGoBack || navigation.CanGoForward || !navigation.LastNavigationTask.IsCompleted
+                || app.HasEmbeddedWork || app.HasLiveWork
+                || RootLayout.HasNavigationPaneToDismiss
+                || root.XamlRoot is { } xamlRoot && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Count > 0)
             {
-                RootLayout.RequestLiveBack(liveOwner);
+                if (point.Properties.IsXButton1Pressed) navigation.Back();
+                else navigation.Forward();
             }
-            else if (RootLayout.ViewModel.IsOverlayOpen || this.Get<AppViewModel>().HasEmbeddedWork)
+        }
+    }
+
+    // The shared player is a separate island; its events never bubble through RootLayout.
+    internal void AttachEmbeddedNavigationInput(PlayerViewModel player)
+    {
+        if (player.Window is not MainPlayerHost host || !IsCurrentEmbeddedHost(host, player)
+            || host.XamlRoot?.Content is not UIElement root) return;
+        if (ReferenceEquals(_embeddedNavigationOwner, player) && ReferenceEquals(_embeddedNavigationRoot, root)) return;
+        if (_embeddedNavigationOwner is { } previous) DetachEmbeddedNavigationInput(previous);
+        _embeddedNavigationOwner = player;
+        _embeddedNavigationRoot = root;
+        root.PreviewKeyDown += OnEmbeddedNavigationKeyDown;
+        root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnEmbeddedNavigationPointerPressed), true);
+    }
+
+    internal void DetachEmbeddedNavigationInput(PlayerViewModel expectedPlayer)
+    {
+        if (!ReferenceEquals(_embeddedNavigationOwner, expectedPlayer)) return;
+        if (_embeddedNavigationRoot is { } root)
+        {
+            root.PreviewKeyDown -= OnEmbeddedNavigationKeyDown;
+            root.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnEmbeddedNavigationPointerPressed));
+        }
+        _embeddedNavigationOwner = null;
+        _embeddedNavigationRoot = null;
+    }
+
+    private bool IsEmbeddedNavigationCurrent(object sender)
+        => ReferenceEquals(sender, _embeddedNavigationRoot) && _embeddedNavigationOwner is { Window: MainPlayerHost host } player
+            && IsCurrentEmbeddedHost(host, player);
+
+    private void OnEmbeddedNavigationPointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationPointer((UIElement)sender, args);
+    }
+
+    private void OnEmbeddedNavigationKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationKey((UIElement)sender, args);
+    }
+
+    private void OnNavigationKeyDown(object sender, KeyRoutedEventArgs args)
+        => HandleNavigationKey(RootLayout, args);
+
+    private void HandleNavigationKey(UIElement root, KeyRoutedEventArgs args)
+    {
+        if (args.Handled || _isTerminalClosePermitted) return;
+        var key = args.Key;
+        var back = key == Windows.System.VirtualKey.Left && AppToolkit.IsOnlyAltPressed()
+            || key == Windows.System.VirtualKey.GoBack && AppToolkit.NotModifierKeyPressed();
+        var forward = key == Windows.System.VirtualKey.Right && AppToolkit.IsOnlyAltPressed()
+            || key == Windows.System.VirtualKey.GoForward && AppToolkit.NotModifierKeyPressed();
+        if (!back && !forward && AppToolkit.NotModifierKeyPressed()
+            && key is Windows.System.VirtualKey.Back or Windows.System.VirtualKey.Escape)
+        {
+            // Editing and popup dismissal keep their existing local key behavior.
+            if (IsNavigationEditing(args.OriginalSource, root)) return;
+            back = true;
+        }
+        if (!back && !forward) return;
+        args.Handled = true;
+        if (args.KeyStatus.WasKeyDown) return;
+        if (back) RootLayout.ViewModel.Back();
+        else RootLayout.ViewModel.Forward();
+    }
+
+    private static bool IsNavigationEditing(object source, UIElement root)
+    {
+        for (var current = source as DependencyObject; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is TextBox or PasswordBox or RichEditBox or ContentDialog) return true;
+            if (ReferenceEquals(current, root)) break;
+        }
+        return false;
+    }
+
+    /// <summary>All Back entries dismiss transient UI before touching presentation or history.</summary>
+    internal bool TryDismissNavigationTransient()
+    {
+        var player = this.Get<AppViewModel>().EmbeddedPlayer;
+        var playerRoot = player?.Window?.XamlRoot?.Content as UIElement;
+        var roots = new[] { RootLayout.XamlRoot, playerRoot?.XamlRoot }.OfType<XamlRoot>().Distinct().ToArray();
+        var popups = roots.SelectMany(VisualTreeHelper.GetOpenPopupsForXamlRoot).ToArray();
+        foreach (var popup in popups.Reverse())
+        {
+            if (WalkVisualTree(popup.Child).OfType<ContentDialog>().FirstOrDefault() is { } dialog)
             {
-                RootLayout.ViewModel.Back();
+                dialog.Hide(); // Complete ShowAsync through its real owner, not by hiding its Popup.
+                return true;
             }
+        }
+
+        if (WalkVisualTree(playerRoot).OfType<PlayerOverlay>().FirstOrDefault()?.TryDismissNavigationTransient() == true)
+            return true;
+        if (RootLayout.TryDismissNavigationPane()) return true;
+        if (player?.IsSubtitleSettingsVisible == true)
+        {
+            player.IsSubtitleSettingsVisible = false;
+            return true;
+        }
+
+        if (popups.Length == 0) return false;
+        // Main-root attached/context/button flyouts are closed through FlyoutBase.Hide.
+        foreach (var node in roots.SelectMany(root => WalkVisualTree(root.Content)))
+        {
+            var flyout = node switch
+            {
+                Button { Flyout.IsOpen: true } button => button.Flyout,
+                UIElement { ContextFlyout.IsOpen: true } element => element.ContextFlyout,
+                FrameworkElement element => FlyoutBase.GetAttachedFlyout(element),
+                _ => null,
+            };
+            if (flyout?.IsOpen == true)
+            {
+                flyout.Hide();
+                return true;
+            }
+            if (node is ComboBox { IsDropDownOpen: true } comboBox)
+            {
+                comboBox.IsDropDownOpen = false;
+                return true;
+            }
+        }
+
+        // Remaining popup controls use their existing IsOpen dismissal surface.
+        popups[^1].IsOpen = false;
+        return true;
+    }
+
+    private static IEnumerable<DependencyObject> WalkVisualTree(DependencyObject? root)
+    {
+        if (root is null) yield break;
+        var pending = new Stack<DependencyObject>();
+        pending.Push(root);
+        while (pending.TryPop(out var node))
+        {
+            yield return node;
+            for (var index = VisualTreeHelper.GetChildrenCount(node) - 1; index >= 0; index--)
+                pending.Push(VisualTreeHelper.GetChild(node, index));
         }
     }
 
     private void OnRootLayoutLoaded(object sender, RoutedEventArgs e)
     {
         var keyboardSource = InputKeyboardSource.GetForIsland(RootLayout.XamlRoot?.ContentIsland);
-        keyboardSource.KeyUp += OnWindowKeyUp;
+        if (ReferenceEquals(_keyboardSource, keyboardSource)) return;
+        if (_keyboardSource is not null) _keyboardSource.KeyUp -= OnWindowKeyUp;
+        _keyboardSource = keyboardSource;
+        _keyboardSource.KeyUp += OnWindowKeyUp;
     }
 
     private bool IsCursorInWindow()

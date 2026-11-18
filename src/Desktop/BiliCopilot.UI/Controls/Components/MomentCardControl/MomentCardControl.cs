@@ -21,6 +21,7 @@ public abstract class MomentCardPresenter : LayoutUserControlBase<MomentItemView
 public sealed partial class MomentCardControl : LayoutControlBase<MomentItemViewModel>
 {
     private ButtonBase _rootCard;
+    private MomentItemViewModel? _observed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentCardControl"/> class.
@@ -37,17 +38,24 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
             {
                 _rootCard.Command = ViewModel.ActivateCommand;
                 AutomationProperties.SetName(_rootCard, GetCardName(ViewModel));
+                AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(ViewModel));
             }
         }
     }
 
     /// <inheritdoc/>
     protected override void OnControlLoaded()
-        => ContextRequested += OnContextRequested;
+    {
+        ContextRequested += OnContextRequested;
+        Observe(ViewModel);
+    }
 
     /// <inheritdoc/>
     protected override void OnControlUnloaded()
-        => ContextRequested -= OnContextRequested;
+    {
+        ContextRequested -= OnContextRequested;
+        Observe(null);
+    }
 
     /// <inheritdoc/>
     protected override void OnViewModelChanged(MomentItemViewModel? oldValue, MomentItemViewModel? newValue)
@@ -56,11 +64,52 @@ public sealed partial class MomentCardControl : LayoutControlBase<MomentItemView
         {
             _rootCard.Command = newValue?.ActivateCommand;
             AutomationProperties.SetName(_rootCard, GetCardName(newValue));
+            AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(newValue));
+        }
+
+        if (IsLoaded)
+        {
+            Observe(newValue);
+        }
+    }
+
+    // The mark can arrive after the card is shown, so the status follows it while the card is loaded.
+    private void Observe(MomentItemViewModel? item)
+    {
+        if (!ReferenceEquals(_observed, item))
+        {
+            if (_observed is not null)
+            {
+                _observed.PropertyChanged -= OnItemPropertyChanged;
+            }
+
+            _observed = item;
+            if (item is not null)
+            {
+                item.PropertyChanged += OnItemPropertyChanged;
+            }
+        }
+
+        if (item is not null && _rootCard is not null)
+        {
+            AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(item));
+        }
+    }
+
+    private void OnItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MomentItemViewModel.WatchMark) && _rootCard is not null)
+        {
+            AutomationProperties.SetItemStatus(_rootCard, GetCardStatus(_observed));
         }
     }
 
     private static string GetCardName(MomentItemViewModel? item)
         => string.IsNullOrEmpty(item?.VideoTitle) ? item?.Author ?? string.Empty : item.VideoTitle;
+
+    // The watched mark on the cover is not hit-testable, so the card reports it as its status.
+    private static string GetCardStatus(MomentItemViewModel? item)
+        => item?.WatchMark?.Text ?? string.Empty;
 
     private static MenuFlyoutItem CreatePrivatePlayItem()
     {

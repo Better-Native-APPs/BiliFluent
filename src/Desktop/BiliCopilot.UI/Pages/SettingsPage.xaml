@@ -64,6 +64,7 @@
                 <settings:LayoutSettingSection />
                 <settings:CacheSettingControl />
                 <settings:NavigationSettingControl />
+                <settings:RecommendationFeedSettingSection />
                 <settings:SearchRecommendSettingSection />
                 <!--<settings:CloseBehaviorSettingControl />-->
                 <settings:NotificationSettingControl />

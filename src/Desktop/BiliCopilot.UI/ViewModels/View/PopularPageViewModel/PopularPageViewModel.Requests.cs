@@ -17,9 +17,12 @@ public sealed partial class PopularPageViewModel
     {
         try
         {
-            var (videos, nextOffset) = await _service.GetRecommendVideoListAsync(_recommendOffset, token);
-            if (!IsCurrentVideoRequest(generation, accountGeneration, token)) return;
-            _recommendOffset = nextOffset;
+            var source = _recommendSource;
+            var offset = _recommendOffsets.GetValueOrDefault(source);
+            var (videos, nextOffset) = await _service.GetRecommendVideoListAsync(source, offset, token);
+            if (!IsCurrentVideoRequest(generation, accountGeneration, token) || source != _recommendSource) return;
+            _recommendOffsets[source] = nextOffset;
+            IsPrefetchExhausted = nextOffset == offset;
             TryAddVideos(videos, VideoCardStyle.Recommend, generation, accountGeneration, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }

@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Models.Constants;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core.Enums;
 using System.Collections.ObjectModel;
@@ -30,6 +31,9 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private bool _isAutoPlayNextRecommendVideo;
+
+    [ObservableProperty]
+    public partial bool IsCommandDanmakuEnabled { get; set; } = true;
 
     [ObservableProperty]
     private PlayerDisplayMode _defaultPlayerDisplayMode;
@@ -104,16 +108,16 @@ public sealed partial class SettingsPageViewModel
     private List<PreferQualityType> _preferQualityCollection;
 
     [ObservableProperty]
+    private RecommendationFeedSource _homeRecommendationFeedSource;
+
+    [ObservableProperty]
+    private List<RecommendationFeedSource> _homeRecommendationFeedSourceCollection;
+
+    [ObservableProperty]
     private List<PreferDecodeType> _preferDecodeCollection;
 
     [ObservableProperty]
-    private List<ExternalPlayerType> _externalPlayerTypeCollection;
-
-    [ObservableProperty]
     private List<MTCBehavior> _mTCBehaviorCollection;
-
-    [ObservableProperty]
-    private bool _useWebPlayerWhenLive;
 
     [ObservableProperty]
     private bool _showSearchRecommend;
@@ -207,6 +211,15 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     public partial MpvLogLevel LogLevel { get; set; }
+
+    [ObservableProperty]
+    public partial bool PlaybackStutterDiagnosticsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool DisableMpvCurlForDiagnostics { get; set; }
+
+    [ObservableProperty]
+    public partial bool UseDisplaySyncForDiagnostics { get; set; }
 
     [ObservableProperty]
     public partial bool HideMainWindowOnPlay { get; set; }

@@ -56,6 +56,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             Introduce = string.IsNullOrEmpty(MyProfile.Introduce)
                 ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.NoSelfIntroduce)
                 : MyProfile.Introduce;
+            // Notifications still wait for account readiness; main content does not.
             this.Get<AppViewModel>().IsInitialLoading = false;
             this.Get<AppViewModel>().CheckUpateCommand.Execute(default);
             UpdateUnreadCommand.Execute(default);
@@ -87,6 +88,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             }
             else
             {
+                App.TraceExitReason("account-initialization-declined");
                 App.Current.Exit();
             }
         }

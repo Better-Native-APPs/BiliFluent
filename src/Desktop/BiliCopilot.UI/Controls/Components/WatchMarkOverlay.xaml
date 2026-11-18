@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Components.WatchMarkOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsHitTestVisible="False"
+    Visibility="Collapsed"
+    mc:Ignorable="d">
+
+    <!--
+        Laid over the video cover. The watched state reads along the bottom edge, like the bar of a player:
+        a short dark fade, the state on the side the duration badge of the host card leaves free, and the progress bar underneath.
+        The host draws its duration badge above this overlay, so the two share one row and the duration is never repeated.
+        The fade sits on the cover, not on the card, so it is dark in both app themes.
+        Nothing is created until a card actually has a mark, so unwatched cards pay nothing for it. The brushes live on the deferred root for the same reason.
+    -->
+    <Grid
+        x:Name="Root"
+        x:Load="False"
+        CornerRadius="{StaticResource ControlCornerRadius}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <!--
+                        Only as dark and as tall as the text needs. It reaches 70% black where the text starts,
+                        which keeps the white text and the accent icon readable on a white cover, and fades out within a few pixels above it.
+                    -->
+                    <ResourceDictionary x:Key="Default">
+                        <LinearGradientBrush x:Key="WatchMarkFadeBrush" StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#00000000" />
+                            <GradientStop Offset="0.3" Color="#B3000000" />
+                            <GradientStop Offset="1" Color="#D9000000" />
+                        </LinearGradientBrush>
+                        <SolidColorBrush x:Key="WatchMarkTextBrush" Color="White" />
+                        <SolidColorBrush x:Key="WatchMarkFinishedIconBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="HighContrast">
+                        <SolidColorBrush x:Key="WatchMarkFadeBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                        <SolidColorBrush x:Key="WatchMarkTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="WatchMarkFinishedIconBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Border
+            x:Name="Fade"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource WatchMarkFadeBrush}" />
+        <!--
+            As tall as the duration badge and placed with the same margin, so both sit on one line.
+            Finished is the filled accent check, partly watched the white outlined clock: the two differ in shape, fill and color, and in the words.
+        -->
+        <StackPanel
+            x:Name="StatusPanel"
+            Height="24"
+            VerticalAlignment="Bottom"
+            Orientation="Horizontal"
+            Spacing="5">
+            <ic:SymbolIcon
+                x:Name="FinishedIcon"
+                VerticalAlignment="Center"
+                FontSize="16"
+                Foreground="{ThemeResource WatchMarkFinishedIconBrush}"
+                IconVariant="Filled"
+                Symbol="CheckmarkCircle" />
+            <ic:SymbolIcon
+                x:Name="PartialIcon"
+                VerticalAlignment="Center"
+                FontSize="16"
+                Foreground="{ThemeResource WatchMarkTextBrush}"
+                Symbol="History" />
+            <TextBlock
+                x:Name="StatusText"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource WatchMarkTextBrush}"
+                Style="{StaticResource BodyStrongTextBlockStyle}" />
+        </StackPanel>
+        <Grid
+            x:Name="BarTrack"
+            Height="5"
+            VerticalAlignment="Bottom">
+            <Grid.Background>
+                <SolidColorBrush Opacity="0.7" Color="Black" />
+            </Grid.Background>
+            <!--
+                The card already reports the progress as its ItemStatus, so the bar stays out of the accessibility tree.
+                The bar is as thick as its MinHeight. Square ends, because the cover corner already rounds the left one.
+            -->
+            <ProgressBar
+                x:Name="Bar"
+                MinHeight="5"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="Transparent"
+                CornerRadius="0"
+                Maximum="1">
+                <ProgressBar.Foreground>
+                    <SolidColorBrush Color="{ThemeResource SystemAccentColorLight2}" />
+                </ProgressBar.Foreground>
+            </ProgressBar>
+        </Grid>
+    </Grid>
+</UserControl>

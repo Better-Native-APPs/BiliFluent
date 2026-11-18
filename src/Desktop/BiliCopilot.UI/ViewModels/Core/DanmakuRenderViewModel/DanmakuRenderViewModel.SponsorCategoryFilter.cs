@@ -68,11 +68,23 @@ public sealed partial class DanmakuRenderViewModel
 
     private void RefreshSponsorCategories(bool redraw = true)
     {
+        var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+        var started = diagnostics ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         var current = CurrentSponsorDanmakuSource();
         ImmutableArray<SponsorDanmakuInterval> ranges = _sponsorCategoryApp is { } app
             ? SponsorDanmakuCategoryProjection.Build(app.Snapshot, _sponsorCategoryAttachment, current)
             : [];
         SetSponsorCategoryRanges(current?.Owner, ranges, redraw);
+        if (diagnostics && PlaybackStutterDiagnostics.IsSlow(started, out var milliseconds))
+        {
+            // Counts only, read after the fact: no segment, media or account data.
+            var view = _sponsorCategoryApp?.Snapshot;
+            var segments = view?.Players.FirstOrDefault(p => p.Attachment == _sponsorCategoryAttachment)?.FilterFacts?.Segments;
+            var segmentCount = segments is { IsDefault: false } list ? list.Length : 0;
+            var filter = view?.Auxiliary?.Filters?.DanmakuEnabled == true ? "on" : "off";
+            PlaybackStutterDiagnostics.ReportSlow("RefreshSponsorCategories", milliseconds,
+                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"segments={segmentCount} filter={filter} ranges={ranges.Length}"));
+        }
     }
 
     private void SetSponsorCategoryRanges(PlaybackOwner? owner, ImmutableArray<SponsorDanmakuInterval> ranges, bool redraw)

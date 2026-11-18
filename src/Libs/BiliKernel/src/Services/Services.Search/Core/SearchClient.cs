@@ -9,7 +9,6 @@ using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.Search;
-using RichasyKernel;
 using System.Text.Json;
 
 namespace Richasy.BiliKernel.Services.Search.Core;

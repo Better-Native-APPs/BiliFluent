@@ -26,14 +26,19 @@ internal static class InternalHttpExtensions
     /// </summary>
     public const string LiveReferer = "https://live.bilibili.com";
 
-    public static readonly HttpClient ImageClient = GetImageClient();
+    public static readonly HttpClient PublicImageClient = GetImageClient(allowSelfSignedCertificates: false);
+
+    public static readonly HttpClient MediaServerImageClient = GetImageClient(allowSelfSignedCertificates: true);
 
     /// <summary>
     /// 获取图片下载客户端.
     /// </summary>
     /// <returns></returns>
-    private static HttpClient GetImageClient()
+    private static HttpClient GetImageClient(bool allowSelfSignedCertificates)
     {
+#if DEBUG
+        allowSelfSignedCertificates = true;
+#endif
         var handler = new CustomHttpClientHandler
         {
             AllowAutoRedirect = true,
@@ -41,11 +46,18 @@ internal static class InternalHttpExtensions
             PreAuthenticate = true,
             ClientCertificateOptions = ClientCertificateOption.Automatic,
             AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate | System.Net.DecompressionMethods.Brotli,
-            UseCookies = false, // Emby API does not use cookies for authentication
-            ServerCertificateCustomValidationCallback = (_, _, _, _) => true, // Bypass SSL validation for self-signed certificates (not recommended for production)
+            UseCookies = false,
         };
 
+        if (allowSelfSignedCertificates)
+        {
+            // Only the dedicated self-hosted media server client bypasses release validation.
+            handler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
+        }
+
+#pragma warning disable CA5400 // Preserve platform defaults; evaluate certificate revocation checks separately.
         var client = new HttpClient(handler);
+#pragma warning restore CA5400
         client.DefaultRequestHeaders.Add("User-Agent", VideoUserAgent);
         return client;
     }

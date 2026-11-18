@@ -21,6 +21,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:live="using:BiliCopilot.UI.Live.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:player="using:BiliCopilot.UI.Controls.Player"
     xmlns:vm="using:BiliCopilot.UI.ViewModels.Core"
@@ -189,16 +190,56 @@
         <DataTemplate x:Key="PgcSideBodyTemplate" x:DataType="vm:PgcConnectorViewModel">
             <player:PgcPlayerSideBody ViewModel="{x:Bind}" />
         </DataTemplate>
+        <!--
+            Live room. The title row carries the room header: it fills the row edge to edge (the row's own padding is
+            taken back) and leaves the card fill to the row. Room data comes straight from the room; the playback
+            state and the chat switch are pushed by this view.
+        -->
+        <DataTemplate x:Key="LiveMainHeaderTemplate" x:DataType="vm:LiveConnectorViewModel">
+            <live:LiveRoomHeader
+                Title="{x:Bind Room.Title, Mode=OneWay}"
+                Margin="-16,0"
+                Anchor="{x:Bind Room.Anchor, Mode=OneWay}"
+                AnchorAvatar="{x:Bind Room.AnchorAvatar, Mode=OneWay}"
+                AnchorInvoked="OnRoomAnchorInvoked"
+                AnchorName="{x:Bind Room.AnchorName, Mode=OneWay}"
+                AudienceCount="{x:Bind Room.AudienceCount, Mode=OneWay}"
+                AudienceLabel="{x:Bind Room.AudienceLabel, Mode=OneWay}"
+                ChatToggleRequested="OnRoomChatToggleRequested"
+                IsBackdropVisible="False"
+                IsFollowing="{x:Bind Room.IsFollowing, Mode=OneWay}"
+                Loaded="OnRoomHeaderLoaded"
+                Unloaded="OnRoomHeaderUnloaded" />
+        </DataTemplate>
+        <!--  The chat panel has its own header, so it takes the whole side column and the side header stays empty.  -->
+        <DataTemplate x:Key="LiveSideHeaderTemplate" x:DataType="vm:LiveConnectorViewModel">
+            <Grid />
+        </DataTemplate>
+        <!--
+            The side column of a room has no drag handle, so the panel starts at the column edge instead of under
+            the handle. The header divider of the page already runs across the panel.
+        -->
+        <DataTemplate x:Key="LiveSideBodyTemplate" x:DataType="vm:LiveConnectorViewModel">
+            <live:LiveChatPanel
+                Margin="6,0,0,0"
+                ChatState="{x:Bind Room.ChatState, Mode=OneWay}"
+                IsHeaderDividerVisible="False"
+                Messages="{x:Bind Room.Messages, Mode=OneWay}"
+                RoomBinding="{x:Bind Room.Binding, Mode=OneWay}" />
+        </DataTemplate>
         <ext:PlayerComponentTemplateSelector
             x:Key="MainHeaderSelector"
+            LiveTemplate="{StaticResource LiveMainHeaderTemplate}"
             PgcTemplate="{StaticResource PgcMainHeaderTemplate}"
             VideoTemplate="{StaticResource VideoMainHeaderTemplate}" />
         <ext:PlayerComponentTemplateSelector
             x:Key="SideHeaderSelector"
+            LiveTemplate="{StaticResource LiveSideHeaderTemplate}"
             PgcTemplate="{StaticResource PgcSideHeaderTemplate}"
             VideoTemplate="{StaticResource VideoSideHeaderTemplate}" />
         <ext:PlayerComponentTemplateSelector
             x:Key="SideBodySelector"
+            LiveTemplate="{StaticResource LiveSideBodyTemplate}"
             PgcTemplate="{StaticResource PgcSideBodyTemplate}"
             VideoTemplate="{StaticResource VideoSideBodyTemplate}" />
     </UserControl.Resources>
@@ -218,10 +259,15 @@
             <RepositionThemeTransition IsStaggeringEnabled="False" />
         </Grid.ChildrenTransitions>
 
-        <!--  标题行（源 55 / VideoPlayerMainHeader.xaml）：标题模板 + 侧栏折叠开关  -->
+        <!--
+            标题行（源 55 / VideoPlayerMainHeader.xaml）：标题模板 + 侧栏折叠开关.
+            A room side column has no drag handle: the row then runs up to the chat panel, and the room header
+            brings its own chat switch in place of the fold button.
+        -->
         <Grid
             x:Name="PlayerHeader"
             Grid.Row="0"
+            Grid.ColumnSpan="{x:Bind GetHeaderColumnSpan(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=1}"
             Padding="16,0"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <Grid.ColumnDefinitions>
@@ -241,7 +287,8 @@
                 VerticalAlignment="Center"
                 IsHide="{x:Bind IsNavColumnManualHide, Mode=TwoWay}"
                 IsInvertDirection="True"
-                ToolTipService.ToolTip="{x:Bind GetSidePanelToggleTip(IsNavColumnManualHide), Mode=OneWay}" />
+                ToolTipService.ToolTip="{x:Bind GetSidePanelToggleTip(IsNavColumnManualHide), Mode=OneWay}"
+                Visibility="{x:Bind GetSideSplitVisibility(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=Visible}" />
         </Grid>
 
         <Border
@@ -273,20 +320,31 @@
                     VerticalAlignment="Center"
                     Spacing="12"
                     Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}">
+                    <!--  A room whose picture cannot be shown says so in plain words and offers to try again.  -->
                     <TextBlock
                         HorizontalAlignment="Center"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{ext:Locale Name=MpvError}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorTitle(ViewModel.IsLiveFailure), Mode=OneWay}"
                         TextAlignment="Center" />
                     <TextBlock
-                        Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                        Text="{x:Bind core:PlayerOverlay.GetErrorDescription(ViewModel.ErrorMessage, ViewModel.IsLiveFailure), Mode=OneWay}"
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
-                    <Button
-                        x:Name="ErrorBackButton"
+                    <StackPanel
                         HorizontalAlignment="Center"
-                        Command="{x:Bind ViewModel.BackCommand, Mode=OneWay}"
-                        Content="{ext:Locale Name=Back}" />
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button
+                            Click="OnRoomRetryClick"
+                            Content="{ext:Locale Name=Retry}"
+                            IsEnabled="{x:Bind ViewModel.CanRefreshLive, Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Visibility="{x:Bind ViewModel.IsLiveFailure, Mode=OneWay}" />
+                        <Button
+                            x:Name="ErrorBackButton"
+                            Command="{x:Bind ViewModel.BackCommand, Mode=OneWay}"
+                            Content="{ext:Locale Name=Back}" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Grid>
@@ -306,10 +364,14 @@
             IsTabStop="False"
             x:Load="{x:Bind IsSidePanelActive, Mode=OneWay}" />
 
-        <!--  侧栏主体（源 112-118）：row2/col2；无硬宽度，随分栏拖动 300–500 实际重排  -->
+        <!--
+            侧栏主体（源 112-118）：row2/col2；无硬宽度，随分栏拖动 300–500 实际重排.
+            A room chat panel carries its own header and takes the column from the top.
+        -->
         <ContentControl
             x:Name="SideBodyHost"
-            Grid.Row="2"
+            Grid.Row="{x:Bind GetSideBodyRow(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=2}"
+            Grid.RowSpan="{x:Bind GetSideBodyRowSpan(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=1}"
             Grid.Column="2"
             Margin="-6,0,0,0"
             HorizontalAlignment="Stretch"

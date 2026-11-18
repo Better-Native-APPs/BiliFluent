@@ -3,7 +3,6 @@
 
 using Richasy.BiliKernel.Bili;
 using Richasy.BiliKernel.Bili.Authorization;
-using RichasyKernel;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -218,10 +217,10 @@ public sealed partial class BiliAuthenticator
 
         var cookie = _cookieResolver.GetCookieString();
         var csrfToken = string.Empty;
-        var match = Regex.Match(cookie, @"bili_jct=(.*?);");
+        var match = Regex.Match(cookie, @"bili_jct=([^;]*)");
         if (match.Success)
         {
-            csrfToken = match.Groups[1].Value;
+            csrfToken = match.Groups[1].Value.Trim();
         }
 
         return csrfToken;

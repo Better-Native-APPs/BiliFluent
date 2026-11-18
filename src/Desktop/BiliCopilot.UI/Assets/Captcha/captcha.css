@@ -1,0 +1,81 @@
+/* Host page for the captcha. The window chrome and status messages are native. */
+:root {
+    color-scheme: light;
+    --page: #f3f3f3;
+    --text: #1b1b1b;
+    --button: #ffffff;
+    --button-border: rgba(0, 0, 0, 0.14);
+    --button-hover: #f9f9f9;
+    --focus: #1b1b1b;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #202020;
+    --text: #ffffff;
+    --button: #2d2d2d;
+    --button-border: rgba(255, 255, 255, 0.12);
+    --button-hover: #323232;
+    --focus: #ffffff;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--page);
+    color: var(--text);
+    font: 14px/20px "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#stage {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+#start,
+#image-submit,
+#image-code {
+    min-width: 160px;
+    padding: 6px 16px;
+    border: 1px solid var(--button-border);
+    border-radius: 4px;
+    background: var(--button);
+    color: inherit;
+    font: inherit;
+    cursor: default;
+}
+
+#start:hover,
+#image-submit:hover {
+    background: var(--button-hover);
+}
+
+#start:focus-visible,
+#image-submit:focus-visible,
+#image-code:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+}
+
+#start[hidden],
+#image-form[hidden] {
+    display: none;
+}
+
+#image-form {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+}
+
+#image-code {
+    box-sizing: border-box;
+    width: 200px;
+    user-select: text;
+}

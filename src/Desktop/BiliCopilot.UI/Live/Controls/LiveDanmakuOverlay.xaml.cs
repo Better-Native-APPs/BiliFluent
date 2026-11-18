@@ -2,6 +2,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Media;
@@ -11,12 +12,26 @@ using Windows.UI.ViewManagement;
 namespace BiliCopilot.UI.Live.Controls;
 
 /// <summary>
-/// Live-only scrolling danmaku renderer. Driven by incoming <see cref="ILiveSession.MessageReceived"/>
+/// Live-only scrolling danmaku renderer. Driven by incoming <see cref="LiveConnectorViewModel.MessageReceived"/>
 /// and a monotonic clock (never media position). At most 32 items are on screen; anything that
 /// cannot be placed immediately is dropped—there is no backlog queue.
+/// The shared player places it in markup and gives it the room connector and whether the picture plays;
+/// the player shows its own playback states.
 /// </summary>
 public sealed partial class LiveDanmakuOverlay : UserControl
 {
+    /// <summary><see cref="Connector"/> dependency property.</summary>
+    public static readonly DependencyProperty ConnectorProperty =
+        DependencyProperty.Register(nameof(Connector), typeof(LiveConnectorViewModel), typeof(LiveDanmakuOverlay), new PropertyMetadata(default(LiveConnectorViewModel), OnSourceChanged));
+
+    /// <summary><see cref="IsPlaying"/> dependency property.</summary>
+    public static readonly DependencyProperty IsPlayingProperty =
+        DependencyProperty.Register(nameof(IsPlaying), typeof(bool), typeof(LiveDanmakuOverlay), new PropertyMetadata(false, OnSourceChanged));
+
+    /// <summary><see cref="IsDanmakuVisible"/> dependency property.</summary>
+    public static readonly DependencyProperty IsDanmakuVisibleProperty =
+        DependencyProperty.Register(nameof(IsDanmakuVisible), typeof(bool), typeof(LiveDanmakuOverlay), new PropertyMetadata(true, OnDanmakuVisibleChanged));
+
     private const int MaxActive = 32;
     private const int MaxPendingHandoff = 32;
     private const int MaxChars = 48;
@@ -26,7 +41,6 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private const double LaneAreaRatio = 0.72;
     private const double StaticSeconds = 4.5;
 
-    private readonly ILiveSession _session;
     private readonly DispatcherQueue _dispatcher;
     private readonly List<Item> _active = new(MaxActive);
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -35,6 +49,7 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private readonly SolidColorBrush _textBrush = new(Microsoft.UI.Colors.White);
     private readonly SolidColorBrush _shadowBrush = new(Color.FromArgb(0xB0, 0, 0, 0));
 
+    private LiveConnectorViewModel? _connector;
     private bool _attached;
     private bool _renderingHooked;
     private bool _danmakuVisible = true;
@@ -45,32 +60,59 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     private int _pendingHandoff;
     private int _snapshotQueued;
 
-    public LiveDanmakuOverlay(ILiveSession session)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LiveDanmakuOverlay"/> class for the shared player.
+    /// It draws once it is loaded and has a <see cref="Connector"/>.
+    /// </summary>
+    public LiveDanmakuOverlay()
     {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
         InitializeComponent();
         _dispatcher = DispatcherQueue;
         DanmakuCanvas.Clip = _clip; // Never draw outside the video area.
         SizeChanged += OnSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        Attach();
+    }
+
+    /// <summary>The connector of the room that plays in the shared player. Another room starts from an empty screen.</summary>
+    public LiveConnectorViewModel? Connector
+    {
+        get => (LiveConnectorViewModel?)GetValue(ConnectorProperty);
+        set => SetValue(ConnectorProperty, value);
+    }
+
+    /// <summary>Whether the picture of the shared player plays. Danmaku is drawn only then.</summary>
+    public bool IsPlaying
+    {
+        get => (bool)GetValue(IsPlayingProperty);
+        set => SetValue(IsPlayingProperty, value);
     }
 
     /// <summary>
-    /// View-owned toggle (set by <see cref="LiveView"/>). Hiding clears and stops drawing only;
+    /// The danmaku switch of the host. Hiding clears and stops drawing only;
     /// it has no effect on playback or on the chat connection.
     /// </summary>
-    internal bool IsDanmakuVisible
+    public bool IsDanmakuVisible
     {
-        get => _danmakuVisible;
-        set
-        {
-            if (_danmakuVisible == value) return;
-            _danmakuVisible = value;
-            DanmakuCanvas.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-            if (!value) ClearAll();
-        }
+        get => (bool)GetValue(IsDanmakuVisibleProperty);
+        set => SetValue(IsDanmakuVisibleProperty, value);
+    }
+
+    private static void OnSourceChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var overlay = (LiveDanmakuOverlay)sender;
+        if (!overlay._attached) return;
+        overlay.SubscribeConnector(overlay.Connector);
+        overlay.Snapshot();
+    }
+
+    private static void OnDanmakuVisibleChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var overlay = (LiveDanmakuOverlay)sender;
+        var visible = (bool)args.NewValue;
+        overlay._danmakuVisible = visible;
+        overlay.DanmakuCanvas.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) overlay.ClearAll();
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -79,17 +121,37 @@ public sealed partial class LiveDanmakuOverlay : UserControl
     {
         if (_attached) return;
         _attached = true;
-        _session.PropertyChanged += OnSessionPropertyChanged; // Subscribe first ...
-        _session.MessageReceived += OnMessageReceived;
-        Snapshot(); // ... then read current state.
+        SubscribeConnector(Connector);
+
+        Snapshot(); // Subscribe first, then read current state.
+    }
+
+    private void SubscribeConnector(LiveConnectorViewModel? connector)
+    {
+        if (ReferenceEquals(_connector, connector)) return;
+        if (_connector is not null)
+        {
+            _connector.PropertyChanged -= OnSessionPropertyChanged;
+            _connector.MessageReceived -= OnMessageReceived;
+        }
+
+        // Nothing of the room before stays on screen, whatever the two rooms have in common.
+        ClearAll();
+        _binding = null;
+        _connector = connector;
+        if (connector is not null)
+        {
+            connector.PropertyChanged += OnSessionPropertyChanged;
+            connector.MessageReceived += OnMessageReceived;
+        }
     }
 
     private void Detach()
     {
         if (!_attached) return;
         _attached = false;
-        _session.PropertyChanged -= OnSessionPropertyChanged;
-        _session.MessageReceived -= OnMessageReceived;
+        SubscribeConnector(null);
+
         ClearAll(); // Also unhooks CompositionTarget.Rendering.
     }
 
@@ -133,8 +195,9 @@ public sealed partial class LiveDanmakuOverlay : UserControl
 
     private void Snapshot()
     {
-        var binding = _session.Binding;
-        var playback = _session.PlaybackState;
+        // The shared player only tells whether the picture plays; its own views show every other state.
+        var binding = _connector?.Room.Binding;
+        var playback = _connector is not null && IsPlaying ? LivePlaybackState.Playing : LivePlaybackState.Idle;
         if (binding != _binding || playback != LivePlaybackState.Playing)
         {
             // Room/account change or leaving Playing: nothing from the old scope stays on screen.
@@ -143,32 +206,21 @@ public sealed partial class LiveDanmakuOverlay : UserControl
 
         _binding = binding;
         _playback = playback;
-        UpdateStatus(playback);
-    }
-
-    private void UpdateStatus(LivePlaybackState playback)
-    {
-        var hint = playback == LivePlaybackState.Playing ? string.Empty : LiveText.PlaybackHint(playback);
-        var visible = hint.Length > 0;
-        StatusText.Text = hint;
-        StatusCard.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        var spinning = visible && playback is LivePlaybackState.Opening or LivePlaybackState.Idle
-            && _uiSettings.AnimationsEnabled;
-        StatusRing.IsActive = spinning;
-        StatusRing.Visibility = spinning ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ---------------------------------------------------------------- incoming handoff
 
     private void OnMessageReceived(object? sender, LiveChatMessage message)
     {
+        // A message of a connector that was replaced in the meantime is not drawn.
+        if (!ReferenceEquals(sender, _connector)) return;
         if (_dispatcher.HasThreadAccess)
         {
             Admit(message);
             return;
         }
 
-        // Safety net only (the session already dispatches): bounded, drop when full.
+        // Safety net only (the room already dispatches): bounded, drop when full.
         if (Interlocked.Increment(ref _pendingHandoff) > MaxPendingHandoff)
         {
             Interlocked.Decrement(ref _pendingHandoff);

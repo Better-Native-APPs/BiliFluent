@@ -9,7 +9,6 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Comment;
 using Richasy.BiliKernel.Services.Comment.Core.Adapters;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Comment.Core;
 

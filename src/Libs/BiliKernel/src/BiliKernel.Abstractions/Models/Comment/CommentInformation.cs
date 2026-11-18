@@ -79,6 +79,11 @@ public sealed class CommentInformation
     public CommentCommunityInformation? CommunityInformation { get; }
 
     /// <summary>
+    /// 评论附带的投票. 正文里的 {vote:Id} 占位符已从 <see cref="Content"/> 中移除，没有投票时为 null.
+    /// </summary>
+    public CommentVote? Vote { get; set; }
+
+    /// <summary>
     /// 评论区类型.
     /// </summary>
     public CommentTargetType CommentType { get; set; }

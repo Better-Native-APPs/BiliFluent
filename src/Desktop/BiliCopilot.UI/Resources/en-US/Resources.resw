@@ -30,4 +30,622 @@
   <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
     <value>{0}, AI generated</value>
   </data>
+  <data name="SystemChatSession" xml:space="preserve">
+    <value>System conversation</value>
+  </data>
+  <data name="NotificationViewDetails" xml:space="preserve">
+    <value>View details</value>
+  </data>
+  <data name="FailedToMarkChatRead" xml:space="preserve">
+    <value>Could not mark the conversation as read. Try again.</value>
+  </data>
+  <data name="FailedToOpenMessageLink" xml:space="preserve">
+    <value>Could not open the message link. Try again.</value>
+  </data>
+  <data name="AudioTrack" xml:space="preserve">
+    <value>Audio track</value>
+  </data>
+  <data name="AudioTrackAndSubtitle" xml:space="preserve">
+    <value>Audio track and subtitles</value>
+  </data>
+  <data name="AudioTrackStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="AudioTrackDolby" xml:space="preserve">
+    <value>Dolby</value>
+  </data>
+  <data name="AudioTrackDolbyAtmos" xml:space="preserve">
+    <value>Dolby Atmos</value>
+  </data>
+  <data name="AudioTrackHiRes" xml:space="preserve">
+    <value>Hi-Res lossless</value>
+  </data>
+  <data name="AudioTrackVip" xml:space="preserve">
+    <value>Premium</value>
+  </data>
+  <data name="AudioTrackAITemplate" xml:space="preserve">
+    <value>{0}, AI dubbing</value>
+  </data>
+  <data name="AudioTrackVipTemplate" xml:space="preserve">
+    <value>{0}, needs a premium membership</value>
+  </data>
+  <data name="AudioTrackOriginal" xml:space="preserve">
+    <value>Original audio</value>
+  </data>
+  <data name="AudioTrackQuality" xml:space="preserve">
+    <value>Audio quality</value>
+  </data>
+  <data name="AudioLanguageSwitchFailed" xml:space="preserve">
+    <value>This language can't be played right now. The previous one is back.</value>
+  </data>
+  <data name="AudioQualitySwitchFailed" xml:space="preserve">
+    <value>This audio quality can't be played right now. The previous one is back.</value>
+  </data>
+  <data name="SeamlessSwitchingTemplate" xml:space="preserve">
+    <value>Switching to {0}…</value>
+  </data>
+  <data name="QualityAuto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="QualityAutoTemplate" xml:space="preserve">
+    <value>Auto ({0})</value>
+  </data>
+  <data name="QualityAutoWithAudioTemplate" xml:space="preserve">
+    <value>Auto ({0} · {1})</value>
+  </data>
+  <data name="PreferQualityDescription" xml:space="preserve">
+    <value>A quality you pick while playing stays in use. Pick Auto in the player to follow this preference again.</value>
+  </data>
+  <data name="DanmakuHoverActions" xml:space="preserve">
+    <value>Show danmaku actions on hover</value>
+  </data>
+  <data name="DanmakuHoverActionsWin2DOnly" xml:space="preserve">
+    <value>Available with the Win2D renderer only</value>
+  </data>
+  <data name="DanmakuUnlike" xml:space="preserve">
+    <value>Remove like</value>
+  </data>
+  <data name="DanmakuLikeNeedSignIn" xml:space="preserve">
+    <value>Sign in to like danmaku</value>
+  </data>
+  <data name="DanmakuLikeFailed" xml:space="preserve">
+    <value>Couldn't like the danmaku. Try again later.</value>
+  </data>
+  <data name="DanmakuCopyFailed" xml:space="preserve">
+    <value>Couldn't copy. Try again.</value>
+  </data>
+  <data name="PlaybackStutterDiagnostics" xml:space="preserve">
+    <value>Playback stutter diagnostics</value>
+  </data>
+  <data name="PlaybackStutterDiagnosticsDescription" xml:space="preserve">
+    <value>Log frame drops, cache state, and UI heartbeats every second, without video or user information.</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnostics" xml:space="preserve">
+    <value>Disable mpv's libcurl network backend (comparison)</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnosticsDescription" xml:space="preserve">
+    <value>Compare network buffering; takes effect when the player is reopened.</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnostics" xml:space="preserve">
+    <value>Use display sync (comparison)</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnosticsDescription" xml:space="preserve">
+    <value>Time video frames to the display refresh rate to compare frame pacing; takes effect when the player is reopened.</value>
+  </data>
+  <data name="CommandDanmakuEnabled" xml:space="preserve">
+    <value>Show interactive danmaku</value>
+  </data>
+  <data name="CommandDanmakuEnabledDescription" xml:space="preserve">
+    <value>Show ratings, polls, follow prompts and uploader messages over the video</value>
+  </data>
+  <data name="CommandDanmakuKindUp" xml:space="preserve">
+    <value>From the uploader</value>
+  </data>
+  <data name="CommandDanmakuKindLink" xml:space="preserve">
+    <value>Related video</value>
+  </data>
+  <data name="CommandDanmakuKindAttention" xml:space="preserve">
+    <value>Support the uploader</value>
+  </data>
+  <data name="CommandDanmakuKindVote" xml:space="preserve">
+    <value>Poll</value>
+  </data>
+  <data name="CommandDanmakuKindGrade" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="CommandDanmakuCardNameTemplate" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="CommandDanmakuRemainingTemplate" xml:space="preserve">
+    <value>{0}s</value>
+  </data>
+  <data name="CommandDanmakuClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="CommandDanmakuOpenVideo" xml:space="preserve">
+    <value>Watch</value>
+  </data>
+  <data name="CommandDanmakuFollow" xml:space="preserve">
+    <value>Follow</value>
+  </data>
+  <data name="CommandDanmakuFollowed" xml:space="preserve">
+    <value>Following</value>
+  </data>
+  <data name="CommandDanmakuTriple" xml:space="preserve">
+    <value>Triple</value>
+  </data>
+  <data name="CommandDanmakuTripleTip" xml:space="preserve">
+    <value>Like, give coins and add to favorites in one go</value>
+  </data>
+  <data name="CommandDanmakuLike" xml:space="preserve">
+    <value>Like</value>
+  </data>
+  <data name="CommandDanmakuLiked" xml:space="preserve">
+    <value>Liked</value>
+  </data>
+  <data name="CommandDanmakuCoinOne" xml:space="preserve">
+    <value>1 coin</value>
+  </data>
+  <data name="CommandDanmakuCoinTwo" xml:space="preserve">
+    <value>2 coins</value>
+  </data>
+  <data name="CommandDanmakuCoined" xml:space="preserve">
+    <value>Coins given</value>
+  </data>
+  <data name="CommandDanmakuVoteSelected" xml:space="preserve">
+    <value>Your choice</value>
+  </data>
+  <data name="CommandDanmakuVoteStatsTemplate" xml:space="preserve">
+    <value>{0} votes · {1}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionNameTemplate" xml:space="preserve">
+    <value>{0}, {1} votes, {2}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionSelectedNameTemplate" xml:space="preserve">
+    <value>{0}, {1} votes, {2}%, your choice</value>
+  </data>
+  <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
+    <value>{0} votes</value>
+  </data>
+  <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
+    <value>Sending your vote…</value>
+  </data>
+  <data name="CommandDanmakuVoteSignInRequired" xml:space="preserve">
+    <value>Sign in to vote</value>
+  </data>
+  <data name="CommandDanmakuVoteFailed" xml:space="preserve">
+    <value>Couldn't send your vote. Try again.</value>
+  </data>
+  <data name="CommandDanmakuGradeAverageTemplate" xml:space="preserve">
+    <value>Average {0} of 5</value>
+  </data>
+  <data name="CommandDanmakuGradeCountTemplate" xml:space="preserve">
+    <value>{0} ratings</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmit" xml:space="preserve">
+    <value>Submit</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmitting" xml:space="preserve">
+    <value>Submitting…</value>
+  </data>
+  <data name="CommandDanmakuGradeRetry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmittedTemplate" xml:space="preserve">
+    <value>You rated it {0} of 5</value>
+  </data>
+  <data name="CommandDanmakuGradeSignInRequired" xml:space="preserve">
+    <value>Sign in to rate</value>
+  </data>
+  <data name="CommandDanmakuGradeFailed" xml:space="preserve">
+    <value>Couldn't submit. Try again.</value>
+  </data>
+  <data name="WatchFinished" xml:space="preserve">
+    <value>Watched</value>
+  </data>
+  <data name="WatchedToTemplate" xml:space="preserve">
+    <value>Watched to {0}</value>
+  </data>
+  <data name="ChapterIndexTemplate" xml:space="preserve">
+    <value>Chapter {0}</value>
+  </data>
+  <data name="Chapters" xml:space="preserve">
+    <value>Chapters</value>
+  </data>
+  <data name="ChapterCurrentTemplate" xml:space="preserve">
+    <value>Chapters, current: {0}</value>
+  </data>
+  <data name="ChapterItemTemplate" xml:space="preserve">
+    <value>Chapter {0}, {1}, starts at {2}</value>
+  </data>
+  <data name="ChapterItemPlayingTemplate" xml:space="preserve">
+    <value>Chapter {0}, {1}, starts at {2}, now playing</value>
+  </data>
+  <data name="QRLoginTip" xml:space="preserve">
+    <value>Scan the QR code below with the Bilibili mobile app to sign in</value>
+  </data>
+  <data name="SignInQRCodeTitle" xml:space="preserve">
+    <value>Scan to sign in</value>
+  </data>
+  <data name="SignInQRCodeImageName" xml:space="preserve">
+    <value>Sign-in QR code</value>
+  </data>
+  <data name="SignInQRCodeUnavailable" xml:space="preserve">
+    <value>This QR code has expired or couldn't be loaded. Refresh it and scan again.</value>
+  </data>
+  <data name="SignInRefreshQRCode" xml:space="preserve">
+    <value>Refresh QR code</value>
+  </data>
+  <data name="SignInModeSelectorName" xml:space="preserve">
+    <value>Sign-in method</value>
+  </data>
+  <data name="SignInPasswordTab" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="SignInSmsTab" xml:space="preserve">
+    <value>SMS code</value>
+  </data>
+  <data name="SignInAccountName" xml:space="preserve">
+    <value>Account</value>
+  </data>
+  <data name="SignInAccountPlaceholder" xml:space="preserve">
+    <value>Phone number or email</value>
+  </data>
+  <data name="SignInPasswordPlaceholder" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="SignInButton" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  <data name="SignInCountryName" xml:space="preserve">
+    <value>Country or region</value>
+  </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>Region</value>
+  </data>
+  <data name="SignInCountryLoading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="SignInCountryLoadFailed" xml:space="preserve">
+    <value>Couldn't load the region list. Check your network and try again.</value>
+  </data>
+  <data name="SignInRetry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="SignInClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="SignInCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SignInPhonePlaceholder" xml:space="preserve">
+    <value>Phone number</value>
+  </data>
+  <data name="SignInSmsCodePlaceholder" xml:space="preserve">
+    <value>SMS code</value>
+  </data>
+  <data name="SignInSendSmsCode" xml:space="preserve">
+    <value>Get code</value>
+  </data>
+  <data name="SignInResendSmsCode" xml:space="preserve">
+    <value>Resend code</value>
+  </data>
+  <data name="SignInSmsCooldownTemplate" xml:space="preserve">
+    <value>Resend in {0}s</value>
+  </data>
+  <data name="SignInSmsCodeSent" xml:space="preserve">
+    <value>Code sent. Check your text messages.</value>
+  </data>
+  <data name="SignInVerificationTitle" xml:space="preserve">
+    <value>Verify your phone</value>
+  </data>
+  <data name="SignInVerificationDescription" xml:space="preserve">
+    <value>This sign-in needs an SMS check. The code will be sent to the phone linked to your account.</value>
+  </data>
+  <data name="SignInVerificationSend" xml:space="preserve">
+    <value>Send code</value>
+  </data>
+  <data name="SignInVerificationSubmit" xml:space="preserve">
+    <value>Verify and sign in</value>
+  </data>
+  <data name="SignInBack" xml:space="preserve">
+    <value>Back to sign-in</value>
+  </data>
+  <data name="SignInTroubleTip" xml:space="preserve">
+    <value>Having trouble?</value>
+  </data>
+  <data name="SignInWebFallback" xml:space="preserve">
+    <value>Sign in on the web</value>
+  </data>
+  <data name="SignInSwitchToWeb" xml:space="preserve">
+    <value>Use web sign-in</value>
+  </data>
+  <data name="SignInStatusPreparing" xml:space="preserve">
+    <value>Preparing the verification…</value>
+  </data>
+  <data name="SignInStatusCaptcha" xml:space="preserve">
+    <value>Complete the verification in the pop-up window</value>
+  </data>
+  <data name="SignInStatusSigningIn" xml:space="preserve">
+    <value>Signing in…</value>
+  </data>
+  <data name="SignInStatusSendingSms" xml:space="preserve">
+    <value>Sending the code…</value>
+  </data>
+  <data name="SignInStatusVerifying" xml:space="preserve">
+    <value>Verifying…</value>
+  </data>
+  <data name="SignInStatusFinishing" xml:space="preserve">
+    <value>Signed in. Opening the app…</value>
+  </data>
+  <data name="SignInAccountRequired" xml:space="preserve">
+    <value>Enter your account</value>
+  </data>
+  <data name="SignInPasswordRequired" xml:space="preserve">
+    <value>Enter your password</value>
+  </data>
+  <data name="SignInPhoneRequired" xml:space="preserve">
+    <value>Enter your phone number</value>
+  </data>
+  <data name="SignInSmsCodeRequired" xml:space="preserve">
+    <value>Enter the SMS code</value>
+  </data>
+  <data name="SignInSmsCodeNotRequested" xml:space="preserve">
+    <value>Get an SMS code first</value>
+  </data>
+  <data name="SignInPhoneChanged" xml:space="preserve">
+    <value>The phone number or region changed. Get a new code.</value>
+  </data>
+  <data name="SignInErrorInvalidCredentials" xml:space="preserve">
+    <value>Incorrect account or password</value>
+  </data>
+  <data name="SignInErrorCaptchaFailed" xml:space="preserve">
+    <value>The verification wasn't accepted. Please try again.</value>
+  </data>
+  <data name="SignInErrorRateLimited" xml:space="preserve">
+    <value>Too many attempts. Please try again later.</value>
+  </data>
+  <data name="SignInErrorTimedOut" xml:space="preserve">
+    <value>The request timed out. Check your network and try again.</value>
+  </data>
+  <data name="SignInErrorInvalidParameters" xml:space="preserve">
+    <value>Some of the information isn't valid. Check it and try again.</value>
+  </data>
+  <data name="SignInErrorInvalidPhoneNumber" xml:space="preserve">
+    <value>That phone number doesn't look right</value>
+  </data>
+  <data name="SignInErrorAccountFormat" xml:space="preserve">
+    <value>Enter a phone number or an email address</value>
+  </data>
+  <data name="SignInErrorInvalidEmail" xml:space="preserve">
+    <value>That email address doesn't look right</value>
+  </data>
+  <data name="SignInErrorMainlandPhoneLength" xml:space="preserve">
+    <value>Enter an 11-digit phone number</value>
+  </data>
+  <data name="SignInErrorSmsCodeLength" xml:space="preserve">
+    <value>Enter the 6-digit code</value>
+  </data>
+  <data name="SignInErrorSmsAlreadySent" xml:space="preserve">
+    <value>A code was sent recently. Check your messages or try again later.</value>
+  </data>
+  <data name="SignInErrorPhoneNumberBlocked" xml:space="preserve">
+    <value>This phone number can't be used to sign in</value>
+  </data>
+  <data name="SignInErrorInvalidSmsCode" xml:space="preserve">
+    <value>Incorrect SMS code</value>
+  </data>
+  <data name="SignInErrorSmsCodeExpired" xml:space="preserve">
+    <value>The SMS code has expired. Get a new one.</value>
+  </data>
+  <data name="SignInErrorSessionExpired" xml:space="preserve">
+    <value>This sign-in attempt has expired. Please start again.</value>
+  </data>
+  <data name="SignInErrorUnsupportedVerification" xml:space="preserve">
+    <value>This sign-in needs a verification method the app doesn't support yet. Use web sign-in instead.</value>
+  </data>
+  <data name="SignInErrorUnsupportedCaptcha" xml:space="preserve">
+    <value>The app doesn't support this type of captcha yet. Use web sign-in instead.</value>
+  </data>
+  <data name="SignInErrorInvalidResponse" xml:space="preserve">
+    <value>The server response couldn't be understood. Use web sign-in instead.</value>
+  </data>
+  <data name="SignInErrorSessionImportFailed" xml:space="preserve">
+    <value>Your account was verified, but the app couldn't finish authorizing. Use web sign-in instead.</value>
+  </data>
+  <data name="SignInErrorNetwork" xml:space="preserve">
+    <value>Couldn't connect. Check your network and try again.</value>
+  </data>
+  <data name="SignInErrorUnknown" xml:space="preserve">
+    <value>Sign-in failed. Please try again later.</value>
+  </data>
+  <data name="SignInErrorUnknownWithCode" xml:space="preserve">
+    <value>Sign-in failed. Please try again later (code {0}).</value>
+  </data>
+  <data name="SignInErrorUnexpected" xml:space="preserve">
+    <value>Something went wrong. Please try again.</value>
+  </data>
+  <data name="CaptchaWindowTitle" xml:space="preserve">
+    <value>Security check</value>
+  </data>
+  <data name="CaptchaViewName" xml:space="preserve">
+    <value>Verification challenge</value>
+  </data>
+  <data name="CaptchaLoading" xml:space="preserve">
+    <value>Loading the verification…</value>
+  </data>
+  <data name="CaptchaStart" xml:space="preserve">
+    <value>Start verification</value>
+  </data>
+  <data name="CaptchaLoadFailed" xml:space="preserve">
+    <value>Couldn't load the verification</value>
+  </data>
+  <data name="CaptchaErrorTimeout" xml:space="preserve">
+    <value>Loading timed out. Check your network and try again.</value>
+  </data>
+  <data name="CaptchaErrorGeneric" xml:space="preserve">
+    <value>Check your network and try again ({0}).</value>
+  </data>
+  <data name="CaptchaErrorComponent" xml:space="preserve">
+    <value>The verification component couldn't start. Make sure the WebView2 Runtime is available.</value>
+  </data>
+  <data name="WebSignInFinishing" xml:space="preserve">
+    <value>Finishing sign-in…</value>
+  </data>
+  <data name="WebSignInFailedTitle" xml:space="preserve">
+    <value>Sign-in wasn't completed</value>
+  </data>
+  <data name="WebSignInFailedDescription" xml:space="preserve">
+    <value>You're signed in on the web page, but the app couldn't finish authorizing. Check your network and try again.</value>
+  </data>
+  <data name="LiveComposerUnavailable" xml:space="preserve">
+    <value>Danmaku can't be sent right now</value>
+  </data>
+  <data name="LiveSendUnavailable" xml:space="preserve">
+    <value>Danmaku can't be sent yet. Try again once the stream and the chat are connected.</value>
+  </data>
+  <data name="LiveSendNotSent" xml:space="preserve">
+    <value>The danmaku wasn't sent, and your text is kept. Check that you're signed in, then try again.</value>
+  </data>
+  <data name="LiveSendUnknown" xml:space="preserve">
+    <value>Couldn't confirm whether the danmaku was sent. Check the chat list first, and send it again only if it isn't there.</value>
+  </data>
+  <data name="LiveSendRejected" xml:space="preserve">
+    <value>The danmaku was rejected. Your text is kept.</value>
+  </data>
+  <data name="LiveSendRejectedTemplate" xml:space="preserve">
+    <value>The danmaku was rejected (code {0}). Your text is kept.</value>
+  </data>
+  <data name="LiveRefresh" xml:space="preserve">
+    <value>Refresh and catch up to live</value>
+  </data>
+  <data name="LiveEndedTitle" xml:space="preserve">
+    <value>The stream ended or the connection dropped</value>
+  </data>
+  <data name="LiveEndedDescription" xml:space="preserve">
+    <value>Refresh to check whether the stream is still on.</value>
+  </data>
+  <data name="LiveFailedTitle" xml:space="preserve">
+    <value>Couldn't load the stream</value>
+  </data>
+  <data name="LiveFailedDescription" xml:space="preserve">
+    <value>The network may be unstable, or the stream may have just ended. You can try again.</value>
+  </data>
+  <data name="LivePlaybackTransitionIncomplete" xml:space="preserve">
+    <value>Playback or switching did not complete. If closing failed, try opening it again shortly.</value>
+  </data>
+  <data name="CommentVoteLabel" xml:space="preserve">
+    <value>Poll</value>
+  </data>
+  <data name="CommentVoteEntryNameTemplate" xml:space="preserve">
+    <value>Poll: {0}</value>
+  </data>
+  <data name="CommentVoteEntryNameWithCountTemplate" xml:space="preserve">
+    <value>Poll: {0}, {1} voted</value>
+  </data>
+  <data name="CommentVoteParticipantsTemplate" xml:space="preserve">
+    <value>{0} voted</value>
+  </data>
+  <data name="CommentVoteSingleChoice" xml:space="preserve">
+    <value>Choose one</value>
+  </data>
+  <data name="CommentVoteMultiChoiceTemplate" xml:space="preserve">
+    <value>Choose up to {0}</value>
+  </data>
+  <data name="CommentVoteRemainingTemplate" xml:space="preserve">
+    <value>You can choose {0} more</value>
+  </data>
+  <data name="CommentVoteLimitReachedTemplate" xml:space="preserve">
+    <value>You've chosen all {0}</value>
+  </data>
+  <data name="CommentVoteDeadlineTemplate" xml:space="preserve">
+    <value>Ends {0}</value>
+  </data>
+  <data name="CommentVoteEnded" xml:space="preserve">
+    <value>Ended</value>
+  </data>
+  <data name="CommentVoteSubmit" xml:space="preserve">
+    <value>Vote</value>
+  </data>
+  <data name="CommentVoteAnonymous" xml:space="preserve">
+    <value>Vote anonymously</value>
+  </data>
+  <data name="CommentVoteLoading" xml:space="preserve">
+    <value>Loading poll…</value>
+  </data>
+  <data name="CommentVoteLoadFailed" xml:space="preserve">
+    <value>Couldn't load this poll</value>
+  </data>
+  <data name="CommentVoteUnavailable" xml:space="preserve">
+    <value>This poll was deleted or can't be shown</value>
+  </data>
+  <data name="CommentVoteDone" xml:space="preserve">
+    <value>Your vote is in</value>
+  </data>
+  <data name="CommentVoteOwn" xml:space="preserve">
+    <value>You started this poll</value>
+  </data>
+  <data name="CommentVoteSupporterOnly" xml:space="preserve">
+    <value>Only this creator's paid supporters can vote</value>
+  </data>
+  <data name="CommentVoteFailedReasonTemplate" xml:space="preserve">
+    <value>Couldn't send your vote: {0}</value>
+  </data>
+  <data name="CommentVoteOptionsName" xml:space="preserve">
+    <value>Poll options</value>
+  </data>
+  <data name="CommentVoteRetry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="HomeRecommendationFeedSource" xml:space="preserve">
+    <value>Home recommendation source</value>
+  </data>
+  <data name="HomeRecommendationFeedSourceDescription" xml:space="preserve">
+    <value>Recommendations refresh from the beginning when you return to Home. Anonymous recommendations are used when signed out.</value>
+  </data>
+  <data name="RecommendationFeedWeb" xml:space="preserve">
+    <value>Web</value>
+  </data>
+  <data name="RecommendationFeedApp" xml:space="preserve">
+    <value>Mobile app</value>
+  </data>
+  <data name="TextLinkUser" xml:space="preserve">
+    <value>View this user's space</value>
+  </data>
+  <data name="TextLinkTopic" xml:space="preserve">
+    <value>Search this topic in the app</value>
+  </data>
+  <data name="TextLinkSearch" xml:space="preserve">
+    <value>Search in the app</value>
+  </data>
+  <data name="TextLinkVideo" xml:space="preserve">
+    <value>Play video</value>
+  </data>
+  <data name="TextLinkPgc" xml:space="preserve">
+    <value>Play this series</value>
+  </data>
+  <data name="TextLinkLive" xml:space="preserve">
+    <value>Open live room</value>
+  </data>
+  <data name="TextLinkArticle" xml:space="preserve">
+    <value>Read article</value>
+  </data>
+  <data name="TextLinkBrowserTemplate" xml:space="preserve">
+    <value>Opens {0} in your browser</value>
+  </data>
+  <data name="TextLinkGoodsTemplate" xml:space="preserve">
+    <value>Shopping or promoted link · opens {0} in your browser</value>
+  </data>
+  <data name="TextLinkNote" xml:space="preserve">
+    <value>View note</value>
+  </data>
+  <data name="TextLinkNameTemplate" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="TextLinkShortLink" xml:space="preserve">
+    <value>Open bilibili short link</value>
+  </data>
+  <data name="TextLinkOpenFailed" xml:space="preserve">
+    <value>Couldn't open this link. Try again.</value>
+  </data>
 </root>

@@ -9,7 +9,6 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Article;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
-using RichasyKernel;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
@@ -141,9 +140,10 @@ internal sealed class MyClient
         _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedRID = true, RequireCookie = true });
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseObj = await BiliHttpClient.ParseAsync(response, SourceGenerationContext.Default.BiliDataResponseChatMessageResponse).ConfigureAwait(false);
-        var messages = responseObj.Data?.MessageList.Select(p => p.ToChatMessage(responseObj.Data.EmoteInfos)).ToList().AsReadOnly()
-            ?? throw new KernelException("无法获取用户聊天消息数据");
-        return (messages.Reverse().ToList(), responseObj.Data.MaxSeqNo, responseObj.Data.HasMore == 1);
+        var data = responseObj.Data ?? throw new KernelException("无法获取用户聊天消息数据");
+        var messages = data.MessageList?.Select(p => p.ToChatMessage(data.EmoteInfos)).Reverse().ToList()
+            ?? [];
+        return (messages, data.MaxSeqNo, data.HasMore == 1);
     }
 
     public async Task MarkChatMessagesAsReadAsync(UserProfile user, long maxSeqNo, CancellationToken cancellationToken)
@@ -156,7 +156,7 @@ internal sealed class MyClient
         };
 
         var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Account.ChatUpdate));
-        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedRID = true, RequireCookie = true });
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings { ForceNoToken = true, NeedRID = true, RequireCookie = true, NeedCSRF = true });
         await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -208,18 +208,19 @@ internal sealed class MyClient
             return (Array.Empty<ChatSession>(), 0, false);
         }
 
-        var sessions = responseObj.Data.SessionList.Where(p => p.SystemMessageType == 0 && p.LastMessage != null).ToList();
+        var sessions = responseObj.Data.SessionList;
 
-        // 批量获取会话的用户信息
-        var userIds = sessions.Select(p => p.TalkerId.ToString()).Distinct().ToList();
-        var users = await BatchGetUsersAsync(userIds, cancellationToken).ConfigureAwait(false);
+        // System talker IDs are virtual accounts, not user IDs accepted by the batch-profile endpoint.
+        var userIds = sessions.Where(p => p.SystemMessageType == 0 && p.LastMessage is not null)
+            .Select(p => p.TalkerId.ToString()).Distinct().ToList();
+        var users = userIds.Count == 0 ? Array.Empty<UserProfile>() : await BatchGetUsersAsync(userIds, cancellationToken).ConfigureAwait(false);
 
-        var chatSessions = sessions.Where(p => users.Any(j => j.Id == p.TalkerId.ToString())).Select(p =>
+        var chatSessions = sessions.Where(p => p.SystemMessageType != 0 || (p.LastMessage is not null && users.Any(j => j.Id == p.TalkerId.ToString()))).Select(p =>
         {
             var user = users.FirstOrDefault(q => q.Id == p.TalkerId.ToString());
             return p.ToChatSession(user);
-        }).Where(p => !string.IsNullOrEmpty(p.LastMessage)).ToList().AsReadOnly();
-        return (chatSessions, sessions.Last().SessionTimestamp ?? 0, responseObj.Data.HasMore == 1);
+        }).Where(p => p.IsSystemSession || !string.IsNullOrEmpty(p.LastMessage)).ToList().AsReadOnly();
+        return (chatSessions, sessions.Count > 0 ? sessions[sessions.Count - 1].SessionTimestamp ?? 0 : 0, responseObj.Data.HasMore == 1);
     }
 
     public async Task<IReadOnlyList<UserProfile>> BatchGetUsersAsync(IEnumerable<string> userIds, CancellationToken cancellationToken)

@@ -44,6 +44,9 @@ public sealed partial class PlayerViewModel
             {
                 PreferPart = part,
                 PreferQuality = SelectedSource?.Data.Quality,
+                PreferAudioLanguageId = snapshot.PreferAudioLanguageId,
+                PreferAudioQualityId = snapshot.PreferAudioQualityId,
+                IsAutomaticAudioStandardOnly = snapshot.IsAutomaticAudioStandardOnly,
                 StartPosition = double.IsFinite(position) && position >= 0 ? position : 0d,
             };
             var prepared = false;

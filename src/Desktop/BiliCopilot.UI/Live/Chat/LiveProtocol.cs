@@ -292,4 +292,9 @@ internal enum LiveFailureCategory
     PropertySubscriber = 1 << 11,
     ChatRelease = 1 << 12,
     BackendRelease = 1 << 13,
+    Discovery = 1 << 14,
+    SocketConnect = 1 << 15,
+    Authentication = 1 << 16,
+    SocketReceive = 1 << 17,
+    Heartbeat = 1 << 18,
 }

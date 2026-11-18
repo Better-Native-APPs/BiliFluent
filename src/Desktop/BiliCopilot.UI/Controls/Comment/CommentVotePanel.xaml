@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Comment.CommentVotePanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:BiliCopilot.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsTabStop="False"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!--
+            Same row as a poll option on the interactive danmaku card (height, padding, text position).
+            Here an option is chosen first and sent with the button below, so the row is a toggle.
+        -->
+        <Style
+            x:Key="VoteChoiceStyle"
+            BasedOn="{StaticResource DefaultToggleButtonStyle}"
+            TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="11,5,11,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <!--  Keep the focus rectangle inside the row so the scrolling list cannot cut it off.  -->
+            <Setter Property="FocusVisualMargin" Value="0" />
+        </Style>
+        <Style
+            x:Key="VoteCaptionStyle"
+            BasedOn="{StaticResource CaptionTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <!--
+        A poll from a comment. The host gives it a width. Past eight or so options the list scrolls
+        on its own, so the title above and the vote button below always stay in view.
+    -->
+    <Grid RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Symbol="Poll" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{StaticResource VoteCaptionStyle}"
+                    Text="{ext:Locale Name=CommentVoteLabel}" />
+            </StackPanel>
+            <TextBlock
+                AutomationProperties.HeadingLevel="Level2"
+                IsTabStop="False"
+                IsTextSelectionEnabled="True"
+                MaxLines="6"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <TextBlock
+                IsTabStop="False"
+                IsTextSelectionEnabled="True"
+                MaxLines="6"
+                Style="{StaticResource VoteCaptionStyle}"
+                Text="{x:Bind ViewModel.Description, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasDescription, Mode=OneWay}" />
+            <TextBlock
+                Style="{StaticResource VoteCaptionStyle}"
+                Text="{x:Bind ViewModel.Meta, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasMeta, Mode=OneWay}" />
+        </StackPanel>
+
+        <!--  Fetching.  -->
+        <StackPanel
+            Grid.Row="1"
+            Orientation="Horizontal"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
+            <ProgressRing
+                Width="16"
+                Height="16"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+            <TextBlock
+                VerticalAlignment="Center"
+                Style="{StaticResource VoteCaptionStyle}"
+                Text="{ext:Locale Name=CommentVoteLoading}" />
+        </StackPanel>
+
+        <!--  Could not fetch: say so and offer another try.  -->
+        <StackPanel
+            Grid.Row="1"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsFailed, Mode=OneWay}">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    IconVariant="Filled"
+                    Symbol="Warning" />
+                <TextBlock
+                    x:Name="FailedBlock"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Text="{ext:Locale Name=CommentVoteLoadFailed}"
+                    TextWrapping="Wrap" />
+            </Grid>
+            <Button
+                MinWidth="96"
+                Command="{x:Bind ViewModel.LoadCommand, Mode=OneWay}"
+                Content="{ext:Locale Name=CommentVoteRetry}" />
+        </StackPanel>
+
+        <!--  Deleted, or not allowed to be shown.  -->
+        <TextBlock
+            x:Name="UnavailableBlock"
+            Grid.Row="1"
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="{ext:Locale Name=CommentVoteUnavailable}"
+            TextWrapping="Wrap"
+            Visibility="{x:Bind ViewModel.IsUnavailable, Mode=OneWay}" />
+
+        <!--
+            The options. While voting is open each one is a toggle with a radio mark (one choice) or a
+            check box (several). Afterwards, or when voting is not possible, the same rows show the
+            counts, the share and the user's own choice.
+        -->
+        <ScrollViewer
+            x:Name="OptionsScroller"
+            Grid.Row="1"
+            MaxHeight="364"
+            AutomationProperties.Name="{ext:Locale Name=CommentVoteOptionsName}"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            UseSystemFocusVisuals="True"
+            VerticalScrollBarVisibility="Auto"
+            Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay}">
+            <ItemsControl
+                IsTabStop="False"
+                ItemsSource="{x:Bind ViewModel.Options, Mode=OneWay}"
+                XYFocusKeyboardNavigation="Enabled">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="items:CommentVoteOptionViewModel">
+                        <Grid Margin="0,0,0,6">
+                            <ToggleButton
+                                AutomationProperties.Name="{x:Bind Text}"
+                                Click="OnOptionClick"
+                                IsChecked="{x:Bind IsChecked, Mode=OneWay}"
+                                IsEnabled="{x:Bind CanChoose, Mode=OneWay}"
+                                Style="{StaticResource VoteChoiceStyle}"
+                                Tag="{x:Bind}"
+                                Visibility="{x:Bind IsChoice, Mode=OneWay}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ic:SymbolIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        IconVariant="{x:Bind GlyphVariant, Mode=OneWay}"
+                                        Symbol="{x:Bind Glyph, Mode=OneWay}" />
+                                    <controls:BasicCoverImage
+                                        Grid.Column="1"
+                                        Width="44"
+                                        Height="44"
+                                        Margin="0,2"
+                                        VerticalAlignment="Center"
+                                        CornerRadius="{StaticResource ControlCornerRadius}"
+                                        DecodeWidth="88"
+                                        Source="{x:Bind Image}"
+                                        Visibility="{x:Bind HasImage}" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        MaxLines="3"
+                                        Text="{x:Bind Text}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                </Grid>
+                            </ToggleButton>
+                            <Grid
+                                MinHeight="36"
+                                Padding="11,3,11,4"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                ColumnSpacing="6"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                RowSpacing="3"
+                                Visibility="{x:Bind IsResult, Mode=OneWay}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <controls:BasicCoverImage
+                                    Width="44"
+                                    Height="44"
+                                    Margin="0,3,2,1"
+                                    VerticalAlignment="Center"
+                                    CornerRadius="{StaticResource ControlCornerRadius}"
+                                    DecodeWidth="88"
+                                    Source="{x:Bind Image}"
+                                    Visibility="{x:Bind HasImage}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    MaxLines="3"
+                                    Text="{x:Bind Text}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap" />
+                                <ic:SymbolIcon
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    FontSize="14"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    IconVariant="Filled"
+                                    Symbol="CheckmarkCircle"
+                                    ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuVoteSelected}"
+                                    Visibility="{x:Bind IsMine, Mode=OneWay}" />
+                                <TextBlock
+                                    Grid.Column="3"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Style="{StaticResource VoteCaptionStyle}"
+                                    Text="{x:Bind Stats, Mode=OneWay}" />
+                                <ProgressBar
+                                    Grid.Row="1"
+                                    Grid.ColumnSpan="4"
+                                    AutomationProperties.Name="{x:Bind ResultName, Mode=OneWay}"
+                                    Maximum="100"
+                                    Value="{x:Bind Percent, Mode=OneWay}" />
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel
+            Grid.Row="2"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay}">
+            <!--  One line for what can still be chosen, sending, what went wrong, or why voting is not possible.  -->
+            <Grid ColumnSpacing="6" Visibility="{x:Bind ViewModel.HasStatus, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    IconVariant="Filled"
+                    Symbol="Warning"
+                    Visibility="{x:Bind ViewModel.IsStatusFailure, Mode=OneWay}" />
+                <TextBlock
+                    x:Name="StatusBlock"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Style="{StaticResource VoteCaptionStyle}"
+                    Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+            </Grid>
+            <Grid ColumnSpacing="12" Visibility="{x:Bind ViewModel.IsChoosing, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <CheckBox
+                    MinWidth="0"
+                    VerticalAlignment="Center"
+                    Content="{ext:Locale Name=CommentVoteAnonymous}"
+                    IsChecked="{x:Bind ViewModel.IsAnonymous, Mode=TwoWay}" />
+                <Button
+                    x:Name="SubmitButton"
+                    Grid.Column="1"
+                    MinWidth="96"
+                    VerticalAlignment="Center"
+                    Click="OnSubmitClick"
+                    Command="{x:Bind ViewModel.SubmitCommand, Mode=OneWay}"
+                    Content="{ext:Locale Name=CommentVoteSubmit}"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>

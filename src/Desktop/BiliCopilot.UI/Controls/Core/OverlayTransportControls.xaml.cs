@@ -70,6 +70,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         RegisterPropertyChangedCallback(OpacityProperty, OnProgressVisibilityChanged);
         RegisterPropertyChangedCallback(ProgressBarVisibleProperty, OnProgressVisibilityChanged);
         DanmakuOptionsTip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, OnDanmakuOptionsOpenChanged);
+        InitializeChapters();
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnContactStarted), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler(OnContactEnded), true);
         AddHandler(PointerCanceledEvent, new PointerEventHandler(OnContactEnded), true);
@@ -103,6 +104,11 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     }
 
     public bool IsInteracting { get; private set; }
+
+    // The timeline row is shown when the host wants it and the media has a timeline. Before a media is known
+    // it stays, as it always has.
+    private bool IsTimelineShown
+        => ProgressBarVisible && (ViewModel is not { } vm || PlayerOverlay.IsCapabilityShown(vm.CanSeek, vm.HasAdmittedMedia));
 
     /// <summary>呈现切换时用于连续位移动画的播放/暂停按钮（仅视觉，不改变命令或输入状态）.</summary>
     internal FrameworkElement PlayPauseTarget => PlayPauseButton;
@@ -140,6 +146,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         CancelPendingInput();
         SubscribeViewModel(null);
         SubtitleRepeater?.ItemsSource = null;
+        AudioLanguageRepeater?.ItemsSource = null;
         IsEnabled = false;
     }
 
@@ -153,6 +160,7 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         _subscribedViewModel = viewModel;
         SubscribePlayer(viewModel?.Player);
+        SubscribeChapters(viewModel);
         if (viewModel is not null)
         {
             viewModel.ProgressChanged += OnViewModelProgressChanged;
@@ -175,6 +183,13 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             _isFirstChangeVolume = true;
         }
         else if (args.PropertyName == nameof(PlayerViewModel.IsConnecting)) SynchronizeControls();
+        else if (args.PropertyName == nameof(PlayerViewModel.CanSeek))
+        {
+            // The timeline row came or went with the media: nothing pending may outlive it, and a row that
+            // came back starts from the current position.
+            if (!IsTimelineShown) CancelPendingInput();
+            else if (CaptureDisplay() is { } owner) SynchronizeProgress(owner.Player.Position, true);
+        }
         else if (args.PropertyName == nameof(PlayerViewModel.IsWindowDeactivated))
         {
             if (_subscribedViewModel!.IsWindowDeactivated) CancelPendingInput();
@@ -198,8 +213,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         // Kernel property notifications can arrive off the UI thread. State/seek changes bypass pixel filtering.
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (ReferenceEquals(sender, _subscribedPlayer) && CaptureInput() is { } owner)
-                SynchronizeProgress(owner.ViewModel.Player.Position, true);
+            if (ReferenceEquals(sender, _subscribedPlayer) && CaptureDisplay() is { } owner)
+                SynchronizeProgress(owner.Player.Position, true);
         });
     }
 
@@ -207,8 +222,16 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     {
         if (!_loaded) return;
         if (Visibility != Visibility.Visible || Opacity <= 0) CancelPendingInput();
-        else if (CaptureInput() is { } owner) SynchronizeProgress(owner.ViewModel.Player.Position, true);
+        else if (CaptureDisplay() is { } owner) SynchronizeProgress(owner.Player.Position, true);
     }
+
+    // What the progress bar shows follows playback whenever the bar is on screen. Unlike input, that does
+    // not need the control to be active: a window that lost activation still shows the bar.
+    private PlayerViewModel? CaptureDisplay()
+        => _loaded && !_cancelingInput && ViewModel is { } vm
+            && ReferenceEquals(vm, _subscribedViewModel) && !vm.IsPlaybackClosing
+            && !vm.IsConnecting && vm.Player?.IsPlaybackInitialized == true
+            ? vm : null;
 
     private InputOwner? CaptureInput()
         => _loaded && IsActive && !_cancelingInput && ViewModel is { } vm
@@ -223,12 +246,20 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void SynchronizeControls()
     {
         IsEnabled = CaptureInput().HasValue;
-        if (!_loaded || !IsActive) return;
+        if (!_loaded) return;
+        if (!IsActive)
+        {
+            // Nothing takes input, but a bar that is still on screen keeps showing the position.
+            if (CaptureDisplay() is { } display) SynchronizeProgress(display.Player.Position, true);
+            return;
+        }
+
         _synchronizingSliders = true;
         try
         {
             Bindings.Update();
             SubtitleRepeater.ItemsSource = ViewModel?.Subtitles;
+            AudioLanguageRepeater.ItemsSource = ViewModel?.AudioLanguages;
             if (ViewModel?.Player is { } player)
             {
                 SynchronizeProgress(player.Position, true);
@@ -261,6 +292,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
             _contacts.Clear();
             _progressContacts.Clear();
             ResetProgressPreview();
+            _chapterPreview?.Reset();
+            ChapterEntry?.CancelPendingInput();
             var danmakuOwner = _danmakuOptionsOwner;
             _danmakuOptionsOwner = null;
             _popups.Cancel(() =>
@@ -313,8 +346,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnContactEnded(object sender, PointerRoutedEventArgs args)
     {
         _contacts.Remove(args.Pointer.PointerId);
-        if (_progressContacts.Remove(args.Pointer.PointerId) && CaptureInput() is { } owner)
-            SynchronizeProgress(owner.ViewModel.Player.Position, true);
+        if (_progressContacts.Remove(args.Pointer.PointerId) && CaptureDisplay() is { } owner)
+            SynchronizeProgress(owner.Player.Position, true);
         UpdateInteractionState();
     }
 
@@ -355,8 +388,9 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private FluentIcons.Common.Symbol GetFullScreenSymbol(PlayerPresentationMode presentation)
         => presentation == PlayerPresentationMode.FullScreen ? FluentIcons.Common.Symbol.FullScreenMinimize : FluentIcons.Common.Symbol.FullScreenMaximize;
 
-    private bool IsPlayPauseEnabled(MpvPlayerState state)
-        => state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End;
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private bool IsPlayPauseEnabled(MpvPlayerState state, bool isLiveReleaseBlocked)
+        => (state is MpvPlayerState.Playing or MpvPlayerState.Paused or MpvPlayerState.End) && !isLiveReleaseBlocked;
 
     private string GetPlayPauseTip(bool isPlaying)
         => isPlaying ? ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Pause) : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.Play);
@@ -381,7 +415,8 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (!IsActive || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        // Shown is enough; active is not needed. An inactive window keeps its bar moving.
+        if (!_loaded || !IsTimelineShown || Visibility != Visibility.Visible || Opacity <= 0
             || ViewModel?.IsControlsVisible != true || !ReferenceEquals(sender, _subscribedViewModel)) return;
         var seekedBackwards = e < _lastProgressPosition;
         _lastProgressPosition = e;
@@ -390,9 +425,10 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void SynchronizeProgress(double position, bool force)
     {
-        if (CaptureInput() is not { } owner || !ProgressBarVisible || Visibility != Visibility.Visible || Opacity <= 0
+        // A drag or a pending seek owns the slider; nothing is written back over it.
+        if (CaptureDisplay() is not { } owner || !IsTimelineShown || Visibility != Visibility.Visible || Opacity <= 0
             || _pendingProgressOwner.HasValue || _progressContacts.Count > 0 || !double.IsFinite(position)) return;
-        var duration = owner.ViewModel.Player.Duration;
+        var duration = owner.Player.Duration;
         var durationChanged = ProgressSlider.Maximum != duration;
         var pixelStep = duration / Math.Max(1, ProgressSlider.ActualWidth);
         if (!force && !durationChanged && position > 0 && position < duration
@@ -416,6 +452,20 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         }
         else if (owner.ViewModel.Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
             await ExecuteInputAsync(owner, () => owner.ViewModel.PlayPauseCommand.ExecuteAsync(null));
+    }
+
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (CaptureInput() is not { } owner || !owner.ViewModel.CanRefreshLive) return;
+        try
+        {
+            await owner.ViewModel.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Fullscreen transport refresh failed: {ex.Message}");
+        }
     }
 
     private void OnProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -552,8 +602,34 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnSubtitleFlyoutOpened(object sender, object e)
         => OpenPopup(sender);
 
+    // The subtitle menu holds the subtitles and, when the media has dubbing languages, the audio track.
+    // A media without subtitles still shows the button for its languages.
+    // Each half also needs its media capability: a media that cannot use subtitles or audio tracks has no menu.
+    private Visibility GetSubtitleMenuVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages,
+        bool canUseSubtitles, bool canSelectAudioTrack, bool hasAdmittedMedia)
+        => (isSubtitleEnabled && !isSubtitleEmpty && PlayerOverlay.IsCapabilityShown(canUseSubtitles, hasAdmittedMedia))
+            || (hasMultipleAudioLanguages && PlayerOverlay.IsCapabilityShown(canSelectAudioTrack, hasAdmittedMedia))
+            ? Visibility.Visible : Visibility.Collapsed;
+
+    private Visibility GetSubtitleListVisibility(bool isSubtitleEnabled, bool isSubtitleEmpty)
+        => isSubtitleEnabled && !isSubtitleEmpty ? Visibility.Visible : Visibility.Collapsed;
+
+    // Subtitles only: "Subtitle". Languages only: "Audio track", with the audio icon. Both: "Audio track and subtitles".
+    private string GetSubtitleMenuName(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => ResourceToolkit.GetLocalizedString(!hasMultipleAudioLanguages
+            ? Models.Constants.StringNames.Subtitle
+            : isSubtitleEnabled && !isSubtitleEmpty ? Models.Constants.StringNames.AudioTrackAndSubtitle : Models.Constants.StringNames.AudioTrack);
+
+    private FluentIcons.Common.Symbol GetSubtitleMenuSymbol(bool isSubtitleEnabled, bool isSubtitleEmpty, bool hasMultipleAudioLanguages)
+        => hasMultipleAudioLanguages && !(isSubtitleEnabled && !isSubtitleEmpty)
+            ? FluentIcons.Common.Symbol.HeadphonesSoundWave : FluentIcons.Common.Symbol.Subtitles;
+
+    private string GetSubtitleMenuTitle(bool hasMultipleAudioLanguages)
+        => ResourceToolkit.GetLocalizedString(hasMultipleAudioLanguages ? Models.Constants.StringNames.AudioTrack : Models.Constants.StringNames.Subtitle);
+
     private void OnRightPanelSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        UpdateChapterLayout();
         if (_loaded && IsActive) BalanceLeftRightWidth();
     }
 

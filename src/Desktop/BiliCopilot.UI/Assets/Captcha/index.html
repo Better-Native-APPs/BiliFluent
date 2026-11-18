@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <!-- GeeTest V3 creates inline scripts as well as loading its allow-listed SDK modules. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; style-src 'self' 'unsafe-inline' https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; img-src data: blob: https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; media-src blob: https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; font-src data: https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; connect-src https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; frame-src https://*.geetest.com https://*.geevisit.com https://*.gsensebot.com; base-uri 'none'; form-action 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verification</title>
+    <link rel="stylesheet" href="captcha.css" />
+</head>
+<body>
+    <main id="stage">
+        <button id="start" type="button" hidden></button>
+        <form id="image-form" hidden>
+            <img id="captcha-image" alt="" />
+            <label id="image-label" for="image-code"></label>
+            <input id="image-code" type="text" maxlength="5" autocomplete="off" spellcheck="false" required />
+            <button id="image-submit" type="submit"></button>
+        </form>
+    </main>
+    <script src="captcha.js"></script>
+</body>
+</html>

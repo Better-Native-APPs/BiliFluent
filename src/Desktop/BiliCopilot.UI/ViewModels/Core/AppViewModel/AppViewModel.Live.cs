@@ -1,15 +1,15 @@
 #nullable enable
 
-using BiliCopilot.UI.Classic;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Live.Application;
+using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.SponsorBlock.Application;
 using BiliCopilot.UI.SponsorBlock.Integration;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.UI.Dispatching;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
-using Richasy.WinUIKernel.Share.Toolkits;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -32,18 +32,17 @@ public sealed partial class AppViewModel
     private ApplicationPlaybackOperations ApplicationPlayback
         => _applicationPlayback ??= new ApplicationPlaybackOperations(CheckPlaybackAccess);
 
-    public bool HasLiveWork => _liveApplication?.HasWork == true;
+    public bool HasLiveWork => _liveApplication?.HasLiveWork == true;
     internal bool IsPlaybackStopping => _playbackShutdown is not null || IsClosed;
-    internal bool HasApplicationPlaybackKeepAlive => HasLiveWork || _applicationPlayback?.HasWork == true
+    internal bool HasApplicationPlaybackKeepAlive => _liveApplication?.HasWork == true || _applicationPlayback?.HasWork == true
         || _playbackObservers.Count != 0 || !_liveNotice.IsCompleted || _liveNoticeWorker is { IsCompleted: false }
         || _playbackShutdown is { IsCompleted: false } || _playbackShutdownFailed
         || _sponsorApplicationRuntime?.HasPendingCleanup == true
         || SponsorMainWindowExitEligible && _sponsorApplicationRuntime?.HasMainWindowExitBarrier == true
         || _playbackTerminationReservation is not null; // Pending/uncertain termination must keep exclusion.
 
-    // Use the existing Classic/MainWindow keepalive seam, not another window registry. Other Live,
-    // Classic, independent and pending-open owners retain their previous hide/keepalive policy.
-    private bool SponsorMainWindowExitEligible => !HasEmbeddedWork && !HasLiveWork && !HasClassicOwnerWork
+    // Existing main-window exit eligibility includes live, independent and pending-open owners.
+    private bool SponsorMainWindowExitEligible => !HasEmbeddedWork && !HasLiveWork
         && !Players.Any(player => !player.IsEmbedded) && _applicationPlayback?.HasWork != true;
 
     private void BindSponsorMainWindow(MainWindow window)
@@ -62,11 +61,8 @@ public sealed partial class AppViewModel
         if (IsPlaybackStopping) return Task.CompletedTask;
         try
         {
-            // Capture the old identity/generation/lifetime and real saved decode choice BEFORE any await.
-            var bridge = LiveApplication;
-            var account = bridge.CaptureLaunchAccount();
-            var decode = ClassicSessionOptions.Capture(this.Get<ISettingsToolkit>()).DecodePreference;
-            return OwnApplicationPlaybackAsync(token => bridge.OpenLiveAsync(information, decode, account, token));
+            // The shared entry captures account identity/generation/lifetime before its first await.
+            return OpenMainPlayerAsync(new MediaSnapshot(information));
         }
         catch (Exception error)
         {
@@ -135,7 +131,7 @@ public sealed partial class AppViewModel
     {
         try
         {
-            const string message = "直播或播放切换未完成。请检查当前窗口；如关闭未完成，应用会保留相关资源，不会强行退出。";
+            var message = ResourceToolkit.GetLocalizedString(StringNames.LivePlaybackTransitionIncomplete);
             var main = Windows.OfType<MainWindow>().FirstOrDefault();
             // Failure visibility only. A successful Live launch does not hide/resize unrelated windows.
             if (main is not null)
@@ -147,17 +143,6 @@ public sealed partial class AppViewModel
         }
         catch { /* No raw diagnostics and no unsafe exit if the existing tip surface is unavailable. */ }
         finally { done.TrySetResult(); }
-    }
-
-    internal void RestoreMainWindowAfterLiveRelease()
-    {
-        // Match the existing Classic last-window return affordance, without changing saved policy.
-        try
-        {
-            if (!IsPlaybackStopping && !HasClassicWork && Players.Count == 0 && !IsMainWindowVisible())
-                Windows.OfType<MainWindow>().FirstOrDefault()?.Activate();
-        }
-        catch { ReportLiveFailure(); }
     }
 
     /// <summary>
@@ -185,9 +170,8 @@ public sealed partial class AppViewModel
             await stop;
             #pragma warning restore VSTHRD003
         } catch { failed = true; }
-        // Pending launch/consent/independent opens have really returned. Close any late adopted owner.
-        // Live retains cached failed release; legacy Classic has its own failed-close retry policy.
-        // This existing late-owner pass does not change either owner's release contract.
+        // Pending launches and independent opens have really returned. Close any late adopted owner.
+        // Live retains cached failed release; the late-owner pass preserves that release contract.
         if (!failed)
         {
             try { await CloseApplicationPlaybackOwnersAsync(); } catch { failed = true; }
@@ -204,8 +188,7 @@ public sealed partial class AppViewModel
                 await observer.Worker;
                 #pragma warning restore VSTHRD003
         }
-        if (HasLiveWork || HasEmbeddedWork || Players.Count != 0 || ClassicPlayers.Count != 0
-            || _classicOpenCount != 0 || HasPendingClassicExternalCleanup || _offeringExternalCleanupRetry) failed = true;
+        if (HasLiveWork || HasEmbeddedWork || Players.Count != 0) failed = true;
         if (failed)
         {
             _playbackShutdownFailed = true;
@@ -260,7 +243,6 @@ public sealed partial class AppViewModel
         // Admission is already shut. Start global durability and every independent owner before
         // joining any branch; each Player.Close still owns its required Sponsor detach/native drain.
         var players = Players.ToArray();
-        var classicPlayers = ClassicPlayers.ToArray();
         var tasks = new List<Task>
         {
             LiveRouteCoordinator.Invoke(CloseSponsorApplicationAsync),
@@ -268,7 +250,6 @@ public sealed partial class AppViewModel
         };
         if (_liveApplication is not null) tasks.Add(LiveRouteCoordinator.Invoke(_liveApplication.ShutdownAsync));
         tasks.AddRange(players.Select(player => LiveRouteCoordinator.Invoke(() => player.CloseAsync())));
-        tasks.AddRange(classicPlayers.Select(window => LiveRouteCoordinator.Invoke(window.CloseAsync)));
         // MainWindow/APP dispatcher and recovery UI survive until ALL real closes and durability finish.
         await Task.WhenAll(tasks);
     }

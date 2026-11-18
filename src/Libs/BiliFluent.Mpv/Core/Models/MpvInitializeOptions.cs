@@ -37,4 +37,16 @@ public sealed class MpvInitializeOptions
     /// 同 <c>--player-operation-mode</c> 选项.
     /// </summary>
     public MpvPlayerOperationMode? PlayerOperationMode { get; set; }
+
+    /// <summary>
+    /// Disables the libcurl network backend for diagnostic comparisons.
+    /// Unsupported options are logged without failing initialization.
+    /// </summary>
+    public bool DisableCurl { get; set; }
+
+    /// <summary>
+    /// Uses <c>--video-sync=display-resample</c> for diagnostic comparisons, without interpolation.
+    /// A rejected option is logged without failing initialization.
+    /// </summary>
+    public bool UseDisplayResample { get; set; }
 }

@@ -21,13 +21,19 @@
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Command="{x:Bind ViewModel.ShowUserSpaceCommand, Mode=OneWay}"
+            IsEnabled="{x:Bind ViewModel.CanSendMessage, Mode=OneWay}"
             Style="{StaticResource AvatarButtonStyle}">
-            <controls:BasicCoverImage
-                Width="36"
-                Height="36"
-                CornerRadius="18"
-                DecodeWidth="100"
-                Source="{x:Bind ViewModel.Avatar, Mode=OneWay}" />
+            <Grid Width="36" Height="36">
+                <SymbolIcon
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Symbol="Mail"
+                    Visibility="{x:Bind ViewModel.ShowSystemAvatarFallback, Mode=OneWay}" />
+                <controls:BasicCoverImage
+                    CornerRadius="18"
+                    DecodeWidth="100"
+                    Source="{x:Bind ViewModel.Avatar, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.ShowSystemAvatarFallback, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+            </Grid>
         </Button>
         <TextBlock
             x:Name="UserNameBlock"
@@ -42,20 +48,28 @@
             </ToolTipService.ToolTip>
         </TextBlock>
 
-        <Button
+        <StackPanel
             Grid.Column="2"
             VerticalAlignment="Center"
-            AutomationProperties.Name="{ext:Locale Name=Refresh}"
-            Command="{x:Bind ViewModel.RefreshCommand, Mode=OneWay}"
-            IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <ic:SymbolIcon
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                    Symbol="ArrowSync" />
-                <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=Refresh}" />
-            </StackPanel>
-        </Button>
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                Command="{x:Bind ViewModel.MarkAsReadCommand, Mode=OneWay}"
+                Content="{ext:Locale Name=MarkAsRead}"
+                Visibility="{x:Bind ViewModel.IsSystemSession, Mode=OneWay}" />
+            <Button
+                AutomationProperties.Name="{ext:Locale Name=Refresh}"
+                Command="{x:Bind ViewModel.RefreshCommand, Mode=OneWay}"
+                IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ic:SymbolIcon
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Symbol="ArrowSync" />
+                    <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=Refresh}" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
     </Grid>
 </local:ChatMessageControlBase>

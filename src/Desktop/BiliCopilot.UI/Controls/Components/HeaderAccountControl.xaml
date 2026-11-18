@@ -19,7 +19,9 @@
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             IsActive="{x:Bind ViewModel.IsInitializing, Mode=OneWay}" />
-        <Button Style="{StaticResource AvatarButtonStyle}">
+        <Button
+            IsEnabled="{x:Bind ViewModel.MyProfile, Mode=OneWay, Converter={StaticResource ObjectToBoolConverter}}"
+            Style="{StaticResource AvatarButtonStyle}">
             <controls:BasicCoverImage
                 x:Name="Avatar"
                 Width="28"

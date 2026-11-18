@@ -72,16 +72,19 @@ public sealed partial class PlayerViewModel
     }
 
     public Task ChangeSpeedAsync(double speed)
-        => IsPlaybackClosing || IsPlayerInputCancellationPending ? Task.CompletedTask : OwnWork(ChangeSpeedCoreAsync(speed));
+        => !CanChangePlaybackRate || IsPlaybackClosing || IsPlayerInputCancellationPending ? Task.CompletedTask : OwnWork(ChangeSpeedCoreAsync(speed));
 
     private Task ChangeSpeedCoreAsync(double speed)
     {
-        if (!double.IsFinite(speed) || speed < 0.1 || speed > 3 || Client is null || Player is null) return Task.CompletedTask;
+        if (!CanChangePlaybackRate || !double.IsFinite(speed) || speed < 0.1 || speed > 3 || Client is null || Player is null) return Task.CompletedTask;
         return SetPersistentUserRateAsync(speed);
     }
 
     public Task SendInlineDanmakuAsync(string text)
     {
+        if (IsLiveMedia) return OwnWork(SendInlineLiveDanmakuAsync(text));
+        if (!CanSendOnDemandDanmaku)
+            return Task.FromException(new InvalidOperationException("This media requires a different danmaku send pipeline."));
         if (IsPlaybackClosing || IsConnecting || Player?.IsPlaybackInitialized != true || string.IsNullOrWhiteSpace(text))
             return Task.FromException(new InvalidOperationException("当前媒体尚未准备好发送弹幕。"));
         return OwnWork(SendInlineDanmakuCoreAsync(text, _mediaVersion, Convert.ToInt32(Player.Position), _activeMediaToken));
@@ -89,6 +92,7 @@ public sealed partial class PlayerViewModel
 
     private async Task SendInlineDanmakuCoreAsync(string text, long version, int position, CancellationToken token)
     {
+        if (!CanSendOnDemandDanmaku) throw new InvalidOperationException("This media requires a different danmaku send pipeline.");
         var success = await DanmakuSend.TrySendDanmakuAsync(text, position, token);
         token.ThrowIfCancellationRequested();
         if (!IsCurrentPlayback(version)) throw new OperationCanceledException("媒体已切换，弹幕输入保持不变。");
@@ -111,12 +115,16 @@ public sealed partial class PlayerViewModel
             InitializeDanmakuCommand, ReloadDanmakuCommand,
         ];
         var tasks = commands.Select(command => command.ExecutionTask).Where(task => task is not null).Cast<Task>().ToArray();
+        if (LiveConnector is { } live)
+            tasks = tasks.Append(live.PendingSend).Append(SelectLiveSourceCommand.ExecutionTask ?? Task.CompletedTask)
+                .Append(live.SendDanmakuCommand.ExecutionTask ?? Task.CompletedTask).ToArray();
         try { await Task.WhenAll(tasks); }
         catch (Exception ex) { logger.LogWarning(ex, "Player transport work ended while closing."); }
     }
 
     private void RetainConnectorWork()
     {
+        if (LiveConnector is { } live) _ = OwnWork(live.PendingSend);
         List<IAsyncRelayCommand> commands = [];
         IEnumerable<IPlayerSectionDetailViewModel> sections = [];
         if (Connector is VideoConnectorViewModel video)

@@ -11,8 +11,10 @@ public sealed class DashMediaInformation(
     IList<DashSegmentInformation>? audioSegments,
     IList<PlayerFormatInformation>? formats,
     int duration = 0,
-    IList<AudioTrackInformation>? audioTracks = default,
-    string? currentLanguage = default)
+    IList<AudioQualityInformation>? audioQualities = default,
+    string? currentLanguage = default,
+    IList<AudioLanguageInformation>? audioLanguages = default,
+    string? audioLanguageGroupTitle = default)
 {
     /// <summary>
     /// 视频时长.
@@ -35,12 +37,22 @@ public sealed class DashMediaInformation(
     public IList<PlayerFormatInformation>? Formats { get; } = formats;
 
     /// <summary>
-    /// Gets the available audio tracks and AI dubbing languages.
+    /// Gets the audio qualities of the current language.
     /// </summary>
-    public IList<AudioTrackInformation>? AudioTracks { get; } = audioTracks;
+    public IList<AudioQualityInformation>? AudioQualities { get; } = audioQualities;
 
     /// <summary>
-    /// Gets the current dubbing language reported by the API.
+    /// Gets the available audio languages, with the original audio first.
+    /// </summary>
+    public IList<AudioLanguageInformation>? AudioLanguages { get; } = audioLanguages;
+
+    /// <summary>
+    /// Gets the title the API gives to its list of dubbing languages, if any.
+    /// </summary>
+    public string? AudioLanguageGroupTitle { get; } = audioLanguageGroupTitle;
+
+    /// <summary>
+    /// Gets the dubbing language the response serves, as reported by the API. Empty for the original audio.
     /// </summary>
     public string? CurrentLanguage { get; } = currentLanguage;
 }

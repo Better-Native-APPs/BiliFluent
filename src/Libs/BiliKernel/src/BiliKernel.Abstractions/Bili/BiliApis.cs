@@ -25,6 +25,39 @@ public static class BiliApis
         /// </summary>
         public const string PasswordEncrypt = _passBase + "/x/passport-login/web/key";
 
+        /// <summary>Gets the Web Passport captcha parameters.</summary>
+        public const string WebCaptcha = _passBase + "/x/passport-login/captcha";
+
+        /// <summary>Gets the image for a Passport image-captcha token.</summary>
+        public const string WebCaptchaImage = _apiBase + "/x/recaptcha/img";
+
+        /// <summary>Submits a Web Passport password login.</summary>
+        public const string WebPasswordLogin = _passBase + "/x/passport-login/web/login";
+
+        /// <summary>Gets the default SMS country and the supported country list.</summary>
+        public const string WebSmsCountries = _passBase + "/x/passport-login/web/country";
+
+        /// <summary>Sends a Web Passport login SMS.</summary>
+        public const string WebSmsSend = _passBase + "/x/passport-login/web/sms/send";
+
+        /// <summary>Submits a Web Passport SMS login.</summary>
+        public const string WebSmsLogin = _passBase + "/x/passport-login/web/login/sms";
+
+        /// <summary>Gets security-center captcha parameters.</summary>
+        public const string VerificationCaptcha = _passBase + "/x/safecenter/captcha/pre";
+
+        /// <summary>Sends a security-center secondary-verification SMS.</summary>
+        public const string VerificationSmsSend = _passBase + "/x/safecenter/common/sms/send";
+
+        /// <summary>Verifies the bound phone's secondary-verification SMS.</summary>
+        public const string VerificationSmsVerify = _passBase + "/x/safecenter/login/tel/verify";
+
+        /// <summary>Verifies an SMS for the security-center variant without a request id.</summary>
+        public const string VerificationSmsVerifyWithoutRequestId = _passBase + "/x/safecenter/sec/verify";
+
+        /// <summary>Exchanges a verified security-center code for Web cookies.</summary>
+        public const string WebExchangeCookie = _passBase + "/x/passport-login/web/exchange_cookie";
+
         /// <summary>
         /// 登录.
         /// </summary>
@@ -379,6 +412,11 @@ public static class BiliApis
         public const string Recommend = _appBase + "/x/v2/feed/index";
 
         /// <summary>
+        /// Home recommendations from the WBI-signed web feed.
+        /// </summary>
+        public const string WebRecommend = _apiBase + "/x/web-interface/wbi/index/top/feed/rcmd";
+
+        /// <summary>
         /// 精选视频.
         /// </summary>
         public const string CuratedPlaylist = _apiBase + "/x/web-interface/index/top/feed/rcmd";
@@ -673,6 +711,21 @@ public static class BiliApis
         public const string LikeDanmaku = _apiBase + "/x/v2/dm/thumbup/add";
 
         /// <summary>
+        /// Submits a score for a rating danmaku.
+        /// </summary>
+        public const string GradeDanmaku = _apiBase + "/x/v2/dm/command/grade/post";
+
+        /// <summary>
+        /// Submits an option for a voting danmaku.
+        /// </summary>
+        public const string VoteDanmaku = _apiBase + "/x/v2/dm/command/vote/post";
+
+        /// <summary>
+        /// Gets voting information and any available option counts.
+        /// </summary>
+        public const string DanmakuVoteInfo = _apiBase + "/x/vote/vote_info";
+
+        /// <summary>
         /// Gets like counts and the current user's danmaku like states.
         /// </summary>
         public const string DanmakuLikeStats = _apiBase + "/x/v2/dm/thumbup/stats";
@@ -795,6 +848,16 @@ public static class BiliApis
         /// 添加评论.
         /// </summary>
         public const string AddReply = _apiBase + "/x/v2/reply/add";
+
+        /// <summary>
+        /// 投票详情（评论、动态里的投票共用）.
+        /// </summary>
+        public const string VoteInfo = _apiBase + "/x/vote/vote_info";
+
+        /// <summary>
+        /// 提交投票.
+        /// </summary>
+        public const string DoVote = _apiBase + "/x/vote/do_vote";
 
         /// <summary>
         /// 动态标签.

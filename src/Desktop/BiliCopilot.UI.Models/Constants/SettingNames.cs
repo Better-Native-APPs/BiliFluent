@@ -32,11 +32,12 @@ public enum SettingNames
     LastSelectedFavoriteSection,
     LastSelectedMessageSection,
     PreferQuality,
-    LastSelectedVideoQuality,
+
+    // The video quality chosen by hand in the player, kept across media. Absent while the quality is automatic.
+    ManualVideoQuality,
     ShouldAutoPlay,
     LastSelectedLiveQuality,
     IsLiveAudioOnly,
-    LastSelectedPgcQuality,
     IsVideoPlayerPartsOnlyIndex,
     PlayerVolume,
     PlayerSpeed,
@@ -84,6 +85,7 @@ public enum SettingNames
     SelectedWebDavConfigId,
     LastMomentSectionIsVideo,
     LastUserSpaceSectionIsVideo,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ExternalPlayer,
     AppVersion = 87,
     BewlyExtensionVersion = 89,
@@ -92,6 +94,7 @@ public enum SettingNames
     IsGpuChecked,
     IsTopNavBarShown,
     MTCBehavior,
+    [Obsolete("Retired setting; live playback never opens the web player.")]
     UseWebPlayerWhenLive = 96,
     ShowSearchRecommend,
     ScrollAccelerate,
@@ -129,11 +132,23 @@ public enum SettingNames
     D3D11AdapterName,
     VulkanDeviceName,
     MaxBackCacheSize,
+    [Obsolete("Playback always uses the current player; this key is ignored.")]
     PlaybackExperience = 135,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerBackend = 136,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerDisplayMode = 137,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicPlayerDecodePreference = 138,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicExternalPlayerPath = 139,
+    [Obsolete("Retired setting; its numeric value remains reserved.")]
     ClassicUseWebPlayerWhenLive = 140,
     DanmakuRendererMpvMigrated = 141,
+    DanmakuDefaultFontMigrated = 142,
+    IsCommandDanmakuEnabled = 143,
+    PlaybackStutterDiagnosticsEnabled = 144,
+    DisableMpvCurlForDiagnostics = 145,
+    UseDisplaySyncForDiagnostics = 146,
+    HomeRecommendationFeedSource = 147,
 }

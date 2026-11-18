@@ -55,6 +55,10 @@ public sealed class PlayerService : IPlayerService
         => _client.GetVideoPlayDetailWithRestAsync(video, cid, cancellationToken, curLanguage);
 
     /// <inheritdoc/>
+    public Task<IReadOnlyList<VideoChapter>> GetVideoChaptersAsync(MediaIdentifier video, long cid, CancellationToken cancellationToken = default)
+        => _client.GetVideoChaptersAsync(video, cid, cancellationToken);
+
+    /// <inheritdoc/>
     public Task<LivePlayerView> GetLivePageDetailAsync(MediaIdentifier live, CancellationToken cancellationToken = default)
         => _client.GetLivePageDetailAsync(live, cancellationToken);
 

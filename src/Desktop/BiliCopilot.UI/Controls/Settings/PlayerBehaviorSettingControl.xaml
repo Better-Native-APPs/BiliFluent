@@ -14,7 +14,6 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <converters:PreferQualityTypeConverter x:Key="PreferQualityConverter" />
-        <converters:ExternalPlayerTypeConverter x:Key="ExternalPlayerTypeConverter" />
         <converters:DisplayModeConverter x:Key="DisplayModeConverter" />
         <converters:PreferDecodeTypeConverter x:Key="PreferDecodeConverter" />
     </UserControl.Resources>
@@ -58,7 +57,7 @@
                     Command="{x:Bind ViewModel.OpenMpvConfigInEditorCommand, Mode=OneWay}"
                     Content="{ext:Locale Name=OpenConfig}" />
             </community:SettingsCard>
-            <community:SettingsCard Header="{ext:Locale Name=PreferQuality}">
+            <community:SettingsCard Description="{ext:Locale Name=PreferQualityDescription}" Header="{ext:Locale Name=PreferQuality}">
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PreferQualityCollection, Mode=OneWay}"

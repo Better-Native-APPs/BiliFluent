@@ -50,7 +50,9 @@ $common = @(
 )
 function Invoke-BuildStep([string]$Name, [string]$Exe, [string[]]$Arguments) {
     @{ executable = $Exe; arguments = $Arguments } | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out "$Name.command.json") -Encoding UTF8
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
     & $Exe @Arguments 1> (Join-Path $out "$Name.stdout.log") 2> (Join-Path $out "$Name.stderr.log")
+    Write-Host ("{0}: {1:n0} s" -f $Name, $watch.Elapsed.TotalSeconds)
     if ($LASTEXITCODE) { throw "$Name failed ($LASTEXITCODE). See $out/$Name.stdout.log" }
     $log = Get-Content (Join-Path $out "$Name.stdout.log") -Raw
     if ($log -notmatch '0 Warning\(s\)\s+0 Error\(s\)') { throw "$Name did not report zero warnings and errors." }

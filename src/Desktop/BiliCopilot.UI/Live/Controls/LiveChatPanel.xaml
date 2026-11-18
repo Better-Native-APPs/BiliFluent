@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Live.Controls.LiveChatPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:live="using:BiliCopilot.UI.Live"
+    IsTabStop="False">
+
+    <!--
+        Chat side panel (VOD SideHeader + SideBody): header with the connection state, then the message list.
+        Display only: the host supplies the bounded message collection and the connection state, and decides the
+        panel's width and visibility. Hiding the panel only collapses the view; it keeps tracking new messages.
+    -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Live/Controls/LiveStatusResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style
+                x:Key="LiveMessageItemStyle"
+                BasedOn="{StaticResource DefaultListViewItemStyle}"
+                TargetType="ListViewItem">
+                <Setter Property="Padding" Value="12,4" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid
+        x:Name="RootGrid"
+        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+        BorderThickness="1,0,0,0">
+        <VisualStateManager.VisualStateGroups>
+            <!--  Connection dot colour. Idle is the Ellipse's own Fill.  -->
+            <VisualStateGroup x:Name="ChatStates">
+                <VisualState x:Name="ChatIdleState" />
+                <VisualState x:Name="ChatLiveState">
+                    <VisualState.Setters>
+                        <Setter Target="ChatDot.Fill" Value="{ThemeResource LiveStateLiveBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ChatWarnState">
+                    <VisualState.Setters>
+                        <Setter Target="ChatDot.Fill" Value="{ThemeResource LiveStateWarnBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ChatErrorState">
+                    <VisualState.Setters>
+                        <Setter Target="ChatDot.Fill" Value="{ThemeResource LiveStateErrorBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            Grid.Row="0"
+            Padding="16,0"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="ChatHeaderText"
+                VerticalAlignment="Center"
+                FontWeight="Bold"
+                MaxLines="1"
+                TextTrimming="CharacterEllipsis" />
+            <Ellipse
+                x:Name="ChatDot"
+                Grid.Column="1"
+                Width="8"
+                Height="8"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Fill="{ThemeResource LiveStateIdleBrush}" />
+            <TextBlock
+                x:Name="ChatStatusText"
+                Grid.Column="2"
+                MaxWidth="160"
+                VerticalAlignment="Center"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <Border
+            x:Name="HeaderDivider"
+            Grid.Row="1"
+            Height="1"
+            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+        <Grid Grid.Row="2" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <ListView
+                x:Name="MessageList"
+                Padding="0,4"
+                IsItemClickEnabled="False"
+                ItemContainerStyle="{StaticResource LiveMessageItemStyle}"
+                SelectionMode="None">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepLastItemInView" />
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <!--  One row = name (secondary) + body (primary).  -->
+                    <DataTemplate x:DataType="live:LiveChatMessage">
+                        <TextBlock
+                            IsTextSelectionEnabled="False"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            TextWrapping="Wrap">
+                            <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind UserName}" />
+                            <Run Text=" " />
+                            <Run Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind Text}" />
+                        </TextBlock>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <TextBlock
+                x:Name="EmptyText"
+                Margin="24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsHitTestVisible="False"
+                Style="{StaticResource BodyTextBlockStyle}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+
+            <Button
+                x:Name="JumpButton"
+                Margin="0,0,0,12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Click="OnJumpClick"
+                CornerRadius="{ThemeResource OverlayCornerRadius}"
+                Style="{StaticResource AccentButtonStyle}"
+                Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ic:SymbolIcon
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Symbol="ArrowDown" />
+                    <TextBlock x:Name="JumpText" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</UserControl>

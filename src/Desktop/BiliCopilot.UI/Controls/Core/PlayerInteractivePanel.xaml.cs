@@ -406,7 +406,9 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
 
         _taps.Cancel();
         _tapTimer.Stop();
-        if (!ViewModel.Player.IsPlaying)
+
+        // A media with a fixed rate has no hold to speed up: no touch flag, no command and no speed hint.
+        if (!ViewModel.Player.IsPlaying || !ViewModel.CanChangePlaybackRate)
         {
             return;
         }
@@ -451,7 +453,7 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         else if (_gesture.Phase == PlayerSurfaceGesture.Vertical)
         {
             // Retain the existing touch volume scale, now over the whole surface.
-            var volume = Math.Clamp(_startVolume - (_gesture.DeltaY / 10), 0, ViewModel.MaxVolume);
+            var volume = Math.Clamp(_startVolume - (_gesture.DeltaY / 10), 0, PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume));
             ApplyVolume(volume);
         }
     }
@@ -561,8 +563,11 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         finally { if (mouse is not null) mouse.Starting = false; }
     }
 
+    // A stream can report a duration without having a timeline. Without the capability a horizontal drag or
+    // wheel previews nothing, reveals no controls and commits nothing.
     private bool CanSeek()
-        => CanControlPlayback() && double.IsFinite(ViewModel.Player.Duration) && ViewModel.Player.Duration > 0;
+        => CanControlPlayback() && ViewModel.CanSeek
+            && double.IsFinite(ViewModel.Player.Duration) && ViewModel.Player.Duration > 0;
 
     private bool IsSurfaceSource(object source)
     {

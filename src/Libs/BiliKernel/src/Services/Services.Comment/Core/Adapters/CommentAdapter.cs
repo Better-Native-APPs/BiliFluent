@@ -61,6 +61,7 @@ internal static class CommentAdapter
         return new CommentInformation(id, content, rootId, isTop, profileDetail, publishTime, communityInfo)
         {
             ContentMetadata = CopyMetadata(info.Content),
+            Vote = info.Content.ToCommentVote(),
         };
     }
 

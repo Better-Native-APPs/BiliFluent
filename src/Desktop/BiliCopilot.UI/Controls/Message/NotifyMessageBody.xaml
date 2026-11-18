@@ -20,12 +20,20 @@
             ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
             SelectionMode="None">
             <ItemsView.Layout>
-                <StackLayout Spacing="8" />
+                <StackLayout Spacing="12" />
             </ItemsView.Layout>
             <ItemsView.ItemTemplate>
                 <DataTemplate x:DataType="items:NotifyMessageItemViewModel">
-                    <ItemContainer AutomationProperties.Name="{x:Bind FirstUserName}" IsTabStop="False">
-                        <local:NotifyMessageCardControl MaxWidth="1000" ViewModel="{x:Bind}" />
+                    <!--
+                        The container draws the hover and pressed fill over its whole area, so it has to be exactly
+                        as large as the card: the width limit sits on the container, and the gap between cards
+                        comes from the layout spacing instead of a margin inside the container.
+                    -->
+                    <ItemContainer
+                        MaxWidth="1000"
+                        AutomationProperties.Name="{x:Bind FirstUserName}"
+                        IsTabStop="False">
+                        <local:NotifyMessageCardControl ViewModel="{x:Bind}" />
                     </ItemContainer>
                 </DataTemplate>
             </ItemsView.ItemTemplate>

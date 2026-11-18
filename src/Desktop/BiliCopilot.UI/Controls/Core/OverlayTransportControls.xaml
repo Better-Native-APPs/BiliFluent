@@ -20,6 +20,26 @@
     LostFocus="OnControlLostFocus"
     IsEnabled="{x:Bind IsActive, Mode=OneWay}">
 
+    <local:PlayerControlBase.Resources>
+        <ResourceDictionary>
+            <!--  Chapter segments of the progress bar. This bar always sits on the dark gradient, so the gaps are dark in every theme.  -->
+            <Style x:Key="ChapterGapStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="#D9000000" />
+            </Style>
+            <Style x:Key="ChapterHighlightStyle" TargetType="Rectangle">
+                <Setter Property="Fill" Value="#52FFFFFF" />
+            </Style>
+            <!--  The chapter entry: a button of this bar that grows with the chapter title.  -->
+            <Style
+                x:Key="ChapterEntryStyle"
+                BasedOn="{StaticResource BasicPlayerIconButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinWidth" Value="40" />
+                <Setter Property="Padding" Value="13,0" />
+            </Style>
+        </ResourceDictionary>
+    </local:PlayerControlBase.Resources>
+
     <Grid
         x:Name="RootGrid"
         Height="160"
@@ -35,7 +55,11 @@
         </Grid.Background>
         <Grid.RowDefinitions>
             <RowDefinition />
-            <RowDefinition Height="Auto" />
+            <!--
+                The timeline. A media without one has no element here, only the room the timeline takes, so the
+                commands above stand where they do for any other media.
+            -->
+            <RowDefinition Height="Auto" MinHeight="{x:Bind local:PlayerOverlay.GetTimelineRoom(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}" />
         </Grid.RowDefinitions>
         <Grid Padding="16,0,8,0">
             <Grid.ColumnDefinitions>
@@ -64,37 +88,52 @@
                 Grid.Column="1"
                 VerticalAlignment="Center"
                 IsEnabled="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}">
+                <!--
+                    Each seek and playlist button sits in a holder that follows its media capability. The narrow state
+                    sets the visibility of the buttons themselves, so the capability cannot live on the same property:
+                    a media that cannot seek or has no playlist drops the holder, button and margin together.
+                -->
                 <StackPanel Orientation="Horizontal">
-                    <Button
-                        x:Name="PrevButton"
-                        Margin="0,0,8,0"
-                        Command="{x:Bind ViewModel.PlayPreviousCommand, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.IsPrevButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.PrevButtonToolTip, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="Previous" />
-                    </Button>
-                    <Button
-                        x:Name="BackwardButton"
-                        Margin="0,0,8,0"
-                        Command="{x:Bind ViewModel.SkipBackwardCommand, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.BackwardTip, Mode=OneWay}"
-                        Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="ArrowStepBack" />
-                    </Button>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanNavigatePlaylist, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="PrevButton"
+                            Margin="0,0,8,0"
+                            Command="{x:Bind ViewModel.PlayPreviousCommand, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.IsPrevButtonEnabled, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PrevButtonToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="Previous" />
+                        </Button>
+                    </Border>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="BackwardButton"
+                            Margin="0,0,8,0"
+                            Command="{x:Bind ViewModel.SkipBackwardCommand, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.BackwardTip, Mode=OneWay}"
+                            Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="ArrowStepBack" />
+                        </Button>
+                    </Border>
+                    <!--  As wide as the refresh button after play, so that play stays in the centre. Nothing is drawn.  -->
+                    <Border
+                        x:Name="RefreshBalance"
+                        Width="48"
+                        x:Load="{x:Bind local:PlayerOverlay.IsTimelineFree(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}"
+                        IsHitTestVisible="False" />
                     <Grid>
                         <Button
                             x:Name="PlayPauseButton"
                             Click="OnPlayPauseButtonClick"
-                            IsEnabled="{x:Bind IsPlayPauseEnabled(ViewModel.Player.PlaybackState), Mode=OneWay}"
+                            IsEnabled="{x:Bind IsPlayPauseEnabled(ViewModel.Player.PlaybackState, ViewModel.IsLiveReleaseBlocked), Mode=OneWay}"
                             Style="{StaticResource PrimaryPlayerButtonStyle}"
                             ToolTipService.ToolTip="{x:Bind GetPlayPauseTip(ViewModel.Player.IsPlaying), Mode=OneWay}">
                             <ic:SymbolIcon
@@ -110,33 +149,62 @@
                             BorderThickness="4"
                             IsActive="{x:Bind IsLoading(ViewModel.Player.PlaybackState, ViewModel.Player.IsLoading), Mode=OneWay}" />
                     </Grid>
+                    <!--
+                        A media without a timeline: the way back to its newest picture, in the place and with the
+                        look of the buttons after play. It is created only for such a media.
+                    -->
                     <Button
-                        x:Name="ForwardButton"
+                        x:Name="RefreshButton"
                         Margin="8,0,0,0"
-                        Command="{x:Bind ViewModel.SkipForwardCommand, Mode=OneWay}"
+                        x:Load="{x:Bind local:PlayerOverlay.IsTimelineFree(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}"
+                        AutomationProperties.Name="{ext:Locale Name=LiveRefresh}"
+                        Click="OnRefreshClick"
+                        IsEnabled="{x:Bind ViewModel.CanRefreshLive, Mode=OneWay}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.ForwardTip, Mode=OneWay}"
-                        Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="ArrowStepOver" />
+                        ToolTipService.ToolTip="{ext:Locale Name=LiveRefresh}">
+                        <ic:SymbolIcon FontSize="16" Symbol="ArrowSync" />
                     </Button>
-                    <Button
-                        x:Name="NextButton"
-                        Margin="8,0,0,0"
-                        Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
-                        <ic:SymbolIcon
-                            FontSize="16"
-                            IconVariant="Filled"
-                            Symbol="Next" />
-                    </Button>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="ForwardButton"
+                            Margin="8,0,0,0"
+                            Command="{x:Bind ViewModel.SkipForwardCommand, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.ForwardTip, Mode=OneWay}"
+                            Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="ArrowStepOver" />
+                        </Button>
+                    </Border>
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanNavigatePlaylist, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="NextButton"
+                            Margin="8,0,0,0"
+                            Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
+                            <ic:SymbolIcon
+                                FontSize="16"
+                                IconVariant="Filled"
+                                Symbol="Next" />
+                        </Button>
+                    </Border>
                 </StackPanel>
             </UserControl>
+
+            <!--  右侧一列的可用宽度（只量宽度，不画任何东西）：章节入口据此决定显示章节名、只显示图标还是收起.  -->
+            <Border
+                x:Name="RightRoom"
+                Grid.Column="2"
+                Height="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False"
+                SizeChanged="OnChapterRoomChanged" />
 
             <!--  右侧附加控制  -->
             <StackPanel
@@ -146,6 +214,14 @@
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 SizeChanged="OnRightPanelSizeChanged">
+                <!--  当前章节入口：有章节时才出现，点开是章节列表；没有章节时整体折叠、不留间距，右侧面板与原来一致.  -->
+                <local:ChapterButton
+                    x:Name="ChapterEntry"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    EntryStyle="{StaticResource ChapterEntryStyle}"
+                    IsActive="{x:Bind IsActive, Mode=OneWay}"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                 <StackPanel
                     x:Name="FullVolumeContainer"
                     Margin="0,0,8,0"
@@ -182,7 +258,7 @@
                         VerticalAlignment="Center"
                         IsEnabled="{x:Bind ViewModel.IsMute, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         LargeChange="10"
-                        Maximum="{x:Bind ViewModel.MaxVolume, Mode=OneWay}"
+                        Maximum="{x:Bind local:PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume), Mode=OneWay}"
                         Minimum="0"
                         SmallChange="1"
                         TickFrequency="1"
@@ -245,7 +321,7 @@
                                     VerticalAlignment="Center"
                                     IsEnabled="{x:Bind ViewModel.IsMute, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                                     LargeChange="10"
-                                    Maximum="{x:Bind ViewModel.MaxVolume, Mode=OneWay}"
+                                    Maximum="{x:Bind local:PlayerOverlay.GetVolumeCeiling(ViewModel.MaxVolume), Mode=OneWay}"
                                     Minimum="0"
                                     SmallChange="1"
                                     TickFrequency="1"
@@ -260,7 +336,8 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     Style="{StaticResource BasicPlayerIconButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}">
+                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}"
+                    Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanChangePlaybackRate, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
                     <Button.Flyout>
                         <Flyout
@@ -362,19 +439,22 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-                <Grid Visibility="{x:Bind ViewModel.IsSubtitleEnabled, Mode=OneWay}">
+                <!--
+                    Subtitle menu. A media with dubbing languages lists them first, above the subtitles;
+                    without them the menu is the subtitle list alone. The button shows for either, and is named
+                    after what it holds: subtitles, the audio track (with its own icon), or both.
+                -->
+                <Grid Visibility="{x:Bind GetSubtitleMenuVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages, ViewModel.CanUseSubtitles, ViewModel.CanSelectAudioTrack, ViewModel.HasAdmittedMedia), Mode=OneWay}">
                     <Button
                         x:Name="SubtitleButton"
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
+                        AutomationProperties.Name="{x:Bind GetSubtitleMenuName(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Subtitle}"
-                        Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
-                        <ic:SymbolIcon FontSize="14" Symbol="Subtitles" />
+                        ToolTipService.ToolTip="{x:Bind GetSubtitleMenuName(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
+                        <ic:SymbolIcon FontSize="14" Symbol="{x:Bind GetSubtitleMenuSymbol(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}" />
                         <Button.Flyout>
-                            <Flyout
-                                Opened="OnSubtitleFlyoutOpened"
-                                ShouldConstrainToRootBounds="False">
+                            <Flyout Opened="OnSubtitleFlyoutOpened" ShouldConstrainToRootBounds="False">
                                 <Flyout.FlyoutPresenterStyle>
                                     <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
                                         <Setter Property="Padding" Value="0" />
@@ -386,52 +466,75 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition />
                                     </Grid.RowDefinitions>
+                                    <!--  The title of the first section: the audio track when there are languages, otherwise the subtitles.  -->
                                     <Grid Margin="16,12" ColumnSpacing="8">
                                         <TextBlock
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
                                             FontWeight="SemiBold"
-                                            Text="{ext:Locale Name=Subtitle}" />
+                                            Text="{x:Bind GetSubtitleMenuTitle(ViewModel.HasMultipleAudioLanguages), Mode=OneWay}" />
                                     </Grid>
+                                    <!--  One scroll area for both lists, so the menu never shows two scroll bars.  -->
                                     <ScrollView
                                         Grid.Row="1"
                                         MaxHeight="400"
                                         Padding="16,0"
                                         HorizontalScrollMode="Disabled"
                                         VerticalScrollBarVisibility="Auto">
-                                        <Grid Margin="0,0,0,12">
-                                            <ItemsRepeater x:Name="SubtitleRepeater" ItemsSource="{x:Bind ViewModel.Subtitles, Mode=OneWay}">
+                                        <StackPanel Margin="0,0,0,12">
+                                            <ItemsRepeater
+                                                x:Name="AudioLanguageRepeater"
+                                                ItemsSource="{x:Bind ViewModel.AudioLanguages, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}">
                                                 <ItemsRepeater.ItemTemplate>
-                                                    <DataTemplate x:DataType="items:SubtitleItemViewModel">
+                                                    <DataTemplate x:DataType="items:AudioLanguageItemViewModel">
+                                                        <!--  Same card as a subtitle row; a language that cannot be played disables itself through the command.  -->
                                                         <base:AppToggleCard
                                                             MinWidth="200"
                                                             MaxWidth="280"
                                                             HorizontalAlignment="Stretch"
-                                                            AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            AutomationProperties.Name="{x:Bind AccessibleName}"
                                                             BorderBrush="Transparent"
                                                             BorderThickness="2"
-                                                            Command="{x:Bind ActiveCommand, Mode=OneWay}"
+                                                            Command="{x:Bind ActiveCommand}"
                                                             IsChecked="{x:Bind IsSelected, Mode=OneWay}"
                                                             IsEnableCheck="False">
-                                                            <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
-                                                            <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                            <Grid ColumnSpacing="8">
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition />
                                                                     <ColumnDefinition Width="Auto" />
                                                                 </Grid.ColumnDefinitions>
-                                                                <base:TrimTextBlock
-                                                                    VerticalAlignment="Center"
-                                                                    MaxLines="1"
-                                                                    Text="{x:Bind Name, Mode=OneWay}" />
-                                                                <Border
+                                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <base:TrimTextBlock
+                                                                        VerticalAlignment="Center"
+                                                                        MaxLines="1"
+                                                                        Text="{x:Bind Name}" />
+                                                                    <!--  The same tag as an AI subtitle.  -->
+                                                                    <Border
+                                                                        Grid.Column="1"
+                                                                        Style="{StaticResource TagBorderStyle}"
+                                                                        Visibility="{x:Bind IsAI}">
+                                                                        <TextBlock
+                                                                            AutomationProperties.AccessibilityView="Raw"
+                                                                            Style="{StaticResource TagTextStyle}"
+                                                                            Text="AI" />
+                                                                    </Border>
+                                                                </Grid>
+                                                                <!--  A quiet note at the far end: this language needs a premium membership.  -->
+                                                                <TextBlock
                                                                     Grid.Column="1"
-                                                                    Style="{StaticResource TagBorderStyle}"
-                                                                    Visibility="{x:Bind IsAI}">
-                                                                    <TextBlock
-                                                                        AutomationProperties.AccessibilityView="Raw"
-                                                                        Style="{StaticResource TagTextStyle}"
-                                                                        Text="AI" />
-                                                                </Border>
+                                                                    VerticalAlignment="Center"
+                                                                    AutomationProperties.AccessibilityView="Raw"
+                                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                                    Text="{ext:Locale Name=AudioTrackVip}"
+                                                                    Visibility="{x:Bind NeedVip}" />
                                                             </Grid>
                                                         </base:AppToggleCard>
                                                     </DataTemplate>
@@ -440,7 +543,55 @@
                                                     <StackLayout Spacing="8" />
                                                 </ItemsRepeater.Layout>
                                             </ItemsRepeater>
-                                        </Grid>
+                                            <StackPanel Visibility="{x:Bind GetSubtitleListVisibility(ViewModel.IsSubtitleEnabled, ViewModel.IsSubtitleEmpty), Mode=OneWay}">
+                                                <!--  The subtitles get their own title only below the languages; alone, the title above is theirs.  -->
+                                                <TextBlock
+                                                    Margin="0,16,0,12"
+                                                    FontWeight="SemiBold"
+                                                    Text="{ext:Locale Name=Subtitle}"
+                                                    Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay}" />
+                                                <ItemsRepeater x:Name="SubtitleRepeater" ItemsSource="{x:Bind ViewModel.Subtitles, Mode=OneWay}">
+                                                    <ItemsRepeater.ItemTemplate>
+                                                        <DataTemplate x:DataType="items:SubtitleItemViewModel">
+                                                            <base:AppToggleCard
+                                                                MinWidth="200"
+                                                                MaxWidth="280"
+                                                                HorizontalAlignment="Stretch"
+                                                                AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
+                                                                BorderBrush="Transparent"
+                                                                BorderThickness="2"
+                                                                Command="{x:Bind ActiveCommand, Mode=OneWay}"
+                                                                IsChecked="{x:Bind IsSelected, Mode=OneWay}"
+                                                                IsEnableCheck="False">
+                                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <base:TrimTextBlock
+                                                                        VerticalAlignment="Center"
+                                                                        MaxLines="1"
+                                                                        Text="{x:Bind Name, Mode=OneWay}" />
+                                                                    <Border
+                                                                        Grid.Column="1"
+                                                                        Style="{StaticResource TagBorderStyle}"
+                                                                        Visibility="{x:Bind IsAI}">
+                                                                        <TextBlock
+                                                                            AutomationProperties.AccessibilityView="Raw"
+                                                                            Style="{StaticResource TagTextStyle}"
+                                                                            Text="AI" />
+                                                                    </Border>
+                                                                </Grid>
+                                                            </base:AppToggleCard>
+                                                        </DataTemplate>
+                                                    </ItemsRepeater.ItemTemplate>
+                                                    <ItemsRepeater.Layout>
+                                                        <StackLayout Spacing="8" />
+                                                    </ItemsRepeater.Layout>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </ScrollView>
                                 </Grid>
                             </Flyout>
@@ -450,7 +601,7 @@
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
-                    Visibility="{x:Bind ViewModel.IsDanmakuControlVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.IsDanmakuSwitchAvailable, Mode=OneWay}">
                     <ToggleButton
                         x:Name="DanmakuToggleButton"
                         Margin="0,0,8,0"
@@ -462,16 +613,22 @@
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         Style="{StaticResource TogglePlayerIconButtonStyle}"
                         ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}" />
-                    <Button
-                        x:Name="DanmakuOptionButton"
-                        Margin="0,0,8,0"
-                        AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
-                        Click="OnDanmakuOptionsButtonClick"
-                        IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
-                        <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
-                    </Button>
+                    <!--
+                        The display settings shape the danmaku of an on-demand media. The narrow state sets the
+                        visibility of the button itself, so the capability lives on a holder around it.
+                    -->
+                    <Border Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ViewModel.CanLoadOnDemandDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}">
+                        <Button
+                            x:Name="DanmakuOptionButton"
+                            Margin="0,0,8,0"
+                            AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
+                            Click="OnDanmakuOptionsButtonClick"
+                            IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
+                            Style="{StaticResource BasicPlayerIconButtonStyle}"
+                            ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                            <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
+                        </Button>
+                    </Border>
                 </StackPanel>
                 <Button
                     x:Name="CompactOverlayButton"
@@ -496,12 +653,13 @@
             </StackPanel>
         </Grid>
 
-        <!--  底部进度条  -->
+        <!--  底部进度条：只属于有时间轴的媒体  -->
         <Grid
+            x:Name="TimelineRow"
             Grid.Row="1"
             Margin="16,-32,16,12"
             ColumnSpacing="12"
-            Visibility="{x:Bind ProgressBarVisible, Mode=OneWay}">
+            Visibility="{x:Bind local:PlayerOverlay.GetCapabilityVisibility(ProgressBarVisible, ViewModel.CanSeek, ViewModel.HasAdmittedMedia), Mode=OneWay}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="60" />
                 <ColumnDefinition />
@@ -568,13 +726,6 @@
                 ThumbToolTipValueConverter="{StaticResource PlayerPositionConverter}"
                 ValueChanged="OnProgressValueChanged"
                 Visibility="{x:Bind ViewModel.IsPreviewProgressChanging, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
-            <local:ChapterPanel
-                x:Name="ChapterPanel"
-                Grid.Column="1"
-                Margin="0,0,4,0"
-                IsEnabled="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.IsChapterVisible, Mode=OneWay}" />
             <Slider
                 x:Name="ProgressSliderFake"
                 Grid.Column="1"
@@ -586,6 +737,19 @@
                 ThumbToolTipValueConverter="{StaticResource PlayerPositionConverter}"
                 Visibility="{x:Bind ViewModel.IsPreviewProgressChanging, Mode=OneWay}"
                 Value="{x:Bind ViewModel.PreviewPosition, Mode=OneWay}" />
+            <!--
+                章节分段画在两个 Slider 各自的轨道里（轨道与已播放填充之上、Thumb 之下），由代码挂入，不在这里占位。
+                章节预览气泡：悬停、拖动进度条或手势预览进度时，在位置上方显示所在章节名与时间；
+                气泡不接收指针、不取焦点，进度条的输入与被动跟随不受影响。没有章节的视频不会打开.
+            -->
+            <Popup
+                x:Name="ChapterTipPopup"
+                Grid.Column="1"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False">
+                <local:ChapterPreviewTip x:Name="ChapterTip" />
+            </Popup>
             <TextBlock
                 Grid.Column="2"
                 HorizontalAlignment="Left"
@@ -603,7 +767,7 @@
             IsOpen="{x:Bind IsDanmakuOptionsOpen(IsActive, ViewModel.IsDanmakuOptionsVisible), Mode=OneWay}"
             PreferredPlacement="TopLeft"
             Target="{x:Bind DanmakuOptionButton}">
-            <danmaku:DanmakuDisplayOptions ViewModel="{x:Bind ViewModel.Danmaku, Mode=OneWay}" />
+            <danmaku:DanmakuDisplayOptions IsCommandDanmakuSwitchVisible="{x:Bind local:PlayerOverlay.IsCapabilityShown(ViewModel.CanUseInteractiveDanmaku, ViewModel.HasAdmittedMedia), Mode=OneWay}" ViewModel="{x:Bind ViewModel.Danmaku, Mode=OneWay}" />
         </TeachingTip>
 
         <VisualStateManager.VisualStateGroups>
@@ -624,7 +788,6 @@
                 <VisualState x:Name="NarrowState">
                     <VisualState.Setters>
                         <Setter Target="FullVolumeContainer.Visibility" Value="Collapsed" />
-                        <Setter Target="ChapterPanel.Visibility" Value="Collapsed" />
                         <Setter Target="SlimVolumeButton.Visibility" Value="Visible" />
                         <Setter Target="BackwardButton.Visibility" Value="Collapsed" />
                         <Setter Target="ForwardButton.Visibility" Value="Visible" />

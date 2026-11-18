@@ -9,6 +9,7 @@ using Richasy.BiliKernel.Models.Base;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.Media.Core.Models;
 using RestDashItem = Richasy.BiliKernel.Services.Media.Core.Models.DashItem;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
@@ -37,29 +38,36 @@ internal static class VideoAdapter
 
     public static VideoInformation ToVideoInformation(this RecommendCard card)
     {
-        var identifier = new MediaIdentifier(card.Args.Aid.ToString(), card.Title, card.Cover.ToVideoCover());
-        var publisher = new PublisherInfo { Publisher = card.Args.UpName, UserId = card.Args.UpId ?? 0 };
-        var communityInfo = new VideoCommunityInformation(card.Args.Aid.ToString(), card.PlayCountText.ToCountNumber(), card.DanmakuCountText.ToCountNumber());
-        var duration = card.DurationText.ToDurationSeconds();
+        var id = card.VideoId.ToString(CultureInfo.InvariantCulture);
+        var identifier = new MediaIdentifier(id, card.Title, card.Cover.ToVideoCover());
+        var publisher = new PublisherInfo { Publisher = card.Args?.UpName ?? string.Empty, UserId = card.Args?.UpId ?? card.Args?.UpMid ?? 0 };
+        var communityInfo = new VideoCommunityInformation(id,
+            string.IsNullOrEmpty(card.PlayCountText) ? null : card.PlayCountText.ToCountNumber(),
+            string.IsNullOrEmpty(card.DanmakuCountText) ? null : card.DanmakuCountText.ToCountNumber());
+        var duration = card.PlayerArgs?.Duration ?? (string.IsNullOrEmpty(card.DurationText) ? (int?)null : card.DurationText.ToDurationSeconds());
         var info = new VideoInformation(
             identifier,
             publisher.ToPublisherProfile(),
-            card.PlayerArgs?.Duration,
+            duration,
             communityInformation: communityInfo);
 
-        var flyoutItems = card.OverflowFlyout.Where(p => p.Reasons != null).Select(p => new VideoOverflowFlyoutItem
+        var flyoutItems = (card.OverflowFlyout ?? Array.Empty<OverflowFlyoutItem>()).Where(p => p.Reasons != null).Select(p => new VideoOverflowFlyoutItem
         {
             Id = p.Type,
             Title = p.Title,
-            Options = p.Reasons.ToDictionary(r => r.Id.ToString() ?? string.Empty, r => r.Name ?? string.Empty),
+            Options = p.Reasons!.Where(r => r.Id.HasValue).GroupBy(r => r.Id.GetValueOrDefault())
+                .ToDictionary(r => r.Key.ToString(CultureInfo.InvariantCulture), r => r.First().Name ?? string.Empty),
         }).ToList();
 
         info.AddExtensionIfNotNull(VideoExtensionDataId.Cid, card.PlayerArgs?.Cid);
         info.AddExtensionIfNotNull(VideoExtensionDataId.MediaType, MediaType.Video);
-        info.AddExtensionIfNotNull(VideoExtensionDataId.RecommendReason, card.RecommendReason);
+        info.AddExtensionIfNotNull(VideoExtensionDataId.RecommendReason, string.IsNullOrEmpty(card.RecommendReason) ? card.RecommendReasonStyle?.Text : card.RecommendReason);
         info.AddExtensionIfNotNull(VideoExtensionDataId.TagId, card.Args?.TagId);
         info.AddExtensionIfNotNull(VideoExtensionDataId.TagName, card.Args?.TagName);
-        info.AddExtensionIfNotNull(VideoExtensionDataId.OverflowFlyout, new VideoOverflowFlyout { Items = flyoutItems });
+        if (flyoutItems.Count > 0)
+        {
+            info.AddExtensionIfNotNull(VideoExtensionDataId.OverflowFlyout, new VideoOverflowFlyout { Items = flyoutItems });
+        }
 
         return info;
     }
@@ -491,7 +499,7 @@ internal static class VideoAdapter
         return new DashMediaInformation(videos, audios, formats);
     }
 
-    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information, bool includeAiDubbing = false, string? requestedLanguage = default)
+    public static DashMediaInformation ToDashMediaInformation(this PlayerInformation information, bool includeAudioLanguages = false, string? requestedLanguage = default)
     {
         var dash = information.VideoInformation;
         if (dash == null)
@@ -502,7 +510,7 @@ internal static class VideoAdapter
         var videos = new List<DashSegmentInformation>();
         var audios = new List<DashSegmentInformation>();
         var formats = new List<PlayerFormatInformation>();
-        var audioTracks = new List<AudioTrackInformation>();
+        var audioQualities = new List<AudioQualityInformation>();
 
         if (dash.Video?.Count > 0)
         {
@@ -518,7 +526,7 @@ internal static class VideoAdapter
             {
                 var seg = ToDashSegmentInformation(audio);
                 audios.Add(seg);
-                audioTracks.Add(new AudioTrackInformation($"std:{seg.Id}", default, AudioTrackKind.Standard, needVip: audio.NeedVip ?? false, segment: seg));
+                audioQualities.Add(new AudioQualityInformation($"std:{seg.Id}", AudioQualityKind.Standard, needVip: audio.NeedVip ?? false, segment: seg));
             }
         }
 
@@ -532,36 +540,40 @@ internal static class VideoAdapter
                 }
 
                 var seg = ToDashSegmentInformation(audio);
-                audioTracks.Add(new AudioTrackInformation($"dolby:{seg.Id}", default, AudioTrackKind.Dolby, needVip: audio.NeedVip ?? dash.Dolby.NeedVip ?? false, segment: seg));
+                audioQualities.Add(new AudioQualityInformation($"dolby:{seg.Id}", AudioQualityKind.Dolby, needVip: audio.NeedVip ?? dash.Dolby.NeedVip ?? false, segment: seg));
             }
         }
 
         if (dash.Flac?.Audio is { } flacAudio)
         {
             var seg = ToDashSegmentInformation(flacAudio);
-            audioTracks.Add(new AudioTrackInformation($"hires:{seg.Id}", default, AudioTrackKind.HiRes, needVip: flacAudio.NeedVip ?? dash.Flac.NeedVip ?? false, segment: seg));
+            audioQualities.Add(new AudioQualityInformation($"hires:{seg.Id}", AudioQualityKind.HiRes, needVip: flacAudio.NeedVip ?? dash.Flac.NeedVip ?? false, segment: seg));
         }
 
-        if (includeAiDubbing && information.Language?.Items is { } languageItems)
+        // The original audio always comes first. Languages are listed only as the API names them;
+        // nothing is derived from the streams.
+        var audioLanguages = new List<AudioLanguageInformation> { new(AudioLanguageInformation.OriginalId) };
+        var languageGroupTitle = default(string);
+        if (includeAudioLanguages && information.Language is { Support: not false, Items: { } languageItems } languageInfo)
         {
-            var requestedAudio = string.IsNullOrEmpty(requestedLanguage)
-                ? default
-                : audios.OrderByDescending(p => p.Bandwidth).FirstOrDefault();
+            languageGroupTitle = string.IsNullOrWhiteSpace(languageInfo.ListTitle) ? default : languageInfo.ListTitle;
+            var servedLanguage = AudioLanguageInformation.MatchesCode(requestedLanguage, information.CurrentLanguage) ? requestedLanguage : default;
             foreach (var language in languageItems)
             {
-                if (string.IsNullOrEmpty(language?.Language))
+                if (string.IsNullOrWhiteSpace(language?.Language) || audioLanguages.Any(p => p.Id == language.Language))
                 {
                     continue;
                 }
 
-                audioTracks.Add(new AudioTrackInformation(
-                    $"ai:{language.Language}",
-                    language.Title,
-                    AudioTrackKind.AiDubbing,
+                // The API has no AI flag of its own. Production type 2 is its AI dubbing ("AI 原声翻译"),
+                // which the official web player marks with an AI tag.
+                audioLanguages.Add(new AudioLanguageInformation(
                     language.Language,
-                    isAI: true,
+                    language.Title,
+                    isAI: language.ProductionType == 2,
                     needVip: language.NeedVip ?? false,
-                    segment: language.Language == requestedLanguage ? requestedAudio : default));
+                    hasAudio: language.Language == servedLanguage,
+                    productionType: language.ProductionType));
             }
         }
 
@@ -589,7 +601,15 @@ internal static class VideoAdapter
             audios = default;
         }
 
-        return new DashMediaInformation(videos, audios, formats, information.Duration, audioTracks.Count > 0 ? audioTracks : default, information.CurrentLanguage);
+        return new DashMediaInformation(
+            videos,
+            audios,
+            formats,
+            information.Duration,
+            audioQualities.Count > 0 ? audioQualities : default,
+            information.CurrentLanguage,
+            audioLanguages,
+            languageGroupTitle);
     }
 
     private static DashSegmentInformation ToDashSegmentInformation(RestDashItem item)

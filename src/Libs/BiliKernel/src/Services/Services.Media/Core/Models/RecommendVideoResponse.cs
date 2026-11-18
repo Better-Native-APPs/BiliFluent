@@ -2,13 +2,15 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Serialization;
+using System.Text.Json;
+using System.Globalization;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
 
 internal sealed class RecommendVideoResponse
 {
     [JsonPropertyName("items")]
-    public IList<RecommendCard> Items { get; set; }
+    public IList<RecommendCard>? Items { get; set; }
 }
 
 internal sealed class RecommendCard
@@ -20,13 +22,13 @@ internal sealed class RecommendCard
     public string? CardGoto { get; set; }
 
     [JsonPropertyName("args")]
-    public VideoArgs Args { get; set; }
+    public VideoArgs? Args { get; set; }
 
     [JsonPropertyName("idx")]
     public long Idx { get; set; }
 
     [JsonPropertyName("param")]
-    public string Parameter { get; set; }
+    public string? Parameter { get; set; }
 
     [JsonPropertyName("cover")]
     public string? Cover { get; set; }
@@ -35,7 +37,7 @@ internal sealed class RecommendCard
     public string? Title { get; set; }
 
     [JsonPropertyName("player_args")]
-    public PlayerArgs PlayerArgs { get; set; }
+    public PlayerArgs? PlayerArgs { get; set; }
 
     [JsonPropertyName("three_point_v2")]
     public IList<OverflowFlyoutItem>? OverflowFlyout { get; set; }
@@ -51,12 +53,35 @@ internal sealed class RecommendCard
 
     [JsonPropertyName("rcmd_reason")]
     public string? RecommendReason { get; set; }
+
+    [JsonPropertyName("rcmd_reason_style")]
+    public RecommendReasonStyle? RecommendReasonStyle { get; set; }
+
+    [JsonPropertyName("ad_info")]
+    public JsonElement AdInfo { get; set; }
+
+    [JsonPropertyName("is_ad")]
+    public int IsAd { get; set; }
+
+    [JsonIgnore]
+    public long VideoId => Args?.Aid is > 0 ? Args.Aid.Value
+        : PlayerArgs?.Aid is > 0 ? PlayerArgs.Aid.Value
+        : long.TryParse(Parameter, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? id : 0;
+}
+
+internal sealed class RecommendReasonStyle
+{
+    [JsonPropertyName("text")]
+    public string? Text { get; set; }
 }
 
 internal sealed class VideoArgs
 {
     [JsonPropertyName("up_id")]
     public long? UpId { get; set; }
+
+    [JsonPropertyName("up_mid")]
+    public long? UpMid { get; set; }
 
     [JsonPropertyName("up_name")]
     public string? UpName { get; set; }
@@ -97,7 +122,7 @@ internal sealed class OverflowFlyoutItem
     [JsonPropertyName("title")]
     public string? Title { get; set; }
 
-    [JsonPropertyName("Type")]
+    [JsonPropertyName("type")]
     public string? Type { get; set; }
 
     [JsonPropertyName("icon")]

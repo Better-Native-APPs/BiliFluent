@@ -591,6 +591,24 @@
   <data name="LoggerModuleDescription" xml:space="preserve">
     <value>查看应用日志或清除日志记录</value>
   </data>
+  <data name="PlaybackStutterDiagnostics" xml:space="preserve">
+    <value>播放卡顿诊断</value>
+  </data>
+  <data name="PlaybackStutterDiagnosticsDescription" xml:space="preserve">
+    <value>每秒记录掉帧、缓存和 UI 心跳，不记录视频或用户信息。</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnostics" xml:space="preserve">
+    <value>禁用 mpv 的 libcurl 网络后端（对比用）</value>
+  </data>
+  <data name="DisableMpvCurlForDiagnosticsDescription" xml:space="preserve">
+    <value>对照诊断网络缓冲；重新打开播放器后生效。</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnostics" xml:space="preserve">
+    <value>使用显示同步（对比用）</value>
+  </data>
+  <data name="UseDisplaySyncForDiagnosticsDescription" xml:space="preserve">
+    <value>按显示器刷新率安排视频帧，对照诊断帧节奏；重新打开播放器后生效。</value>
+  </data>
   <data name="MainWindow" xml:space="preserve">
     <value>主窗口</value>
   </data>
@@ -812,9 +830,6 @@
   </data>
   <data name="PreferCodecDescription" xml:space="preserve">
     <value>优先选择该编码的视频流，HEVC/H.265 和 AV1 需要额外安装解码器</value>
-  </data>
-  <data name="PreferHighQuality" xml:space="preserve">
-    <value>画质优先</value>
   </data>
   <data name="PreferQuality" xml:space="preserve">
     <value>画质偏好</value>
@@ -1197,9 +1212,6 @@
   <data name="RecommendLivePartition" xml:space="preserve">
     <value>推荐的直播分区</value>
   </data>
-  <data name="ExternalPlayerType" xml:space="preserve">
-    <value>外部播放器类型</value>
-  </data>
   <data name="Name" xml:space="preserve">
     <value>名称</value>
   </data>
@@ -1307,9 +1319,6 @@
   </data>
   <data name="CustomMpvConfigDescription" xml:space="preserve">
     <value>MPV 用户请参考 mpv.io 的说明进行自定义配置</value>
-  </data>
-  <data name="UseWebPlayerWhenLive" xml:space="preserve">
-    <value>使用网页播放器观看直播</value>
   </data>
   <data name="ShowSearchRecommend" xml:space="preserve">
     <value>显示搜索推荐</value>
@@ -1712,5 +1721,599 @@
   </data>
   <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
     <value>{0}，AI 生成</value>
+  </data>
+  <data name="SystemChatSession" xml:space="preserve">
+    <value>系统会话</value>
+  </data>
+  <data name="NotificationViewDetails" xml:space="preserve">
+    <value>查看详情</value>
+  </data>
+  <data name="FailedToMarkChatRead" xml:space="preserve">
+    <value>标记会话已读失败，请重试</value>
+  </data>
+  <data name="FailedToOpenMessageLink" xml:space="preserve">
+    <value>无法打开消息链接，请重试</value>
+  </data>
+  <data name="AudioTrack" xml:space="preserve">
+    <value>声轨</value>
+  </data>
+  <data name="AudioTrackAndSubtitle" xml:space="preserve">
+    <value>声轨和字幕</value>
+  </data>
+  <data name="AudioTrackStandard" xml:space="preserve">
+    <value>标准音质</value>
+  </data>
+  <data name="AudioTrackDolby" xml:space="preserve">
+    <value>杜比</value>
+  </data>
+  <data name="AudioTrackDolbyAtmos" xml:space="preserve">
+    <value>杜比全景声</value>
+  </data>
+  <data name="AudioTrackHiRes" xml:space="preserve">
+    <value>Hi-Res 无损</value>
+  </data>
+  <data name="AudioTrackVip" xml:space="preserve">
+    <value>大会员</value>
+  </data>
+  <data name="AudioTrackAITemplate" xml:space="preserve">
+    <value>{0}，AI 配音</value>
+  </data>
+  <data name="AudioTrackVipTemplate" xml:space="preserve">
+    <value>{0}，需要大会员</value>
+  </data>
+  <data name="AudioTrackOriginal" xml:space="preserve">
+    <value>原声</value>
+  </data>
+  <data name="AudioTrackQuality" xml:space="preserve">
+    <value>音质</value>
+  </data>
+  <data name="AudioLanguageSwitchFailed" xml:space="preserve">
+    <value>这个语言暂时播放不了，已切回原来的语言。</value>
+  </data>
+  <data name="AudioQualitySwitchFailed" xml:space="preserve">
+    <value>这个音质暂时播放不了，已切回原来的音质。</value>
+  </data>
+  <data name="SeamlessSwitchingTemplate" xml:space="preserve">
+    <value>正在切换到 {0}…</value>
+  </data>
+  <data name="QualityAuto" xml:space="preserve">
+    <value>自动</value>
+  </data>
+  <data name="QualityAutoTemplate" xml:space="preserve">
+    <value>自动（{0}）</value>
+  </data>
+  <data name="QualityAutoWithAudioTemplate" xml:space="preserve">
+    <value>自动（{0} · {1}）</value>
+  </data>
+  <data name="PreferQualityDescription" xml:space="preserve">
+    <value>播放时手动选的清晰度会一直沿用，在播放器里选回“自动”后恢复按这里的偏好播放。</value>
+  </data>
+  <data name="DanmakuHoverActions" xml:space="preserve">
+    <value>悬停时显示弹幕操作</value>
+  </data>
+  <data name="DanmakuHoverActionsWin2DOnly" xml:space="preserve">
+    <value>仅 Win2D 渲染方式可用</value>
+  </data>
+  <data name="DanmakuUnlike" xml:space="preserve">
+    <value>取消点赞</value>
+  </data>
+  <data name="DanmakuLikeNeedSignIn" xml:space="preserve">
+    <value>登录后才能点赞弹幕</value>
+  </data>
+  <data name="DanmakuLikeFailed" xml:space="preserve">
+    <value>弹幕点赞失败，请稍后重试</value>
+  </data>
+  <data name="DanmakuCopyFailed" xml:space="preserve">
+    <value>复制失败，请重试</value>
+  </data>
+  <data name="CommandDanmakuEnabled" xml:space="preserve">
+    <value>显示互动弹幕</value>
+  </data>
+  <data name="CommandDanmakuEnabledDescription" xml:space="preserve">
+    <value>播放时在画面上显示评分、投票、关注提醒和 UP 主弹幕</value>
+  </data>
+  <data name="CommandDanmakuKindUp" xml:space="preserve">
+    <value>UP 主弹幕</value>
+  </data>
+  <data name="CommandDanmakuKindLink" xml:space="preserve">
+    <value>关联视频</value>
+  </data>
+  <data name="CommandDanmakuKindAttention" xml:space="preserve">
+    <value>支持 UP 主</value>
+  </data>
+  <data name="CommandDanmakuKindVote" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommandDanmakuKindGrade" xml:space="preserve">
+    <value>评分</value>
+  </data>
+  <data name="CommandDanmakuCardNameTemplate" xml:space="preserve">
+    <value>{0}：{1}</value>
+  </data>
+  <data name="CommandDanmakuRemainingTemplate" xml:space="preserve">
+    <value>{0} 秒</value>
+  </data>
+  <data name="CommandDanmakuClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="CommandDanmakuOpenVideo" xml:space="preserve">
+    <value>去看看</value>
+  </data>
+  <data name="CommandDanmakuFollow" xml:space="preserve">
+    <value>关注</value>
+  </data>
+  <data name="CommandDanmakuFollowed" xml:space="preserve">
+    <value>已关注</value>
+  </data>
+  <data name="CommandDanmakuTriple" xml:space="preserve">
+    <value>一键三连</value>
+  </data>
+  <data name="CommandDanmakuTripleTip" xml:space="preserve">
+    <value>同时点赞、投币并收藏</value>
+  </data>
+  <data name="CommandDanmakuLike" xml:space="preserve">
+    <value>点赞</value>
+  </data>
+  <data name="CommandDanmakuLiked" xml:space="preserve">
+    <value>已点赞</value>
+  </data>
+  <data name="CommandDanmakuCoinOne" xml:space="preserve">
+    <value>投 1 币</value>
+  </data>
+  <data name="CommandDanmakuCoinTwo" xml:space="preserve">
+    <value>投 2 币</value>
+  </data>
+  <data name="CommandDanmakuCoined" xml:space="preserve">
+    <value>已投币</value>
+  </data>
+  <data name="CommandDanmakuVoteSelected" xml:space="preserve">
+    <value>你的选择</value>
+  </data>
+  <data name="CommandDanmakuVoteStatsTemplate" xml:space="preserve">
+    <value>{0} 票 · {1}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionNameTemplate" xml:space="preserve">
+    <value>{0}，{1} 票，占 {2}%</value>
+  </data>
+  <data name="CommandDanmakuVoteOptionSelectedNameTemplate" xml:space="preserve">
+    <value>{0}，{1} 票，占 {2}%，你的选择</value>
+  </data>
+  <data name="CommandDanmakuVoteSummaryTemplate" xml:space="preserve">
+    <value>共 {0} 票</value>
+  </data>
+  <data name="CommandDanmakuVoteSubmitting" xml:space="preserve">
+    <value>正在提交…</value>
+  </data>
+  <data name="CommandDanmakuVoteSignInRequired" xml:space="preserve">
+    <value>登录后才能投票</value>
+  </data>
+  <data name="CommandDanmakuVoteFailed" xml:space="preserve">
+    <value>投票没有成功，请再试一次</value>
+  </data>
+  <data name="CommandDanmakuGradeAverageTemplate" xml:space="preserve">
+    <value>平均 {0} 星</value>
+  </data>
+  <data name="CommandDanmakuGradeCountTemplate" xml:space="preserve">
+    <value>{0} 人参与</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmit" xml:space="preserve">
+    <value>提交</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmitting" xml:space="preserve">
+    <value>提交中…</value>
+  </data>
+  <data name="CommandDanmakuGradeRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="CommandDanmakuGradeSubmittedTemplate" xml:space="preserve">
+    <value>你评了 {0} 星</value>
+  </data>
+  <data name="CommandDanmakuGradeSignInRequired" xml:space="preserve">
+    <value>登录后才能评分</value>
+  </data>
+  <data name="CommandDanmakuGradeFailed" xml:space="preserve">
+    <value>提交失败，请重试</value>
+  </data>
+  <data name="WatchFinished" xml:space="preserve">
+    <value>已看完</value>
+  </data>
+  <data name="WatchedToTemplate" xml:space="preserve">
+    <value>看到 {0}</value>
+  </data>
+  <data name="Chapters" xml:space="preserve">
+    <value>视频章节</value>
+  </data>
+  <data name="ChapterCurrentTemplate" xml:space="preserve">
+    <value>视频章节，当前：{0}</value>
+  </data>
+  <data name="ChapterItemTemplate" xml:space="preserve">
+    <value>第 {0} 章，{1}，{2} 开始</value>
+  </data>
+  <data name="ChapterItemPlayingTemplate" xml:space="preserve">
+    <value>第 {0} 章，{1}，{2} 开始，正在播放</value>
+  </data>
+  <data name="SignInQRCodeTitle" xml:space="preserve">
+    <value>扫码登录</value>
+  </data>
+  <data name="SignInQRCodeImageName" xml:space="preserve">
+    <value>登录二维码</value>
+  </data>
+  <data name="SignInQRCodeUnavailable" xml:space="preserve">
+    <value>二维码已失效或加载失败，请刷新后重新扫码</value>
+  </data>
+  <data name="SignInRefreshQRCode" xml:space="preserve">
+    <value>刷新二维码</value>
+  </data>
+  <data name="SignInModeSelectorName" xml:space="preserve">
+    <value>登录方式</value>
+  </data>
+  <data name="SignInPasswordTab" xml:space="preserve">
+    <value>密码登录</value>
+  </data>
+  <data name="SignInSmsTab" xml:space="preserve">
+    <value>短信登录</value>
+  </data>
+  <data name="SignInAccountName" xml:space="preserve">
+    <value>账号</value>
+  </data>
+  <data name="SignInAccountPlaceholder" xml:space="preserve">
+    <value>手机号或邮箱</value>
+  </data>
+  <data name="SignInPasswordPlaceholder" xml:space="preserve">
+    <value>密码</value>
+  </data>
+  <data name="SignInButton" xml:space="preserve">
+    <value>登录</value>
+  </data>
+  <data name="SignInCountryName" xml:space="preserve">
+    <value>国家或地区</value>
+  </data>
+  <data name="SignInCountryPlaceholder" xml:space="preserve">
+    <value>地区</value>
+  </data>
+  <data name="SignInCountryLoading" xml:space="preserve">
+    <value>加载中…</value>
+  </data>
+  <data name="SignInCountryLoadFailed" xml:space="preserve">
+    <value>地区列表加载失败，请检查网络后重试</value>
+  </data>
+  <data name="SignInRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="SignInClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="SignInCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="SignInPhonePlaceholder" xml:space="preserve">
+    <value>手机号</value>
+  </data>
+  <data name="SignInSmsCodePlaceholder" xml:space="preserve">
+    <value>短信验证码</value>
+  </data>
+  <data name="SignInSendSmsCode" xml:space="preserve">
+    <value>获取验证码</value>
+  </data>
+  <data name="SignInResendSmsCode" xml:space="preserve">
+    <value>重新获取</value>
+  </data>
+  <data name="SignInSmsCooldownTemplate" xml:space="preserve">
+    <value>{0} 秒后可重发</value>
+  </data>
+  <data name="SignInSmsCodeSent" xml:space="preserve">
+    <value>验证码已发送，请查看手机短信</value>
+  </data>
+  <data name="SignInVerificationTitle" xml:space="preserve">
+    <value>验证手机</value>
+  </data>
+  <data name="SignInVerificationDescription" xml:space="preserve">
+    <value>本次登录需要短信验证，验证码会发送到账号绑定的手机。</value>
+  </data>
+  <data name="SignInVerificationSend" xml:space="preserve">
+    <value>发送验证码</value>
+  </data>
+  <data name="SignInVerificationSubmit" xml:space="preserve">
+    <value>验证并登录</value>
+  </data>
+  <data name="SignInBack" xml:space="preserve">
+    <value>返回登录</value>
+  </data>
+  <data name="SignInTroubleTip" xml:space="preserve">
+    <value>登录遇到问题？</value>
+  </data>
+  <data name="SignInWebFallback" xml:space="preserve">
+    <value>使用网页登录</value>
+  </data>
+  <data name="SignInSwitchToWeb" xml:space="preserve">
+    <value>改用网页登录</value>
+  </data>
+  <data name="SignInStatusPreparing" xml:space="preserve">
+    <value>正在准备人机验证…</value>
+  </data>
+  <data name="SignInStatusCaptcha" xml:space="preserve">
+    <value>请在弹出的窗口中完成人机验证</value>
+  </data>
+  <data name="SignInStatusSigningIn" xml:space="preserve">
+    <value>正在登录…</value>
+  </data>
+  <data name="SignInStatusSendingSms" xml:space="preserve">
+    <value>正在发送验证码…</value>
+  </data>
+  <data name="SignInStatusVerifying" xml:space="preserve">
+    <value>正在验证…</value>
+  </data>
+  <data name="SignInStatusFinishing" xml:space="preserve">
+    <value>登录成功，正在进入应用…</value>
+  </data>
+  <data name="SignInAccountRequired" xml:space="preserve">
+    <value>请输入账号</value>
+  </data>
+  <data name="SignInPasswordRequired" xml:space="preserve">
+    <value>请输入密码</value>
+  </data>
+  <data name="SignInPhoneRequired" xml:space="preserve">
+    <value>请输入手机号</value>
+  </data>
+  <data name="SignInSmsCodeRequired" xml:space="preserve">
+    <value>请输入短信验证码</value>
+  </data>
+  <data name="SignInSmsCodeNotRequested" xml:space="preserve">
+    <value>请先获取短信验证码</value>
+  </data>
+  <data name="SignInPhoneChanged" xml:space="preserve">
+    <value>手机号或地区已更改，请重新获取验证码</value>
+  </data>
+  <data name="SignInErrorInvalidCredentials" xml:space="preserve">
+    <value>账号或密码不正确</value>
+  </data>
+  <data name="SignInErrorCaptchaFailed" xml:space="preserve">
+    <value>人机验证未通过，请重试</value>
+  </data>
+  <data name="SignInErrorRateLimited" xml:space="preserve">
+    <value>操作过于频繁，请稍后再试</value>
+  </data>
+  <data name="SignInErrorTimedOut" xml:space="preserve">
+    <value>请求超时，请检查网络后重试</value>
+  </data>
+  <data name="SignInErrorInvalidParameters" xml:space="preserve">
+    <value>提交的信息有误，请检查后重试</value>
+  </data>
+  <data name="SignInErrorInvalidPhoneNumber" xml:space="preserve">
+    <value>手机号格式不正确</value>
+  </data>
+  <data name="SignInErrorAccountFormat" xml:space="preserve">
+    <value>请输入手机号或邮箱</value>
+  </data>
+  <data name="SignInErrorInvalidEmail" xml:space="preserve">
+    <value>邮箱格式不正确</value>
+  </data>
+  <data name="SignInErrorMainlandPhoneLength" xml:space="preserve">
+    <value>请输入 11 位手机号</value>
+  </data>
+  <data name="SignInErrorSmsCodeLength" xml:space="preserve">
+    <value>请输入 6 位验证码</value>
+  </data>
+  <data name="SignInErrorSmsAlreadySent" xml:space="preserve">
+    <value>验证码刚刚已经发送过，请查看短信或稍后再获取</value>
+  </data>
+  <data name="SignInErrorPhoneNumberBlocked" xml:space="preserve">
+    <value>该手机号无法用于登录</value>
+  </data>
+  <data name="SignInErrorInvalidSmsCode" xml:space="preserve">
+    <value>短信验证码不正确</value>
+  </data>
+  <data name="SignInErrorSmsCodeExpired" xml:space="preserve">
+    <value>短信验证码已过期，请重新获取</value>
+  </data>
+  <data name="SignInErrorSessionExpired" xml:space="preserve">
+    <value>本次登录已失效，请重新开始</value>
+  </data>
+  <data name="SignInErrorUnsupportedVerification" xml:space="preserve">
+    <value>本次登录需要应用内暂不支持的验证方式，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorUnsupportedCaptcha" xml:space="preserve">
+    <value>遇到了应用内暂不支持的验证码类型，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorInvalidResponse" xml:space="preserve">
+    <value>服务器返回了无法识别的内容，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorSessionImportFailed" xml:space="preserve">
+    <value>账号验证已通过，但应用授权没有完成，请改用网页登录</value>
+  </data>
+  <data name="SignInErrorNetwork" xml:space="preserve">
+    <value>网络连接失败，请检查网络后重试</value>
+  </data>
+  <data name="SignInErrorUnknown" xml:space="preserve">
+    <value>登录失败，请稍后重试</value>
+  </data>
+  <data name="SignInErrorUnknownWithCode" xml:space="preserve">
+    <value>登录失败，请稍后重试（错误码 {0}）</value>
+  </data>
+  <data name="SignInErrorUnexpected" xml:space="preserve">
+    <value>出现意外错误，请重试</value>
+  </data>
+  <data name="CaptchaWindowTitle" xml:space="preserve">
+    <value>安全验证</value>
+  </data>
+  <data name="CaptchaViewName" xml:space="preserve">
+    <value>人机验证</value>
+  </data>
+  <data name="CaptchaLoading" xml:space="preserve">
+    <value>正在加载验证码…</value>
+  </data>
+  <data name="CaptchaStart" xml:space="preserve">
+    <value>开始验证</value>
+  </data>
+  <data name="CaptchaLoadFailed" xml:space="preserve">
+    <value>验证码加载失败</value>
+  </data>
+  <data name="CaptchaErrorTimeout" xml:space="preserve">
+    <value>加载超时，请检查网络后重试</value>
+  </data>
+  <data name="CaptchaErrorGeneric" xml:space="preserve">
+    <value>请检查网络后重试（{0}）</value>
+  </data>
+  <data name="CaptchaErrorComponent" xml:space="preserve">
+    <value>无法启动验证组件，请确认系统的 WebView2 运行时可用</value>
+  </data>
+  <data name="WebSignInFinishing" xml:space="preserve">
+    <value>正在完成登录…</value>
+  </data>
+  <data name="WebSignInFailedTitle" xml:space="preserve">
+    <value>登录没有完成</value>
+  </data>
+  <data name="WebSignInFailedDescription" xml:space="preserve">
+    <value>网页已登录，但应用授权没有完成。请检查网络后重试。</value>
+  </data>
+  <data name="LiveComposerUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕</value>
+  </data>
+  <data name="LiveSendUnavailable" xml:space="preserve">
+    <value>现在还不能发送弹幕，请等直播和弹幕连接好后再试。</value>
+  </data>
+  <data name="LiveSendNotSent" xml:space="preserve">
+    <value>弹幕没有发出，内容已保留。请检查登录状态后再试。</value>
+  </data>
+  <data name="LiveSendUnknown" xml:space="preserve">
+    <value>无法确认弹幕是否已发出。请先看看弹幕列表，确认没有发出后再手动发送。</value>
+  </data>
+  <data name="LiveSendRejected" xml:space="preserve">
+    <value>弹幕被拒绝，内容已保留。</value>
+  </data>
+  <data name="LiveSendRejectedTemplate" xml:space="preserve">
+    <value>弹幕被拒绝（代码 {0}），内容已保留。</value>
+  </data>
+  <data name="LiveRefresh" xml:space="preserve">
+    <value>刷新到最新直播画面</value>
+  </data>
+  <data name="LiveEndedTitle" xml:space="preserve">
+    <value>直播已结束或连接中断</value>
+  </data>
+  <data name="LiveEndedDescription" xml:space="preserve">
+    <value>可以刷新一下，看看直播是否还在继续。</value>
+  </data>
+  <data name="LiveFailedTitle" xml:space="preserve">
+    <value>直播画面没有加载出来</value>
+  </data>
+  <data name="LiveFailedDescription" xml:space="preserve">
+    <value>可能是网络不稳定，或者直播刚刚结束。可以再试一次。</value>
+  </data>
+  <data name="LivePlaybackTransitionIncomplete" xml:space="preserve">
+    <value>直播或播放切换未完成；如关闭失败，请稍后再次打开重试。</value>
+  </data>
+  <data name="CommentVoteLabel" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommentVoteEntryNameTemplate" xml:space="preserve">
+    <value>投票：{0}</value>
+  </data>
+  <data name="CommentVoteEntryNameWithCountTemplate" xml:space="preserve">
+    <value>投票：{0}，{1} 人参与</value>
+  </data>
+  <data name="CommentVoteParticipantsTemplate" xml:space="preserve">
+    <value>{0} 人参与</value>
+  </data>
+  <data name="CommentVoteSingleChoice" xml:space="preserve">
+    <value>单选</value>
+  </data>
+  <data name="CommentVoteMultiChoiceTemplate" xml:space="preserve">
+    <value>最多选 {0} 项</value>
+  </data>
+  <data name="CommentVoteRemainingTemplate" xml:space="preserve">
+    <value>还可以选 {0} 项</value>
+  </data>
+  <data name="CommentVoteLimitReachedTemplate" xml:space="preserve">
+    <value>已选满 {0} 项</value>
+  </data>
+  <data name="CommentVoteDeadlineTemplate" xml:space="preserve">
+    <value>{0} 截止</value>
+  </data>
+  <data name="CommentVoteEnded" xml:space="preserve">
+    <value>已结束</value>
+  </data>
+  <data name="CommentVoteSubmit" xml:space="preserve">
+    <value>投票</value>
+  </data>
+  <data name="CommentVoteAnonymous" xml:space="preserve">
+    <value>匿名投票</value>
+  </data>
+  <data name="CommentVoteLoading" xml:space="preserve">
+    <value>正在加载投票…</value>
+  </data>
+  <data name="CommentVoteLoadFailed" xml:space="preserve">
+    <value>投票没有加载出来</value>
+  </data>
+  <data name="CommentVoteUnavailable" xml:space="preserve">
+    <value>这个投票已被删除，或者暂时无法查看</value>
+  </data>
+  <data name="CommentVoteDone" xml:space="preserve">
+    <value>已投票</value>
+  </data>
+  <data name="CommentVoteOwn" xml:space="preserve">
+    <value>这是你发起的投票</value>
+  </data>
+  <data name="CommentVoteSupporterOnly" xml:space="preserve">
+    <value>充电专属投票，给 UP 主充电后才能参与</value>
+  </data>
+  <data name="CommentVoteFailedReasonTemplate" xml:space="preserve">
+    <value>投票没有成功：{0}</value>
+  </data>
+  <data name="CommentVoteOptionsName" xml:space="preserve">
+    <value>投票选项</value>
+  </data>
+  <data name="CommentVoteRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="HomeRecommendationFeedSource" xml:space="preserve">
+    <value>首页推荐流来源</value>
+  </data>
+  <data name="HomeRecommendationFeedSourceDescription" xml:space="preserve">
+    <value>返回首页推荐时自动从头刷新；未登录时使用匿名推荐。</value>
+  </data>
+  <data name="RecommendationFeedWeb" xml:space="preserve">
+    <value>网页版</value>
+  </data>
+  <data name="RecommendationFeedApp" xml:space="preserve">
+    <value>手机 App</value>
+  </data>
+  <data name="TextLinkUser" xml:space="preserve">
+    <value>查看用户空间</value>
+  </data>
+  <data name="TextLinkTopic" xml:space="preserve">
+    <value>在应用内搜索这个话题</value>
+  </data>
+  <data name="TextLinkSearch" xml:space="preserve">
+    <value>在应用内搜索</value>
+  </data>
+  <data name="TextLinkVideo" xml:space="preserve">
+    <value>播放视频</value>
+  </data>
+  <data name="TextLinkPgc" xml:space="preserve">
+    <value>播放剧集</value>
+  </data>
+  <data name="TextLinkLive" xml:space="preserve">
+    <value>进入直播间</value>
+  </data>
+  <data name="TextLinkArticle" xml:space="preserve">
+    <value>阅读专栏</value>
+  </data>
+  <data name="TextLinkBrowserTemplate" xml:space="preserve">
+    <value>在浏览器中打开 {0}</value>
+  </data>
+  <data name="TextLinkGoodsTemplate" xml:space="preserve">
+    <value>商品或推广链接 · 在浏览器中打开 {0}</value>
+  </data>
+  <data name="TextLinkNote" xml:space="preserve">
+    <value>查看笔记</value>
+  </data>
+  <data name="TextLinkNameTemplate" xml:space="preserve">
+    <value>{0}，{1}</value>
+  </data>
+  <data name="TextLinkShortLink" xml:space="preserve">
+    <value>打开哔哩哔哩短链接</value>
+  </data>
+  <data name="TextLinkOpenFailed" xml:space="preserve">
+    <value>链接没有打开，请再试一次</value>
   </data>
 </root>

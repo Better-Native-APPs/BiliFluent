@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using BiliCopilot.UI.SponsorBlock.Models;
@@ -10,7 +11,7 @@ namespace BiliCopilot.UI.SponsorBlock.Api;
 /// <summary>Typed opt-in protocol only. No cookies, arbitrary endpoints, retries, UI, or player ownership.</summary>
 public sealed partial class SponsorClient : IDisposable
 {
-    public const string UserAgent = "BiliFluent/2.2611.8.0";
+    public static string UserAgent { get; } = "BiliFluent/" + GetAppVersion();
     private static readonly string[] FullActions = ["full"];
     private static readonly string[] UserInfoFields = ["userName", "viewCount", "minutesSaved", "vip", "permissions", "segmentCount"];
     public static Uri Service { get; } = new("https://www.bsbsb.top/");
@@ -28,6 +29,22 @@ public sealed partial class SponsorClient : IDisposable
     {
         this.consent = consent;
         transport = new(handler, clock, timeout);
+    }
+
+    private static string GetAppVersion()
+    {
+        try
+        {
+            var version = Windows.ApplicationModel.Package.Current.Id.Version;
+            return new Version(version.Major, version.Minor, version.Build, version.Revision).ToString(4);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or COMException or PlatformNotSupportedException)
+        {
+            // Unpackaged hosts have no package identity; keep the protocol usable in tests.
+            var version = typeof(SponsorClient).Assembly.GetName().Version;
+            return version is null ? "0.0.0.0"
+                : new Version(version.Major, version.Minor, Math.Max(0, version.Build), Math.Max(0, version.Revision)).ToString(4);
+        }
     }
 
     internal static string JsonQuery<T>(string name, T value, JsonTypeInfo<T> type) =>

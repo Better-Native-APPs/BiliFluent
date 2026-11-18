@@ -24,78 +24,158 @@
         </ResourceDictionary>
     </core:PlayerControlBase.Resources>
 
-    <!--  Store 源 Controls/Player/SubtitleButton.xaml：ClosedCaption 图标、字幕开关、ItemsView 字幕列表；Margin 8,0,0,0 原样保留  -->
-    <Grid Margin="8,0,0,0" Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+    <!--
+        Store 源 Controls/Player/SubtitleButton.xaml：ClosedCaption 图标、字幕开关、ItemsView 字幕列表；Margin 8,0,0,0 原样保留.
+        A media with dubbing languages lists them first, above the subtitles; the button then shows even without subtitles.
+        The button is named after what it holds: subtitles, the audio track (with its own icon), or both.
+    -->
+    <Grid Margin="8,0,0,0" Visibility="{x:Bind GetMenuVisibility(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages, ViewModel.CanUseSubtitles, ViewModel.CanSelectAudioTrack, ViewModel.HasAdmittedMedia), Mode=OneWay}">
         <Button
             VerticalAlignment="Center"
+            AutomationProperties.Name="{x:Bind GetMenuName(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}"
             Style="{StaticResource CircleIconButtonStyle}"
-            ToolTipService.ToolTip="{ext:Locale Name=Subtitle}">
-            <ic:SymbolIcon FontSize="14" Symbol="ClosedCaption" />
+            ToolTipService.ToolTip="{x:Bind GetMenuName(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}">
+            <ic:SymbolIcon FontSize="14" Symbol="{x:Bind GetMenuSymbol(ViewModel.IsSubtitleEmpty, ViewModel.HasMultipleAudioLanguages), Mode=OneWay}" />
             <Button.Flyout>
                 <Flyout
                     x:Name="SubtitleFlyout"
                     FlyoutPresenterStyle="{StaticResource TransportButtonFlyoutPresenterStyle}"
                     Opened="OnFlyoutOpened">
-                    <StackPanel Width="200" Spacing="4">
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=SubtitleEnabled}" />
-                            <ToggleSwitch
-                                Grid.Column="1"
-                                MinWidth="0"
-                                MinHeight="0"
-                                VerticalAlignment="Center"
-                                IsOn="{x:Bind ViewModel.IsSubtitleEnabled, Mode=TwoWay}"
-                                OffContent=""
-                                OnContent="" />
-                        </Grid>
-                        <ItemsView
-                            x:Name="SubtitleView"
-                            IsItemInvokedEnabled="True"
-                            ItemInvoked="OnSubtitleItemInvoked">
-                            <ItemsView.ItemTemplate>
-                                <DataTemplate x:DataType="items:SubtitleItemViewModel">
-                                    <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
-                                    <ItemContainer
-                                        AutomationProperties.Name="{x:Bind AccessibleName}"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        Style="{StaticResource AppItemContainerStyle}">
-                                        <Grid
-                                            Padding="12,8"
-                                            Background="Transparent"
-                                            Tag="{x:Bind}"
-                                            Tapped="OnSubtitleItemTapped">
-                                            <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
-                                            <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                    <StackPanel Width="200">
+                        <!--  The audio track: the original audio first, then the dubbing languages.  -->
+                        <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasMultipleAudioLanguages, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock
+                                HorizontalAlignment="Left"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{ext:Locale Name=AudioTrack}" />
+                            <ItemsView
+                                x:Name="AudioView"
+                                AutomationProperties.Name="{ext:Locale Name=AudioTrack}"
+                                IsItemInvokedEnabled="True"
+                                ItemInvoked="OnAudioItemInvoked"
+                                SelectionMode="Single">
+                                <ItemsView.ItemTemplate>
+                                    <DataTemplate x:DataType="items:AudioLanguageItemViewModel">
+                                        <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                        <ItemContainer
+                                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            IsEnabled="{x:Bind IsEnabled}"
+                                            Style="{StaticResource AppItemContainerStyle}">
+                                            <Grid
+                                                Padding="12,8"
+                                                Background="Transparent"
+                                                ColumnSpacing="8"
+                                                Tag="{x:Bind}"
+                                                Tapped="OnAudioItemTapped">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <base:TrimTextBlock
-                                                    VerticalAlignment="Center"
-                                                    MaxLines="1"
-                                                    Text="{x:Bind Name}" />
-                                                <Border
+                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <base:TrimTextBlock
+                                                        VerticalAlignment="Center"
+                                                        MaxLines="1"
+                                                        Text="{x:Bind Name}" />
+                                                    <!--  The same tag as an AI subtitle.  -->
+                                                    <Border
+                                                        Grid.Column="1"
+                                                        Style="{StaticResource TagBorderStyle}"
+                                                        Visibility="{x:Bind IsAI}">
+                                                        <TextBlock
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            Style="{StaticResource TagTextStyle}"
+                                                            Text="AI" />
+                                                    </Border>
+                                                </Grid>
+                                                <!--  A quiet note at the far end: this language needs a premium membership.  -->
+                                                <TextBlock
                                                     Grid.Column="1"
-                                                    Style="{StaticResource TagBorderStyle}"
-                                                    Visibility="{x:Bind IsAI}">
-                                                    <TextBlock
-                                                        AutomationProperties.AccessibilityView="Raw"
-                                                        Style="{StaticResource TagTextStyle}"
-                                                        Text="AI" />
-                                                </Border>
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AccessibilityView="Raw"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackVip}"
+                                                    Visibility="{x:Bind NeedVip}" />
                                             </Grid>
-                                        </Grid>
-                                    </ItemContainer>
-                                </DataTemplate>
-                            </ItemsView.ItemTemplate>
-                            <ItemsView.Layout>
-                                <StackLayout Spacing="4" />
-                            </ItemsView.Layout>
-                        </ItemsView>
+                                        </ItemContainer>
+                                    </DataTemplate>
+                                </ItemsView.ItemTemplate>
+                                <ItemsView.Layout>
+                                    <StackLayout Spacing="4" />
+                                </ItemsView.Layout>
+                            </ItemsView>
+                            <!--  Room between the two lists, only when subtitles follow.  -->
+                            <Border Height="8" Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+                        </StackPanel>
+                        <!--  The subtitles, as before. Hidden when the media has languages but no subtitle.  -->
+                        <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" Text="{ext:Locale Name=SubtitleEnabled}" />
+                                <ToggleSwitch
+                                    Grid.Column="1"
+                                    MinWidth="0"
+                                    MinHeight="0"
+                                    VerticalAlignment="Center"
+                                    IsOn="{x:Bind ViewModel.IsSubtitleEnabled, Mode=TwoWay}"
+                                    OffContent=""
+                                    OnContent="" />
+                            </Grid>
+                            <ItemsView
+                                x:Name="SubtitleView"
+                                IsItemInvokedEnabled="True"
+                                ItemInvoked="OnSubtitleItemInvoked">
+                                <ItemsView.ItemTemplate>
+                                    <DataTemplate x:DataType="items:SubtitleItemViewModel">
+                                        <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                        <ItemContainer
+                                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            Style="{StaticResource AppItemContainerStyle}">
+                                            <Grid
+                                                Padding="12,8"
+                                                Background="Transparent"
+                                                Tag="{x:Bind}"
+                                                Tapped="OnSubtitleItemTapped">
+                                                <!--  Left-aligned, so the tag follows the name; a long name is trimmed and the tag keeps its place.  -->
+                                                <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <base:TrimTextBlock
+                                                        VerticalAlignment="Center"
+                                                        MaxLines="1"
+                                                        Text="{x:Bind Name}" />
+                                                    <Border
+                                                        Grid.Column="1"
+                                                        Style="{StaticResource TagBorderStyle}"
+                                                        Visibility="{x:Bind IsAI}">
+                                                        <TextBlock
+                                                            AutomationProperties.AccessibilityView="Raw"
+                                                            Style="{StaticResource TagTextStyle}"
+                                                            Text="AI" />
+                                                    </Border>
+                                                </Grid>
+                                            </Grid>
+                                        </ItemContainer>
+                                    </DataTemplate>
+                                </ItemsView.ItemTemplate>
+                                <ItemsView.Layout>
+                                    <StackLayout Spacing="4" />
+                                </ItemsView.Layout>
+                            </ItemsView>
+                        </StackPanel>
                     </StackPanel>
                 </Flyout>
             </Button.Flyout>

@@ -6,7 +6,6 @@ using Bilibili.Polymer.App.Search.V1;
 using Richasy.BiliKernel.Adapters;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
-using RichasyKernel;
 using System.Text.RegularExpressions;
 
 namespace Richasy.BiliKernel.Services.Search.Core;

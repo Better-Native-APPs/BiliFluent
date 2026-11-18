@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Live.Controls.LiveComposer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        The danmaku box of a live room. It is the box of the on-demand danmaku box: the same control with the same
+        text box style, so the two look alike wherever they stand. The place at its left, where the on-demand box
+        keeps its send settings, stays empty. The icon at its right sends, as Enter does.
+    -->
+    <AutoSuggestBox
+        x:Name="DraftBox"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Center"
+        IsEnabled="False"
+        PreviewKeyDown="OnDraftPreviewKeyDown"
+        QuerySubmitted="OnDraftSubmitted"
+        TextChanged="OnDraftTextChanged">
+        <AutoSuggestBox.TextBoxStyle>
+            <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
+                <Setter Property="Padding" Value="36,4,8,4" />
+                <Setter Property="MaxLength" Value="100" />
+            </Style>
+        </AutoSuggestBox.TextBoxStyle>
+        <AutoSuggestBox.QueryIcon>
+            <ic:SymbolIcon FontSize="14" Symbol="Send" />
+        </AutoSuggestBox.QueryIcon>
+    </AutoSuggestBox>
+</UserControl>

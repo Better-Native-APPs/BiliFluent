@@ -16,11 +16,13 @@ LocalTest 提供独立的包名、实例标识与通知激活标识，可与正�
 | 显示名称 | `BiliFluent（测试）` |
 | 实例键 | `BiliFluent.LocalTest` |
 | 应用 ID | `App` |
-| 默认起始版本 | `2.2611.2.0`，后续测试版本须递增 |
+| 默认版本 | `<version>`，取应用清单版本，后续测试版本须递增 |
 | 架构 | `x64` |
 | 通知激活 CLSID | `CF0E1EDD-C7F4-56B5-BFD8-C6D8EFBCC0FE` |
 
 CLSID 按 `channel.json` 中新仓库 URL 的 UUIDv5 规则生成；可执行文件仍为内部名称 `BiliCopilot.UI.exe`。发布者 ID `7rrwb2e69v8er` 由 `CN=BiliFluent` 的 UTF-16LE SHA-256 摘要前 8 字节进行 Crockford Base32 编码得到。
+
+`Prepare-Package.ps1` 与 `Seal-Package.ps1` 省略 `-Version` 时读取 `src/Desktop/BiliCopilot.UI/Package.appxmanifest` 的 `Identity Version`，仍可显式传入 `<version>`。通道历史最低版本集中在 `channel.json` 的 `minimumVersion`；Windows App SDK 版本从 `src/Directory.Packages.props` 的 `Microsoft.WindowsAppSDK` 派生，并在准备交付目录时写入通道配置。
 
 ## 工具边界与输入
 
@@ -37,25 +39,25 @@ CLSID 按 `channel.json` 中新仓库 URL 的 UUIDv5 规则生成；可执行文
 .\scripts\local-test\Prepare-Package.ps1 `
   -SourceLayout <原生布局目录> -OutputRoot <新的测试输出目录> `
   -WorkspaceRoot <工作区目录> -ApprovedInventory <文件清单JSON路径> `
-  -ExpectedInventorySha256 <文件清单哈希> -Version '2.2611.2.0'
+  -ExpectedInventorySha256 <文件清单哈希> -Version '<version>'
 
 # 确认后转换并打包
 .\scripts\local-test\Prepare-Package.ps1 `
   -SourceLayout <原生布局目录> -OutputRoot <新的测试输出目录> `
   -WorkspaceRoot <工作区目录> -ApprovedInventory <文件清单JSON路径> `
-  -ExpectedInventorySha256 <文件清单哈希> -Version '2.2611.2.0' `
+  -ExpectedInventorySha256 <文件清单哈希> -Version '<version>' `
   -Prepare -Pack -MakeAppxPath <makeappx.exe路径> `
   -ExpectedMakeAppxSha256 <makeappx.exe哈希>
 ```
 
-输入、输出与工作区必须是互不包含的普通绝对路径；输出目录必须是全新目录。脚本核对布局、版本、x64 原生 PE 及通知注册后，生成 `delivery/BiliFluent.LocalTest_2.2611.2.0_x64.msix`。
+输入、输出与工作区必须是互不包含的普通绝对路径；输出目录必须是全新目录。脚本核对布局、版本、x64 原生 PE 及通知注册后，生成 `delivery/BiliFluent.LocalTest_<version>_x64.msix`。
 
 ## 2. 签名并预先信任测试证书
 
 签名证书的主题须为 `CN=BiliFluent`。使用对应私钥的证书指纹签名：
 
 ```powershell
-$msix = '<测试输出目录>\delivery\BiliFluent.LocalTest_2.2611.2.0_x64.msix'
+$msix = '<测试输出目录>\delivery\BiliFluent.LocalTest_<version>_x64.msix'
 & signtool.exe sign /fd SHA256 /sha1 <证书指纹> /s My $msix
 ```
 
@@ -69,7 +71,7 @@ LocalTest 安装器不会自动导入证书。由开发者在安装前核对并�
   -LooseExePath '<测试输出目录>\layout\BiliCopilot.UI.exe' `
   -ExpectedLooseExeSha256 <EXE哈希> `
   -ExpectedSignerCertificateSha256 <证书DER哈希> `
-  -Version '2.2611.2.0'
+  -Version '<version>'
 ```
 
 封包前交付目录仅包含签名 MSIX、`Install.ps1`、`LocalTest.psm1` 和 `channel.json`。脚本核对签名、公钥摘要、包身份与原生 EXE 一致性，生成 `test-artifacts.json`；已封包的版本不覆盖，升级时分配新版本和新目录。外部记录并传递脚本输出的清单 SHA-256。

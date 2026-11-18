@@ -4,7 +4,6 @@
 using Bilibili.App.Dynamic.V2;
 using Richasy.BiliKernel.Adapters;
 using Richasy.BiliKernel.Models.Media;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.Moment.Core;
 
@@ -40,6 +39,14 @@ internal static class VideoAdapter
         var info = new VideoInformation(identifier, default, duration, bvid, communityInformation: communityInfo);
         info.AddExtensionIfNotNull(VideoExtensionDataId.Cid, archive.Cid);
         info.AddExtensionIfNotNull(VideoExtensionDataId.MediaType, Models.MediaType.Video);
+        info.AddExtensionIfNotNull(VideoExtensionDataId.WatchProgress, archive.ToWatchProgress());
+        info.AddExtensionIfNotNull(VideoExtensionDataId.HasShowProgressFlag, archive.ShowProgress ? true : default(bool?));
         return info;
     }
+
+    /// <summary>
+    /// Reads the watch progress the server sends with an archive card. Shared by the video and the PGC adapters.
+    /// </summary>
+    public static VideoWatchProgress? ToWatchProgress(this MdlDynArchive archive)
+        => VideoWatchProgress.FromPartProgress(archive.ShowProgress, archive.PartProgress, archive.PartDuration, archive.Duration);
 }

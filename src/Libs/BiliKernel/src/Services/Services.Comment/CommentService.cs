@@ -17,6 +17,7 @@ namespace Richasy.BiliKernel.Services.Comment;
 public sealed class CommentService : ICommentService
 {
     private readonly CommentClient _client;
+    private readonly CommentVoteClient _voteClient;
 
     /// <summary>
     /// 初始化.
@@ -26,6 +27,7 @@ public sealed class CommentService : ICommentService
         BiliAuthenticator authenticator)
     {
         _client = new CommentClient(httpClient, authenticator);
+        _voteClient = new CommentVoteClient(httpClient, authenticator);
     }
 
     /// <inheritdoc/>
@@ -47,4 +49,12 @@ public sealed class CommentService : ICommentService
     /// <inheritdoc/>
     public Task ToggleLikeAsync(bool isLike, string commentId, string targetId, CommentTargetType type, CancellationToken cancellationToken = default)
         => _client.LiekCommentAsync(isLike, commentId, targetId, type, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<CommentVoteDetail?> GetVoteDetailAsync(string voteId, CancellationToken cancellationToken = default)
+        => _voteClient.GetVoteDetailAsync(voteId, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<CommentVoteDetail> SubmitVoteAsync(CommentVoteDetail vote, IReadOnlyList<int> optionIndexes, string voterId, bool anonymous = false, CancellationToken cancellationToken = default)
+        => _voteClient.SubmitVoteAsync(vote, optionIndexes, voterId, anonymous, cancellationToken);
 }

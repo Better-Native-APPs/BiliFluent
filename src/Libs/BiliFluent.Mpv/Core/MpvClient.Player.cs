@@ -82,7 +82,10 @@ public sealed partial class MpvClient
 
             if (options.StartPosition != null)
             {
-                commandOptions.Add($"start={Math.Round(options.StartPosition.Value)}");
+                // mpv reads start as a relative time, so fractions of a second are valid. A culture with
+                // a decimal comma would split the option list, hence the invariant format.
+                var start = Math.Max(0, options.StartPosition.Value).ToString("0.###", CultureInfo.InvariantCulture);
+                commandOptions.Add($"start={start}");
             }
 
             if (options.InitialVolume != null)
@@ -92,7 +95,7 @@ public sealed partial class MpvClient
 
             if (options.InitialSpeed != null)
             {
-                commandOptions.Add($"speed={Math.Round(options.InitialSpeed.Value, 2)}");
+                commandOptions.Add($"speed={Math.Round(options.InitialSpeed.Value, 2).ToString(CultureInfo.InvariantCulture)}");
             }
 
             //if (!string.IsNullOrEmpty(options.MediaName))
@@ -188,7 +191,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         bool result = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(CoreIdle, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(CoreIdle, out result));
         var stateResult = WrapAsResult(errorCode, "Mpv | get core-idle failed");
         if (stateResult.IsFailed)
         {
@@ -201,7 +204,7 @@ public sealed partial class MpvClient
             return MpvPlayerState.Playing;
         }
 
-        await Task.Run(() => errorCode = _handle.GetProperty(PausedForCache, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(PausedForCache, out result));
         stateResult = WrapAsResult(errorCode, "Mpv | get paused-for-cache failed");
         if (stateResult.IsFailed)
         {
@@ -214,7 +217,7 @@ public sealed partial class MpvClient
             return MpvPlayerState.Buffering;
         }
 
-        await Task.Run(() => errorCode = _handle.GetProperty(Seeking, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(Seeking, out result));
         stateResult = WrapAsResult(errorCode, "Mpv | get seeking failed");
         if (stateResult.IsFailed)
         {
@@ -227,7 +230,7 @@ public sealed partial class MpvClient
             return MpvPlayerState.Seeking;
         }
 
-        await Task.Run(() => errorCode = _handle.GetProperty(EofReached, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(EofReached, out result));
         stateResult = WrapAsResult(errorCode, "Mpv | get eof-reached failed");
         if (stateResult.IsFailed)
         {
@@ -240,7 +243,7 @@ public sealed partial class MpvClient
             return MpvPlayerState.End;
         }
 
-        await Task.Run(() => errorCode = _handle.GetProperty(IdleActive, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(IdleActive, out result));
         stateResult = WrapAsResult(errorCode, "Mpv | get idle-active failed");
         if (stateResult.IsFailed)
         {
@@ -264,7 +267,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         double result = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(TimePosition, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(TimePosition, out result));
         var positionResult = WrapAsResult(errorCode, "Mpv | get time-pos failed");
         if (positionResult.IsFailed)
         {
@@ -293,7 +296,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         double result = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(Duration, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(Duration, out result));
         var durationResult = WrapAsResult(errorCode, "Mpv | get duration failed");
         if (durationResult.IsFailed)
         {
@@ -311,7 +314,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         double result = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(Volume, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(Volume, out result));
         var volumeResult = WrapAsResult(errorCode, "Mpv | get volume failed");
         if (volumeResult.IsFailed)
         {
@@ -345,7 +348,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         double result = default;
-        await Task.Run(() => errorCode = _handle.GetProperty(Speed, out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(Speed, out result));
         var speedResult = WrapAsResult(errorCode, "Mpv | get speed failed");
         if (speedResult.IsFailed)
         {
@@ -536,7 +539,7 @@ public sealed partial class MpvClient
     {
         var errorCode = MpvError.Success;
         object? result = null;
-        await Task.Run(() => errorCode = _handle.GetPropertyNode("track-list", out result));
+        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetPropertyNode("track-list", out result));
         if (errorCode != MpvError.Success)
         {
             return MpvResult.Fail($"Mpv | get subtitle tracks failed: {errorCode}");

@@ -4,7 +4,6 @@ using BiliCopilot.UI.Models.Constants;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.WinUIKernel.Share.Toolkits;
-using System.Collections.ObjectModel;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -65,9 +64,22 @@ public sealed partial class DanmakuRenderViewModel
     public partial string? Title { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHoverActionsAvailable))]
     public partial DanmakuRendererType Renderer { get; set; }
 
-    public ObservableCollection<SystemFont> Fonts { get; } = [];
+    /// <summary>
+    /// Whether hovering a danmaku shows its actions.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsHoverActionsEnabled { get; set; }
+
+    /// <summary>
+    /// Only the Win2D renderer knows which danmaku is under the pointer.
+    /// </summary>
+    public bool IsHoverActionsAvailable => Renderer == DanmakuRendererType.Win2D;
+
+    [ObservableProperty]
+    public partial IReadOnlyList<SystemFont> Fonts { get; set; } = [];
 
     /// <summary>
     /// 速度加成改变时触发的事件.

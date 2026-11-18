@@ -2,7 +2,7 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using BiliCopilot.UI.Live.Application;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
 
@@ -46,48 +46,40 @@ public interface ILiveChatClient : IAsyncDisposable
     Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
 }
 
-public interface ILiveSession : INotifyPropertyChanged, IAsyncDisposable
+// Optional same-assembly diagnostics; the public client/room contracts stay unchanged.
+internal interface ILiveChatDiagnosticSink
+{
+    void ReportRoomStatistics(long inboxIn, long inboxDrop, long published, long dispatchFail);
+    void ReportCloseStep(string name, Exception? error, TimeSpan elapsed);
+    void ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown = false);
+}
+
+/// <summary>Room/chat ownership, independent of video playback and window presentation.</summary>
+public interface ILiveRoomSession : INotifyPropertyChanged, IAsyncDisposable
 {
     LiveBinding? Binding { get; }
+    LiveRoomScope? CurrentScope { get; }
     string Title { get; }
     string AnchorName { get; }
     Uri? AnchorAvatar { get; }
-    /// <summary>The room owner's profile (in-app user space target); null while the room has not reported one.</summary>
     UserProfile? Anchor { get; }
     bool? IsFollowing { get; }
     long? AudienceCount { get; }
     string AudienceLabel { get; }
-    IReadOnlyList<PlayerFormatInformation> Qualities { get; }
-    PlayerFormatInformation? SelectedQuality { get; }
-    bool CanChangeQuality { get; }
-    IAsyncRelayCommand<PlayerFormatInformation> SelectQualityCommand { get; }
-    LivePlaybackState PlaybackState { get; }
     LiveChatState ChatState { get; }
-    string? PlaybackError { get; }
     string? ChatError { get; }
-    double Volume { get; }
-    bool IsBusy { get; }
     bool CanSend { get; }
+    bool IsClosing { get; }
+    bool ReleaseConfirmed { get; }
     ReadOnlyObservableCollection<LiveChatMessage> Messages { get; }
     event EventHandler<LiveChatMessage>? MessageReceived;
-    Task OpenAsync(LiveInformation live, CancellationToken cancellationToken);
-    Task RefreshAsync(CancellationToken cancellationToken);
-    Task SelectQualityAsync(PlayerFormatInformation quality, CancellationToken cancellationToken);
-    Task PlayAsync(CancellationToken cancellationToken);
-    Task PauseAsync(CancellationToken cancellationToken);
-    Task SetVolumeAsync(double volume, CancellationToken cancellationToken);
+    LiveRoomScope PrepareRoom(LiveInformation live, LiveAccountStamp account, CancellationToken cancellationToken);
+    void PublishRoomReset(LiveRoomScope scope);
+    void BindRoom(LiveRoomScope scope, long roomId, LiveInformation information);
+    Task ConnectAsync(LiveRoomScope scope);
+    Task StopAsync(LiveRoomScope scope);
+    void RequestClose();
     Task<LiveSendResult> SendManuallyAsync(LiveBinding binding, string text, CancellationToken cancellationToken);
     Task CloseAsync();
-}
-
-/// <summary>Window presentation belongs to the host, independently of the playback session.</summary>
-public interface ILivePresentation : INotifyPropertyChanged
-{
-    bool IsFullScreen { get; }
-    bool IsCompactOverlay { get; }
-    void EnterFullScreen();
-    void ExitFullScreen();
-    void EnterCompactOverlay();
-    void ExitCompactOverlay();
-    void RestorePresentation();
+    Task RetryCloseAsync() => CloseAsync();
 }

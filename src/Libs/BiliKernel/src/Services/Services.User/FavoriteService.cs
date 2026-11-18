@@ -10,7 +10,6 @@ using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Article;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Services.User.Core;
-using RichasyKernel;
 
 namespace Richasy.BiliKernel.Services.User;
 

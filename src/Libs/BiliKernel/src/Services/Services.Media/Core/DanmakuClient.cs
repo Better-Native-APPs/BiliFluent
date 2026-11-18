@@ -8,7 +8,8 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Http;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Danmaku;
-using RichasyKernel;
+using System.Globalization;
+using System.Text.Json;
 
 namespace Richasy.BiliKernel.Services.Media.Core;
 
@@ -51,7 +52,12 @@ internal sealed class DanmakuClient
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         reply = await BiliHttpClient.ParseAsync(response, DmWebViewReply.Parser).ConfigureAwait(false);
 
-        return new DanmakuMeta { SegmentCount = Convert.ToInt32(reply.DmSge?.Total ?? 0), Total = Convert.ToInt32(reply.Count) };
+        return new DanmakuMeta
+        {
+            SegmentCount = Convert.ToInt32(reply.DmSge?.Total ?? 0),
+            Total = Convert.ToInt32(reply.Count),
+            CommandDanmakus = reply.CommandDms.Select(CommandDanmakuParser.Parse).ToList(),
+        };
     }
 
     public async Task<IReadOnlyList<DanmakuInformation>> GetSegmentDanmakusWithWebAsync(string aid, string cid, int segmentIndex, CancellationToken cancellationToken)
@@ -162,6 +168,159 @@ internal sealed class DanmakuClient
         };
 
         var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.LikeDanmaku));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.None,
+            NeedCSRF = true,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task VoteDanmakuAsync(string aid, string cid, int progressMs, string voteId, int voteType,
+        string commandId, int optionId, bool hasSelfDefinition, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(aid))
+        {
+            throw new ArgumentException("The video aid is required.", nameof(aid));
+        }
+
+        if (string.IsNullOrEmpty(cid))
+        {
+            throw new ArgumentException("The video cid is required.", nameof(cid));
+        }
+
+        if (string.IsNullOrEmpty(voteId))
+        {
+            throw new ArgumentException("The vote identifier is required.", nameof(voteId));
+        }
+
+        if (string.IsNullOrEmpty(commandId))
+        {
+            throw new ArgumentException("The command danmaku identifier is required.", nameof(commandId));
+        }
+
+        if (progressMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(progressMs), "The playback progress must not be negative.");
+        }
+
+        if (optionId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(optionId), "The option identifier must be positive.");
+        }
+
+        var parameters = new Dictionary<string, string>
+        {
+            { "aid", aid },
+            { "cid", cid },
+            { "progress", progressMs.ToString(CultureInfo.InvariantCulture) },
+            { "vote_id", voteId },
+            { "vote_type", voteType.ToString(CultureInfo.InvariantCulture) },
+            { "cmd_id_str", commandId },
+            { "option_id", optionId.ToString(CultureInfo.InvariantCulture) },
+            { "has_self_def", hasSelfDefinition ? "1" : "0" },
+            { "polaris_app_id", "100" },
+            { "polaris_platform", "5" },
+            { "statistics", "{\"appId\":100,\"platform\":5,\"abtest\":\"\",\"version\":\"\"}" },
+        };
+
+        using var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.VoteDanmaku));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.None,
+            NeedCSRF = true,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (KernelException ex) when (IsVoteSignInRequired(ex))
+        {
+            throw new UnauthorizedAccessException("Sign in is required to vote.", ex);
+        }
+    }
+
+    public async Task<VoteCommandDanmakuPayload> GetDanmakuVoteInfoAsync(string voteId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(voteId))
+        {
+            throw new ArgumentException("The vote identifier is required.", nameof(voteId));
+        }
+        var parameters = new Dictionary<string, string> { { "vote_id", voteId } };
+        using var request = BiliHttpClient.CreateRequest(HttpMethod.Get, new Uri(BiliApis.Video.DanmakuVoteInfo));
+        _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
+        {
+            ApiType = BiliApiType.None,
+            RequireCookie = true,
+            ForceNoToken = true,
+        });
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var document = JsonDocument.Parse(content);
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty("vote_info", out var info) || info.ValueKind != JsonValueKind.Object)
+        {
+            throw new KernelException("Failed to parse voting information.");
+        }
+
+        return CommandDanmakuParser.ParseVoteInfo(info);
+    }
+
+    private static bool IsVoteSignInRequired(KernelException exception)
+    {
+        if (exception.InnerException is not { } cause) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(cause.Message);
+            var response = document.RootElement;
+            return response.ValueKind == JsonValueKind.Object && response.TryGetProperty("code", out var code)
+                && code.ValueKind == JsonValueKind.Number && code.TryGetInt32(out var value) && value == -101;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    public async Task GradeDanmakuAsync(string aid, string cid, int progressMs, string gradeId, int gradeScore, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(aid))
+        {
+            throw new ArgumentException("The video aid is required.", nameof(aid));
+        }
+
+        if (string.IsNullOrEmpty(cid))
+        {
+            throw new ArgumentException("The video cid is required.", nameof(cid));
+        }
+
+        if (string.IsNullOrEmpty(gradeId))
+        {
+            throw new ArgumentException("The grade identifier is required.", nameof(gradeId));
+        }
+
+        if (progressMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(progressMs), "The playback progress must not be negative.");
+        }
+
+        if (gradeScore < 2 || gradeScore > 10 || gradeScore % 2 != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(gradeScore), "The grade score must be 2, 4, 6, 8, or 10.");
+        }
+
+        var parameters = new Dictionary<string, string>
+        {
+            { "aid", aid },
+            { "cid", cid },
+            { "progress", progressMs.ToString(CultureInfo.InvariantCulture) },
+            { "grade_id", gradeId },
+            { "grade_score", gradeScore.ToString(CultureInfo.InvariantCulture) },
+        };
+
+        var request = BiliHttpClient.CreateRequest(HttpMethod.Post, new Uri(BiliApis.Video.GradeDanmaku));
         _authenticator.AuthorizeRestRequest(request, parameters, new BiliAuthorizeExecutionSettings
         {
             ApiType = BiliApiType.None,

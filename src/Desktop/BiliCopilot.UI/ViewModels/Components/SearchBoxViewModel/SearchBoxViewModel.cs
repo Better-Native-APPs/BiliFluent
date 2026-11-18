@@ -80,12 +80,13 @@ public sealed partial class SearchBoxViewModel : ViewModelBase
         {
             if (string.IsNullOrEmpty(_extraRegionId))
             {
+                var cancellation = new CancellationTokenSource();
+                _cancellationTokenSource = cancellation;
                 try
                 {
                     Suggestion.Clear();
-                    _cancellationTokenSource = new CancellationTokenSource();
-                    var suggests = await _searchService.GetSearchSuggestsAsync(Keyword, _cancellationTokenSource.Token);
-                    if (suggests is not null)
+                    var suggests = await _searchService.GetSearchSuggestsAsync(Keyword, cancellation.Token);
+                    if (suggests is not null && !cancellation.IsCancellationRequested)
                     {
                         foreach (var item in suggests)
                         {
@@ -95,7 +96,11 @@ public sealed partial class SearchBoxViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "尝试加载搜索建议时出错.");
+                    // Typing on or submitting the search cancels this request; that is not a failure.
+                    if (!cancellation.IsCancellationRequested)
+                    {
+                        _logger.LogError(ex, "尝试加载搜索建议时出错.");
+                    }
                 }
             }
             else

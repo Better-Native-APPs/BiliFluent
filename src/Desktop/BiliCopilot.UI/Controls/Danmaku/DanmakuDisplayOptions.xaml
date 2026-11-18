@@ -12,13 +12,12 @@
 
     <!--
         全屏（TeachingTip，最小宽 320 含 12 内边距）与窗口化（Flyout，内边距 12,10）共用同一面板：
-        固定内容宽度使两处尺寸一致；可用高度不足时在面板内部滚动.
+        固定内容宽度使两处尺寸一致.
+        This panel does not scroll by itself. Both hosts already scroll their content when it does not fit
+        (the TeachingTip content area and the FlyoutPresenter each have a ScrollViewer), so a scroll viewer
+        here would be a second one inside theirs and show a second scroll bar.
     -->
-    <ScrollViewer
-        MaxHeight="560"
-        HorizontalScrollMode="Disabled"
-        HorizontalScrollBarVisibility="Disabled"
-        VerticalScrollBarVisibility="Auto">
+    <Grid>
         <StackPanel Width="296" Padding="8,4" Spacing="12">
             <ComboBox
                 x:Name="RendererComboBox"
@@ -120,6 +119,24 @@
                 </Grid>
             </StackPanel>
             <ToggleSwitch Header="{ext:Locale Name=DanmakuBold}" IsOn="{x:Bind ViewModel.IsDanmakuBold, Mode=TwoWay}" />
+            <StackPanel Spacing="4">
+                <ToggleSwitch
+                    Header="{ext:Locale Name=DanmakuHoverActions}"
+                    IsEnabled="{x:Bind ViewModel.IsHoverActionsAvailable, Mode=OneWay}"
+                    IsOn="{x:Bind ViewModel.IsHoverActionsEnabled, Mode=TwoWay}" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="{ext:Locale Name=DanmakuHoverActionsWin2DOnly}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.IsHoverActionsAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+            </StackPanel>
+            <!--  互动弹幕开关：与设置页共用同一个设置视图模型，对所有播放器即时生效  -->
+            <ToggleSwitch
+                Header="{ext:Locale Name=CommandDanmakuEnabled}"
+                IsOn="{x:Bind Settings.IsCommandDanmakuEnabled, Mode=TwoWay}"
+                ToolTipService.ToolTip="{ext:Locale Name=CommandDanmakuEnabledDescription}"
+                Visibility="{x:Bind IsCommandDanmakuSwitchVisible, Mode=OneWay}" />
             <StackPanel
                 Padding="12,8"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -138,5 +155,5 @@
                     Text="{x:Bind ViewModel.DanmakuCountText, Mode=OneWay}" />
             </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </local:DanmakuControlBase>

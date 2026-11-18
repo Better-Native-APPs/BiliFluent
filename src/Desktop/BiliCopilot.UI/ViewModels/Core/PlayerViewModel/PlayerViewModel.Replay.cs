@@ -1,7 +1,12 @@
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.Extensions.Logging;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
+using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Player;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -11,71 +16,142 @@ public sealed partial class PlayerViewModel
     /// <summary>Replay through the same real serial boundary as media replacement.</summary>
     public Task ReplayAsync(double? preferPosition = null)
     {
+        if (!CanSeek && preferPosition.HasValue) return Task.CompletedTask;
+        if (IsLiveMedia) return RefreshLiveAsync();
         var player = Player;
+        if (preferPosition is { } position)
+        {
+            if (!double.IsFinite(position) || position < 0) return Task.CompletedTask;
+            NoteUserPosition(position);
+        }
+        else if (player?.PlaybackState == MpvPlayerState.End)
+        {
+            // The explicit replay of an ended file is a new request for the beginning.
+            preferPosition = 0;
+            NoteUserPosition(0);
+        }
+        CancelSeamlessSelection();
         return player is null ? Task.CompletedTask
             : RunWithoutPlayerInputAsync(() => ReplayWithSubtitleRestoreAsync(player, preferPosition), nativeReplay: true);
     }
 
     private Task SelectSourceAsync(SourceItemViewModel source)
     {
-        if (source is null || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
+        if (!CanSelectOnDemandQuality || source is not { IsEnabled: true } || IsPlaybackClosing || IsConnecting || !Sources.Contains(source) || Player is null)
             return Task.CompletedTask;
 
-        var player = Player;
-        var position = player.Position;
         var snapshot = _snapshot;
-        var resolver = _sourceResolver;
-        return RunWithoutPlayerInputAsync(async () =>
+        var resolver = OnDemandResolver;
+        if (resolver is not (VideoMediaSourceResolver or PgcMediaSourceResolver))
         {
-            if (!Sources.Contains(source)) return;
-            foreach (var item in Sources) item.IsSelected = item.Equals(source);
-            SelectedSource = source;
-            if (resolver is VideoMediaSourceResolver videoResolver)
-            {
-                snapshot.PreferQuality = source.Data.Quality;
-                videoResolver.ResetSnapshot(snapshot);
-                // Replay itself consumes this captured position. Never save it in a VM field
-                // or wait for IsPlaybackInitialized (Replay need not toggle that property).
-                await ReplayWithSubtitleRestoreAsync(player, position);
-            }
-        }, nativeReplay: resolver is VideoMediaSourceResolver);
+            return Task.CompletedTask;
+        }
+
+        // A quality chosen by hand is remembered for the media that follow. Choosing "automatic" forgets it.
+        if (source.IsAuto)
+        {
+            SettingsToolkit.DeleteLocalSetting(SettingNames.ManualVideoQuality);
+        }
+        else
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.ManualVideoQuality, source.Data.Quality);
+        }
+
+        var preferences = new OnDemandSelectionPreferences(source.IsAuto ? null : source.Data.Quality,
+            source.IsAuto ? null : snapshot.PreferAudioQualityId ?? GetResolverAudioSelections(resolver).QualityId,
+            snapshot.PreferAudioLanguageId, snapshot.IsAutomaticAudioStandardOnly);
+        return SwitchOnDemandSelectionAsync(new(preferences), source.Name);
     }
 
-    private async Task ReplayWithSubtitleRestoreAsync(MpvPlayer player, double? preferPosition)
+    private static PlayerFormatInformation? GetPlayingFormat(MediaSourceResolverBase? resolver)
+        => resolver switch
+        {
+            VideoMediaSourceResolver video => video.GetCurrentFormat(),
+            PgcMediaSourceResolver pgc => pgc.GetCurrentFormat(),
+            _ => default,
+        };
+
+    private async Task<bool> ReplayWithSubtitleRestoreAsync(MpvPlayer player, double? preferPosition)
     {
         var version = _mediaVersion;
         var token = _activeMediaToken;
         var client = player.Client;
-        if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(client, Client)) return;
+        if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || !ReferenceEquals(client, Client)) return false;
+        var observation = await ReadPlaybackObservationAsync(player);
+        if (!IsCurrentPlayback(version)) return false;
+        preferPosition = _playbackPosition.Resolve(observation?.Position, preferPosition ?? player.Position);
+        _reloadState = (preferPosition, observation?.Paused ?? player.PlaybackState == MpvPlayerState.Paused,
+            observation?.Speed ?? player.PlaybackRate);
+        _onDemandReplayNeedsLoad = true;
+        _lastOnDemandReplayIssued = false;
 
-        var subtitle = IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
-        if (subtitle is null || Connector is not VideoConnectorViewModel video)
-        {
-            await player.ReplayAsync(preferPosition);
-            return;
-        }
-
-        var aid = video._view.Information.Identifier.Id;
-        var cid = video._part.Identifier.Id;
+        ResetChapters();
+        InitializeVideoChapters();
+        ResetCommandDanmakuPlayback();
+        _subtitleToRestore = null; // This reload restores the subtitle itself.
+        var subtitle = CanUseSubtitles && IsSubtitleEnabled ? Subtitles.FirstOrDefault(item => item.IsSelected) : null;
+        var video = Connector as VideoConnectorViewModel;
+        var aid = video?._view.Information.Identifier.Id;
+        var cid = video?._part.Identifier.Id;
         var loaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var loadingStarted = false;
+        OnDemandSelectionLoad? loadedSelection = null;
         client.ReachFileLoading += OnLoading;
         client.ReachFileLoaded += OnLoaded;
         client.ReachFileEnd += OnEnded;
         client.ErrorOccurred += OnError;
         try
         {
-            await player.ReplayAsync(preferPosition);
-            // Replay returns after issuing loadfile, not after the replacement file is ready.
-            if (!await loaded.Task.WaitAsync(token))
+            var positionRequest = _playbackPosition.Version;
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Playback | reload-start position={Position} user-seek-pending={Pending}",
+                    preferPosition, _playbackPosition.PendingPosition is not null);
+            if (!await player.ReplayAsync(preferPosition, resume: observation is not { Paused: true }, speed: observation?.Speed))
             {
-                if (CanRestore()) ShowSubtitleFailure(MpvResult.Fail("Mpv | replay ended before file-loaded"), selecting: true);
-                return;
+                OnDemandResolver?.AbandonSelectionLoad();
+                if (OnDemandResolver is { } previous) ApplyCurrentOnDemandSelection(previous);
+                return false;
+            }
+            _playbackPosition.MarkSubmitted(positionRequest);
+            _lastOnDemandReplayIssued = true;
+            // Replay returns after issuing loadfile, not after the replacement file is ready.
+            bool isLoaded;
+            try
+            {
+                isLoaded = await loaded.Task.WaitAsync(PlaybackNetworkPolicy.SubtitleRestoreWait, token);
+            }
+            catch (TimeoutException)
+            {
+                // A node that hangs must not keep the media gate: the next loaded file restores the subtitle.
+                if (subtitle is not null && CanRestore()) _subtitleToRestore = subtitle;
+                return false;
             }
 
-            if (!CanRestore()) return;
+            if (!isLoaded)
+            {
+                if (_failover.IsAwaitingLoad)
+                {
+                    // The address failed and another one is tried: the file that loads restores the subtitle.
+                    if (subtitle is not null && CanRestore()) _subtitleToRestore = subtitle;
+                    return false;
+                }
+
+                OnDemandResolver?.AbandonSelectionLoad();
+                if (subtitle is not null && CanRestore()) ShowSubtitleFailure(MpvResult.Fail("Mpv | replay ended before file-loaded"), selecting: true);
+                return false;
+            }
+
+            if (IsCurrentPlayback(version) && OnDemandResolver is { } resolver)
+            {
+                resolver.CompleteSelectionLoad(loadedSelection);
+                _onDemandReplayNeedsLoad = false;
+                ApplyCurrentOnDemandSelection(resolver);
+            }
+
+            if (subtitle is null || !CanRestore()) return true;
             // RunWithoutPlayerInputAsync already owns the media gate. Do not acquire it again.
             await SelectSubtitleCoreAsync(subtitle, version, token);
+            return true;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex)
@@ -90,15 +166,25 @@ public sealed partial class PlayerViewModel
             client.ErrorOccurred -= OnError;
         }
 
+        return false;
+
         bool CanRestore() => IsCurrentPlayback(version) && ReferenceEquals(player, Player) && ReferenceEquals(client, Client)
-            && IsSubtitleEnabled && subtitle.IsSelected && Subtitles.Any(item => ReferenceEquals(item, subtitle))
+            && IsSubtitleEnabled && subtitle is { IsSelected: true } && Subtitles.Any(item => ReferenceEquals(item, subtitle))
             && Connector is VideoConnectorViewModel current && current._view.Information.Identifier.Id == aid
             && current._part.Identifier.Id == cid;
 
-        void OnLoading(object? sender, EventArgs args) => loadingStarted = true;
+        void OnLoading(object? sender, EventArgs args)
+        {
+            OnDemandResolver?.ArmSelectionLoad();
+            loadingStarted = true;
+        }
         void OnLoaded(object? sender, EventArgs args)
         {
-            if (loadingStarted) loaded.TrySetResult(true);
+            if (loadingStarted)
+            {
+                loadedSelection = OnDemandResolver?.CaptureSelectionLoad();
+                loaded.TrySetResult(true);
+            }
         }
 
         void OnEnded(object? sender, EventArgs args)

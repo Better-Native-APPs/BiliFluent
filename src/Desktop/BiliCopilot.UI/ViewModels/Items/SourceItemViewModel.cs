@@ -1,10 +1,13 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.ViewModels;
+using System.Globalization;
 
 namespace BiliCopilot.UI.ViewModels.Items;
 
@@ -13,13 +16,30 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
     private readonly Func<SourceItemViewModel, Task> _activeFunc;
 
     public SourceItemViewModel(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc)
+        : this(info, activeFunc, 0)
+    {
+        var userIsVip = this.Get<AccountViewModel>().MyProfile.IsVip ?? false;
+        IsEnabled = !info.NeedVip || (info.NeedVip && userIsVip);
+    }
+
+    private SourceItemViewModel(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc, int eotf)
         : base(info)
     {
         Name = info.Description;
         Id = info.Quality.ToString();
+        Eotf = eotf;
         _activeFunc = activeFunc;
-        var userIsVip = this.Get<AccountViewModel>().MyProfile.IsVip ?? false;
-        IsEnabled = !info.NeedVip || (info.NeedVip && userIsVip);
+        IsEnabled = true;
+    }
+
+    private SourceItemViewModel(Func<SourceItemViewModel, Task> activeFunc)
+        : base(new PlayerFormatInformation(0, string.Empty, false, false))
+    {
+        Name = ResourceToolkit.GetLocalizedString(StringNames.QualityAuto);
+        Id = "auto";
+        _activeFunc = activeFunc;
+        IsAuto = true;
+        IsEnabled = true;
     }
 
     [ObservableProperty]
@@ -33,8 +53,64 @@ public sealed partial class SourceItemViewModel : ViewModelBase<PlayerFormatInfo
 
     public string Id { get; set; }
 
-    public override bool Equals(object? obj) => obj is SourceItemViewModel model && Id == model.Id;
-    public override int GetHashCode() => HashCode.Combine(Id);
+    /// <summary>
+    /// The live transfer function, part of the entry's identity. On-demand entries always use 0,
+    /// preserving their quality-only equality even when their format metadata describes HDR.
+    /// </summary>
+    public int Eotf { get; }
+
+    /// <summary>
+    /// Whether this is the "automatic" entry at the top of the list. It stands for no quality of its own
+    /// (its quality number is 0); its name tells which quality plays.
+    /// </summary>
+    public bool IsAuto { get; }
+
+    /// <summary>
+    /// The name of the audio quality the automatic entry picked, when that is Dolby or Hi-Res.
+    /// It is part of the entry's name then. Null for the standard quality.
+    /// </summary>
+    public string? AutoAudioName { get; set; }
+
+    /// <summary>
+    /// Creates the "automatic" entry of a quality list.
+    /// </summary>
+    public static SourceItemViewModel CreateAuto(Func<SourceItemViewModel, Task> activeFunc)
+        => new(activeFunc);
+
+    /// <summary>
+    /// Creates an eligible live quality entry without an automatic tier or on-demand preferences.
+    /// The live source service has already checked login and VIP eligibility.
+    /// </summary>
+    public static SourceItemViewModel CreateLive(PlayerFormatInformation info, Func<SourceItemViewModel, Task> activeFunc)
+        => new(info, activeFunc, info.Eotf);
+
+    /// <summary>
+    /// Names the automatic entry after what plays, such as "Auto (1080P)", or "Auto (1080P · Hi-Res lossless)"
+    /// when <see cref="AutoAudioName"/> is set.
+    /// </summary>
+    public void ShowAutoQuality(PlayerFormatInformation? playing)
+    {
+        if (!IsAuto)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(playing?.Description))
+        {
+            Name = ResourceToolkit.GetLocalizedString(StringNames.QualityAuto);
+        }
+        else if (string.IsNullOrWhiteSpace(AutoAudioName))
+        {
+            Name = string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.QualityAutoTemplate), playing.Description);
+        }
+        else
+        {
+            Name = string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(StringNames.QualityAutoWithAudioTemplate), playing.Description, AutoAudioName);
+        }
+    }
+
+    public override bool Equals(object? obj) => obj is SourceItemViewModel model && Id == model.Id && Eotf == model.Eotf;
+    public override int GetHashCode() => HashCode.Combine(Id, Eotf);
 
     [RelayCommand]
     private Task ActiveAsync()

@@ -93,6 +93,9 @@ namespace Richasy.BiliKernel;
 [JsonSerializable(typeof(PublisherInfo))]
 [JsonSerializable(typeof(RecommendVideoResponse))]
 [JsonSerializable(typeof(RecommendCard))]
+[JsonSerializable(typeof(RecommendReasonStyle))]
+[JsonSerializable(typeof(WebRecommendVideoResponse))]
+[JsonSerializable(typeof(WebRecommendCard))]
 [JsonSerializable(typeof(VideoArgs))]
 [JsonSerializable(typeof(PlayerArgs))]
 [JsonSerializable(typeof(OverflowFlyoutItem))]
@@ -144,6 +147,7 @@ namespace Richasy.BiliKernel;
 [JsonSerializable(typeof(BiliDataResponse<List<PartitionVideo>>))]
 [JsonSerializable(typeof(BiliDataResponse<CuratedPlaylistResponse>))]
 [JsonSerializable(typeof(BiliDataResponse<RecommendVideoResponse>))]
+[JsonSerializable(typeof(BiliDataResponse<WebRecommendVideoResponse>))]
 [JsonSerializable(typeof(BiliDataResponse<SubtitleViewResponse>))]
 internal sealed partial class SourceGenerationContext : JsonSerializerContext
 {

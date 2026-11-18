@@ -83,6 +83,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         Unloaded += OnLocalUnloaded;
         ProgressSlider.SizeChanged += OnProgressSliderSizeChanged;
         ProgressSlider.RegisterPropertyChangedCallback(RangeBase.MaximumProperty, OnProgressMaximumChanged);
+        InitializeChapters();
     }
 
     /// <summary>
@@ -133,6 +134,16 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         || ViewModel.Client?.IsDisposed != false
         || ViewModel.Player?.IsPlaybackInitialized != true;
 
+    // What the progress bar shows follows playback whenever the bar is on screen. Unlike input, that does
+    // not need the control to be active: a window that lost activation still shows the bar.
+    private bool IsProgressDisplayBlocked =>
+        !_loaded
+        || ViewModel is null
+        || ViewModel.IsPlaybackClosing
+        || ViewModel.IsConnecting
+        || ViewModel.Client?.IsDisposed != false
+        || ViewModel.Player?.IsPlaybackInitialized != true;
+
     /// <summary>
     /// 获取当前是否正在进行需阻止自动隐藏/快捷键的交互（拖动、延迟调度中或浮出已打开）.
     /// </summary>
@@ -160,6 +171,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         _pendingSpeedOwner = null;
         _pendingSpeedClaim = null;
         _hasFocus = false;
+        _chapterPreview?.Reset();
         UpdateSlots(cancel: true);
         _popups.Cancel();
         RefreshInteraction();
@@ -220,7 +232,14 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     {
         IsEnabled = !IsInputBlocked;
         UpdateSlots(cancel: false);
-        if (!_loaded || !IsActive) return;
+        if (!_loaded) return;
+        if (!IsActive)
+        {
+            // Nothing takes input, but a bar that is still on screen keeps showing the position.
+            SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
+            return;
+        }
+
         _synchronizingSliders = true;
         try
         {
@@ -236,6 +255,11 @@ public sealed partial class IslandTransportControls : PlayerControlBase
         Update(LeftContent);
         Update(MiddleContent);
         Update(RightContent);
+        if (ChapterEntry is not null)
+        {
+            ChapterEntry.IsActive = !IsInputBlocked;
+            if (cancel) ChapterEntry.CancelPendingInput();
+        }
 
         void Update(object? content)
         {
@@ -283,6 +307,24 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     private static bool IsNotBuffering(MpvPlayerState state, bool isLoading)
         => !IsBuffering(state, isLoading);
 
+    // Play starts or resumes the picture, so it also waits for a live release that is still unconfirmed.
+    private static bool IsPlayPauseEnabled(MpvPlayerState state, bool isLoading, bool isLiveReleaseBlocked)
+        => IsNotBuffering(state, isLoading) && !isLiveReleaseBlocked;
+
+    // Ask for the newest picture of a media without a timeline, once. The player shows what goes wrong.
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (IsInputBlocked || ViewModel is not { CanRefreshLive: true } owner) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Island transport refresh failed: {ex.Message}");
+        }
+    }
+
     private void SubscribeViewModel(PlayerViewModel? viewModel)
     {
         SubscribePlayer(null);
@@ -299,6 +341,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             viewModel.ProgressChanged += OnViewModelProgressChanged;
         }
         SubscribePlayer(viewModel);
+        SubscribeChapters(viewModel);
     }
 
     private void SubscribePlayer(PlayerViewModel? owner)
@@ -368,7 +411,8 @@ public sealed partial class IslandTransportControls : PlayerControlBase
 
     private void OnViewModelProgressChanged(object? sender, double e)
     {
-        if (!IsActive || !_isProgressVisible || ViewModel?.IsControlsVisible != true
+        // Shown is enough; active is not needed. An inactive window keeps its bar moving.
+        if (!_loaded || !_isProgressVisible || ViewModel?.IsControlsVisible != true
             || !ReferenceEquals(sender, _subscribedViewModel) || !double.IsFinite(e)) return;
         var seekedBackwards = e < _lastProgressPosition;
         var positionChanged = e != _lastProgressPosition;
@@ -381,8 +425,9 @@ public sealed partial class IslandTransportControls : PlayerControlBase
     private void SynchronizeProgress(double position, bool force)
     {
         if (force) _progressSynchronizationPending = true;
+        // A pending seek owns the slider; nothing is written back over it.
         if (!_isProgressVisible || ViewModel?.IsControlsVisible != true || _progressChangeList.Count > 0
-            || IsInputBlocked || !double.IsFinite(position)) return;
+            || IsProgressDisplayBlocked || !double.IsFinite(position)) return;
         var duration = ViewModel.Player.Duration;
         var durationChanged = ProgressSlider.Maximum != duration;
         // 与浮层底部进度条一致：至少移动一个像素，且保留 0.1 秒的最小步长.
@@ -406,6 +451,7 @@ public sealed partial class IslandTransportControls : PlayerControlBase
             subscription.Element.Visibility == Visibility.Visible && subscription.Element.Opacity > 0);
         var becameVisible = visible && !_isProgressVisible;
         _isProgressVisible = visible;
+        if (!visible) _chapterPreview?.Reset();
         if (becameVisible) SynchronizeProgress(ViewModel?.Player?.Position ?? 0, true);
     }
 

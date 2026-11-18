@@ -30,6 +30,7 @@ internal static class EmoteAdapter
     public static EmoteText ToEmoteText(this Bilibili.Main.Community.Reply.V1.Content content)
     {
         var text = content.Message.Replace("[请升级到App最新版本查看图文评论]", string.Empty);
+        text = CommentVoteAdapter.RemoveVotePlaceholders(text);
         var emotes = content.Emotes;
         var emoteDict = new Dictionary<string, BiliImage>();
         var pictures = new List<BiliImage>();
@@ -56,6 +57,6 @@ internal static class EmoteAdapter
             pictures = content.Pictures.Select(p => p.ImgSrc.ToImage(p.ImgWidth, p.ImgHeight)).ToList();
         }
 
-        return new EmoteText(text, emoteDict, pictures);
+        return new EmoteText(text, emoteDict, pictures) { Links = content.ToTextLinks() };
     }
 }

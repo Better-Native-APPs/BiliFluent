@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Pages.Overlay;
+using BiliCopilot.UI.Services.WatchRecords;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
@@ -29,7 +30,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentItemViewModel"/> class.
     /// </summary>
-    public MomentItemViewModel(MomentInformation data, MomentCardStyle style, Action<MomentItemViewModel> showCommentAction)
+    /// <param name="data">Moment data.</param>
+    /// <param name="style">Card style.</param>
+    /// <param name="showCommentAction">Opens the comments of this moment.</param>
+    /// <param name="showWatchMark">Whether video covers carry the watched mark. Only the dynamic page turns it on.</param>
+    public MomentItemViewModel(MomentInformation data, MomentCardStyle style, Action<MomentItemViewModel> showCommentAction, bool showWatchMark = false)
         : base(data)
     {
         _showMomentAction = showCommentAction;
@@ -44,12 +49,13 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         Description = data.Description;
         NoData = data.Data is null;
         Style = style;
+        _showWatchMark = showWatchMark;
 
         if (!NoData)
         {
             if (data.Data is MomentInformation forward)
             {
-                InnerContent = new MomentItemViewModel(forward, Style, showCommentAction);
+                InnerContent = new MomentItemViewModel(forward, Style, showCommentAction, showWatchMark);
             }
             else if (data.Data is VideoInformation video)
             {
@@ -76,6 +82,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoTitle = einfo.Identifier.Title;
                 VideoCover = einfo.Identifier.Cover.Uri;
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(einfo.Duration!.Value));
+            }
+
+            if (showWatchMark)
+            {
+                RefreshWatchMark(this.Get<WatchRecordIndex>());
             }
         }
     }

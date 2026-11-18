@@ -43,6 +43,14 @@ public interface IVideoDiscoveryService
     Task<(IReadOnlyList<VideoInformation> Items, long Offset)> GetRecommendVideoListAsync(long offset = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets a recommendation page from the selected source.
+    /// </summary>
+    /// <param name="source">The recommendation source.</param>
+    /// <param name="offset">The source-specific cursor, or zero for the first page.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    Task<(IReadOnlyList<VideoInformation> Items, long Offset)> GetRecommendVideoListAsync(RecommendationFeedSource source, long offset, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 获取热门视频列表.
     /// </summary>
     Task<(IReadOnlyList<VideoInformation> Items, long Offset)> GetHotVideoListAsync(long offset = 0, CancellationToken cancellationToken = default);

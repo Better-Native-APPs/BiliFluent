@@ -27,6 +27,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task DisposeCoreAsync()
     {
+        if (HasOwnedLiveResources || IsLiveMedia)
+        {
+            await DisposeLiveCoreAsync();
+            return;
+        }
         if (Window is MainPlayerHost host) await host.PrepareForCloseAsync();
         await DrainPlayerWorkAsync();
         // Decide cancellation failure before any native/host teardown, registry release or CTS disposal.
@@ -47,6 +52,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         Window?.SetActiveAction(null);
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
         Danmaku.ClearAll();
+        ClearCommandDanmakuMedia();
+        ReleaseSystemMediaTransportControls(_smtc);
         _nativeMp?.Dispose();
         _nativeMp = null;
 
@@ -55,12 +62,6 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             _tripleTimer.Tick -= OnTripleTimerTick;
             _tripleTimer.Stop();
             _tripleTimer = null;
-        }
-
-        if (_smtc != null)
-        {
-            _smtc.ButtonPressed -= OnSmtcButtonPressed;
-            _smtc = null;
         }
 
         if (Connector != null)
@@ -75,12 +76,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
+            Client.ReachFileLoaded -= OnChapterFileLoaded;
         }
 
         if (Player is not null)
         {
             Player.PropertyChanged -= OnPlayerPropertyChanged;
-            if (_historyResolver is not null && Player.Duration > 0)
+            Player.RelayUpstreamFailed -= OnRelayUpstreamFailed;
+            if (CanUsePlaybackHistory && _historyResolver is not null && Player.Duration > 0)
             {
                 // Shutdown resets these properties before MpvPlayer can save the final progress.
                 var position = Player.Position;
@@ -131,7 +134,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _lifetime.Dispose();
         if (!IsEmbedded && UseIntegrationOperation && _independentInitializationCompleted
             && this.Get<AppViewModel>().Windows.OfType<MainWindow>().FirstOrDefault() is not null)
+        {
+            App.TraceExitReason("independent-player-integration-close");
             _ = App.Current.RequestExitAsync();
+        }
     }
 
     private async Task DrainPlayerWorkAsync()
@@ -156,11 +162,21 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     private async Task InitializeMediaAsync(MediaSnapshot snapshot)
     {
         CheckMediaAdmission();
+        ResetNetworkFailover();
+        await SuspendPlaybackDiagnosticsAsync();
+        await SuspendNetworkMonitorAsync();
+        CheckMediaAdmission();
+        var previousHistoryResolver = CanUsePlaybackHistory ? _historyResolver : null;
         _snapshot = snapshot;
+        NotifyMediaCapabilitiesChanged();
+        NotifyLivePropertiesChanged();
+        ResetCommandDanmakuMedia();
         ErrorMessage = default;
         CacheSpeedText = default;
         ShowPlayerWindow();
         IsSourceSelectable = false;
+        HasMultipleAudioLanguages = false;
+        HasMultipleAudioQualities = false;
         IsDanmakuEnabled = false;
         IsDanmakuLoading = false;
         IsStatsOverlayShown = false;
@@ -170,14 +186,41 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         IsSubtitleEmpty = true;
         _isDanmakuInitialized = false;
         IsNextTipShownInThisMedia = false;
+        if (!CanNavigatePlaylist)
+        {
+            IsPrevButtonEnabled = false;
+            IsNextButtonEnabled = false;
+            IsVideoNavigationAvailable = false;
+        }
+        if (!CanSeek)
+        {
+            PositionText = null;
+            DurationText = null;
+            IsBottomProgressBarVisible = false;
+        }
+        if (!CanSelectOnDemandQuality)
+        {
+            Sources.Clear();
+            SelectedSource = null;
+        }
         Danmaku.ClearAll();
-        Chapters.Clear();
+        ResetChapters();
         IsChapterVisible = SettingsToolkit.ReadLocalSetting(SettingNames.IsChapterVisible, true);
         UseIntegrationOperation = !IsEmbedded && SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true)
             && SettingsToolkit.ReadLocalSetting(SettingNames.UseIntegrationWhenSinglePlayWindow, true);
         BackwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.BackwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepBackwardSecond, 10d));
         ForwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.ForwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepForwardSecond, 30d));
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
+        if (IsLiveMedia)
+        {
+            await InitializeLiveMediaAsync(previousHistoryResolver);
+            return;
+        }
+        if (HasOwnedLiveResources)
+        {
+            await LeaveLiveMediaAsync();
+            CheckMediaAdmission();
+        }
         if (Client != null)
         {
             await Client.PauseAsync();
@@ -196,6 +239,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             System.Diagnostics.Debug.WriteLine($"Player initialized with connector: {Connector.GetType().Name}");
             await Connector.InitializeAsync(_snapshot, default, _activeMediaToken);
             CheckMediaAdmission();
+            InitializeCommandDanmaku();
+            InitializeVideoChapters();
         }
 
         Title = Connector switch
@@ -225,21 +270,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 }
                 break;
             case BiliMediaType.Live:
+                _sourceResolver = null;
                 break;
             default:
+                _sourceResolver = null;
                 break;
         }
 
-        _sourceResolver.SetInitializationCancellation(_activeMediaToken);
-        _sourceResolver.WindowHandle = Window!.RenderHwnd;
-
-        if (_historyResolver != null && Player != null)
+        if (OnDemandResolver is { } onDemandResolver)
         {
-            await _historyResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true);
+            onDemandResolver.SetInitializationCancellation(_activeMediaToken);
+            onDemandResolver.WindowHandle = Window!.RenderHwnd;
+        }
+        StartNetworkMonitor();
+
+        if (previousHistoryResolver != null && Player != null)
+        {
+            await previousHistoryResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true);
             CheckMediaAdmission();
         }
 
         // TODO: 创建历史记录处理器
+        _historyResolver = null;
         switch (_snapshot.Type)
         {
             case BiliMediaType.Video:
@@ -268,16 +320,25 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         if (Player is null)
         {
-            Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger);
+            // Video and PGC sources carry the addresses of their streams and are read through the
+            // loopback relay of the player; a source without them plays directly.
+            Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger)
+            {
+                RelayOptions = CreateRelayOptions(),
+            };
             Player.PropertyChanged += OnPlayerPropertyChanged;
+            Player.RelayUpstreamFailed += OnRelayUpstreamFailed;
+            Client!.ReachFileLoaded += OnChapterFileLoaded;
         }
         else
         {
             Player.UpdateResolvers(_sourceResolver, _historyResolver);
+            Player.RelayOptions = CreateRelayOptions();
         }
 
         CheckMediaAdmission();
         CheckHostReady();
+        WatchAutomaticAudio();
         await Player.InitializeAsync();
 
         CheckMediaAdmission();
@@ -287,9 +348,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         CheckFullScreen();
         CheckCompactOverlay();
-        ProgressChanged?.Invoke(this, 0);
+        if (CanSeek) ProgressChanged?.Invoke(this, 0);
         await LoadSourcesAsync();
         CheckMediaAdmission();
+
+        LoadAudioSelections();
 
         await LoadSubtitlesAsync();
     }
@@ -395,7 +458,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     private void CheckBottomProgressBarVisible()
-        => IsBottomProgressBarVisible = !IsControlsVisible && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
+        => IsBottomProgressBarVisible = CanSeek && !IsControlsVisible && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
 
     partial void OnIsControlsVisibleChanged(bool value)
         => Window?.SetCaptionButtonVisibility(value);

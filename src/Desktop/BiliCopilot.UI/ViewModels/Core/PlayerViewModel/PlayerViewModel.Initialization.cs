@@ -40,7 +40,7 @@ public sealed partial class PlayerViewModel
         && _hostReady && !IsPlaybackClosing && Window?.GetWindow().IsVisible == true;
 
     internal bool IsPlaybackClosing => _isClosing || Window?.IsClosed == true
-        || Window?.IsDisposed == true || Client?.IsDisposed == true;
+        || Window?.IsDisposed == true || Client?.IsDisposed == true || (_liveAccountActive && _liveAccountEnded);
 
     internal bool HasPublishedClose => _closeTask is not null;
 
@@ -49,6 +49,12 @@ public sealed partial class PlayerViewModel
 
     private void CheckMediaAdmission()
     {
+        if (_liveAccountActive && _liveAccount != CaptureLiveAccount())
+        {
+            _liveAccountEnded = true;
+            Close();
+            throw new OperationCanceledException("Live account scope ended.");
+        }
         _activeMediaToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(IsPlaybackClosing, this);
     }
@@ -138,7 +144,7 @@ public sealed partial class PlayerViewModel
 
     private async void OnHostCloseRequested(object? sender, EventArgs args)
     {
-        try { await CloseAsync(); }
+        try { await BiliCopilot.UI.Live.Application.LiveCloseDiagnostics.Invoke("window", CloseAsync); }
         catch (Exception ex) { ReportCloseFailure(ex); }
     }
 
@@ -153,6 +159,8 @@ public sealed partial class PlayerViewModel
 
     private void ReportCloseFailure(Exception ex)
     {
+        if (HasOwnedLiveResources || IsLiveMedia)
+            ex = new InvalidOperationException("Live close is incomplete. Owned resources are retained.");
         logger.LogError(ex, "Player cleanup failed; host ownership retained.");
         ErrorMessage = ex.Message;
         this.Get<AppViewModel>().ShowTipCommand.Execute((ex.Message, Richasy.WinUIKernel.Share.Base.InfoType.Error));
@@ -172,6 +180,17 @@ public sealed partial class PlayerViewModel
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _closeTask = completion.Task;
         _isClosing = true;
+        try { ReleaseSystemMediaTransportControls(_smtc); }
+        catch (Exception ex) { _closeCancellationErrors.Add(ex); }
+        if (HasOwnedLiveResources || IsLiveMedia)
+        {
+            BeginLiveClose();
+            _closeWorker = CompleteLiveCloseAsync(completion, cancelOpening);
+            return _closeTask;
+        }
+        _ = SuspendPlaybackDiagnosticsAsync();
+        _ = SuspendNetworkMonitorAsync();
+        ClearActiveCommandDanmakus();
         HideMpvDanmaku();
         StartSponsorApplicationCleanup();
         _closeWorker = CompleteCloseAsync(completion, cancelOpening);
@@ -247,9 +266,15 @@ public sealed partial class PlayerViewModel
     internal Task InitializeAsync(MediaSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         if (IsPlaybackClosing) return Task.CompletedTask;
+        if (snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live)
+        {
+            CheckLiveRelease();
+            BindLiveAccount(_liveAccountActive ? _liveAccount!.Value : CaptureLiveAccount());
+        }
         // Cancel callbacks run once; a later Cancel no-op must not turn a failed transition into reuse.
         if (_mediaCancellationError is { } failure) return OwnWork(Task.FromException(failure));
         RetireSponsorBinding(RetirementReason.Replacement);
+        ClearActiveCommandDanmakus();
         var previous = _mediaCancellation;
         // A callback may reenter CloseAsync before Cancel reports its error. Reserve this real
         // synchronous cancellation scope in the existing drain set, so close cannot release early.
@@ -272,9 +297,14 @@ public sealed partial class PlayerViewModel
             RetainConnectorWork();
             Connector?.InvalidateRequests();
             if (previous is not null) _retiredMediaCancellations.Add(previous);
-            var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+            var request = snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live
+                ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token, _liveAccount!.Value.Lifetime)
+                : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
             _mediaCancellation = request;
-            return OwnWork(InitializeCoreAsync(snapshot, request));
+            if (snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live) _liveMediaPending = true;
+            var operation = OwnWork(InitializeCoreAsync(snapshot, request));
+            if (snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live) _liveInitialization = operation;
+            return operation;
         }
         finally
         {
@@ -284,6 +314,7 @@ public sealed partial class PlayerViewModel
 
     private async Task InitializeCoreAsync(MediaSnapshot snapshot, CancellationTokenSource request)
     {
+        if (snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live) await Task.Yield();
         var entered = false;
         try
         {
@@ -304,7 +335,11 @@ public sealed partial class PlayerViewModel
             await RefreshSponsorApplicationMetadataAsync();
             if (!IsEmbedded) _independentInitializationCompleted = true;
         }
-        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        // A close invalidates the connector requests and refuses new admissions before it cancels this
+        // source: leaving while the media still loads is a cancellation as well, not a playback failure.
+        catch (Exception ex) when (ex is OperationCanceledException
+            ? request.IsCancellationRequested || IsPlaybackClosing
+            : ex is ObjectDisposedException && IsPlaybackClosing)
         {
             if (!IsEmbedded && !_independentInitializationCompleted) throw;
         }
@@ -322,6 +357,11 @@ public sealed partial class PlayerViewModel
                 IsConnecting = false;
                 _initializationGate.Release();
             }
+            if (snapshot.Type == BiliCopilot.UI.Models.Constants.BiliMediaType.Live && ReferenceEquals(request, _mediaCancellation))
+            {
+                _liveMediaPending = false;
+                NotifyLivePropertiesChanged();
+            }
             // Caller-owned tokens remain registerable while retired connector work drains.
             // All current/retired CTSs are released only by successful session close.
         }
@@ -329,6 +369,8 @@ public sealed partial class PlayerViewModel
 
     private void ReportPlaybackFailure(Exception ex)
     {
+        if (HasOwnedLiveResources || IsLiveMedia)
+            ex = new InvalidOperationException("Live playback is unavailable. Refresh to resolve a new stream.");
         logger.LogError(ex, "Playback transition failed.");
         if (!IsPlaybackClosing)
         {

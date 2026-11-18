@@ -1,6 +1,7 @@
 ﻿using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Models.Danmaku;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Richasy.WinUIKernel.Share.ViewModels;
@@ -9,6 +10,11 @@ namespace BiliCopilot.UI.ViewModels.Core;
 
 public sealed partial class DanmakuRenderViewModel : ViewModelBase
 {
+    // A CJK UI font keeps Latin letters and digits in the same design as Chinese glyphs.
+    internal const string DefaultDanmakuFontFamily = "Microsoft YaHei UI";
+    private const string LegacyDefaultDanmakuFontFamily = "Segoe UI";
+    private const string HoverActionsSettingKey = "IsDanmakuHoverActionsEnabled";
+
     internal int Position => _position;
 
     public DanmakuRenderViewModel()
@@ -20,8 +26,21 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
             SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRendererMpvMigrated, true);
         }
 
+        // The old default was persisted on first use, so a stored legacy default is moved once.
+        // A later manual choice of that font is kept because the marker is already set.
+        if (!SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuDefaultFontMigrated, false))
+        {
+            if (SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily) == LegacyDefaultDanmakuFontFamily)
+            {
+                SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily);
+            }
+
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuDefaultFontMigrated, true);
+        }
+
         Renderer = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, DanmakuRendererType.Mpv);
-        DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, "Segoe UI");
+        DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily);
+        IsHoverActionsEnabled = this.Get<ISettingsToolkit>().ReadLocalSetting(HoverActionsSettingKey, true);
     }
 
     public void Initialize(IList<DanmakuInformation> danmakus)
@@ -119,12 +138,13 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
         DanmakuFontSize = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontSize, 1.2d);
         DanmakuArea = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuArea, 1d);
         DanmakuSpeed = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuSpeed, 1.2d);
-        DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, "Segoe UI");
+        DanmakuFontFamily = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, DefaultDanmakuFontFamily);
         IsDanmakuBold = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsDanmakuBold, true);
         OutlineSize = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuOutlineSize, 1d);
         IsRollingEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsRollingDanmakuEnabled, true);
         IsTopEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsTopDanmakuEnabled, true);
         IsBottomEnabled = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.IsBottomDanmakuEnabled, true);
+        IsHoverActionsEnabled = this.Get<ISettingsToolkit>().ReadLocalSetting(HoverActionsSettingKey, true);
         IsDanmakuLimit = true;
         ResetStyle();
     }
@@ -137,19 +157,23 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
             return;
         }
 
-        var fonts = await this.Get<IFontToolkit>().GetFontsAsync();
-        foreach (var item in fonts)
+        IReadOnlyList<SystemFont> fonts;
+        try
         {
-            Fonts.Add(item);
+            fonts = await DanmakuFontCatalog.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<DanmakuRenderViewModel>>().LogError(ex, "Failed to load danmaku fonts; the selected font is unchanged.");
+            return;
         }
 
-        var localFont = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, "Segoe UI");
-        if (!Fonts.Select(p => p.LocalName).Contains(localFont))
+        // Resume on the UI context and publish only the completed snapshot.
+        Fonts = fonts;
+        if (DanmakuFontCatalog.Find(fonts, DanmakuFontFamily) is null)
         {
-            localFont = "Segoe UI";
+            DanmakuFontFamily = DefaultDanmakuFontFamily;
         }
-
-        DanmakuFontFamily = localFont;
     }
 
     partial void OnIsShowDanmakuChanged(bool value)
@@ -178,7 +202,16 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuSpeed, value);
 
     partial void OnDanmakuFontFamilyChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, value);
+    {
+        try
+        {
+            SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuFontFamily, value);
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<DanmakuRenderViewModel>>().LogError(ex, "Failed to save the danmaku font preference.");
+        }
+    }
 
     partial void OnIsTopEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.IsTopDanmakuEnabled, value);
@@ -197,4 +230,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
 
     partial void OnRendererChanged(DanmakuRendererType value)
         => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.DanmakuRenderer, value);
+
+    partial void OnIsHoverActionsEnabledChanged(bool value)
+        => this.Get<ISettingsToolkit>().WriteLocalSetting(HoverActionsSettingKey, value);
 }

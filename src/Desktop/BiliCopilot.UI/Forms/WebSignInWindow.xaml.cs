@@ -4,6 +4,7 @@ using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using Richasy.BiliKernel.Bili.Authorization;
 using WinUIEx;
@@ -17,6 +18,7 @@ public sealed partial class WebSignInWindow : WindowEx
 {
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private bool _isClosed;
+    private bool _isImporting;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebSignInWindow"/> class.
@@ -40,8 +42,10 @@ public sealed partial class WebSignInWindow : WindowEx
         Activated += OnActivated;
     }
 
+    // While this window is open, the startup page stops its own sign-in paths; it picks them up again
+    // if this window closes without a session.
     private void OnActivated(object sender, WindowActivatedEventArgs args)
-        => this.Get<StartupPageViewModel>().ExitCommand.Execute(default);
+        => this.Get<StartupPageViewModel>().SuspendSignInCommand.Execute(default);
 
     private async void OnClosed(object sender, WindowEventArgs args)
     {
@@ -61,10 +65,17 @@ public sealed partial class WebSignInWindow : WindowEx
             _cancellationTokenSource.Dispose();
         }
 
+        var startup = this.Get<StartupPageViewModel>();
         var localToken = this.Get<IBiliTokenResolver>().GetToken();
         if (localToken != null)
         {
+            // Signed in: shut the startup page down for good before the app restarts.
+            startup.ExitCommand.Execute(false);
             this.Get<AppViewModel>().RestartCommand.Execute(default);
+        }
+        else
+        {
+            startup.ResumeSignInCommand.Execute(default);
         }
     }
 
@@ -91,35 +102,95 @@ public sealed partial class WebSignInWindow : WindowEx
             return;
         }
 
-        var token = _cancellationTokenSource.Token;
         try
         {
-            if (sender.CoreWebView2.Source.StartsWith("https://passport.bilibili.com"))
+            var source = sender.CoreWebView2.Source;
+            if (source.StartsWith("https://passport.bilibili.com"))
             {
                 await sender.CoreWebView2.ExecuteScriptAsync("document.querySelector('.international-footer').remove();document.querySelector('.top-header').remove()");
             }
-            else if (sender.CoreWebView2.Source.StartsWith("https://www.bilibili.com"))
+            else if (source.StartsWith("https://www.bilibili.com"))
             {
-                var cookies = await sender.CoreWebView2.CookieManager.GetCookiesAsync(sender.Source.AbsoluteUri);
-                if (_isClosed)
-                {
-                    return;
-                }
+                await ImportSessionAsync();
+            }
+        }
+        catch (Exception) when (_isClosed)
+        {
+            // In-flight WebView calls may finish after the window closes.
+        }
+        catch (Exception ex)
+        {
+            // Nothing here may reach the UI thread's unhandled-exception path.
+            this.Get<ILogger<WebSignInWindow>>().LogWarning("The web sign-in page could not be processed: {ExceptionType}", ex.GetType().FullName);
+        }
+    }
 
-                var cookieDict = cookies.Select(p => (p.Name, p.Value)).ToDictionary();
-                if (cookieDict.Count > 0)
-                {
-                    await this.Get<IAuthenticationService>().SignInAsync(new Richasy.BiliKernel.Bili.AuthorizeExecutionSettings { Cookies = cookieDict }, token);
-                    if (!_isClosed)
-                    {
-                        Close();
-                    }
-                }
+    private async void OnImportRetryButtonClickAsync(object sender, RoutedEventArgs e)
+        => await ImportSessionAsync();
+
+    // Hands the cookies of the signed-in web page to the app. Failing is expected (the app token may not
+    // arrive in time), so the outcome is shown in the window and the user can try again.
+    private async Task ImportSessionAsync()
+    {
+        if (_isClosed || _isImporting)
+        {
+            return;
+        }
+
+        _isImporting = true;
+        var isFailed = false;
+        try
+        {
+            var token = _cancellationTokenSource.Token;
+            var pageUri = MainView.Source?.AbsoluteUri;
+            if (pageUri is null || !pageUri.StartsWith("https://www.bilibili.com"))
+            {
+                // A retry can come after the user has browsed elsewhere; the session cookies live here.
+                pageUri = "https://www.bilibili.com/";
+            }
+
+            var cookies = await MainView.CoreWebView2.CookieManager.GetCookiesAsync(pageUri);
+            if (_isClosed)
+            {
+                return;
+            }
+
+            var cookieDict = cookies.Select(p => (p.Name, p.Value)).ToDictionary();
+            if (cookieDict.Count == 0)
+            {
+                return;
+            }
+
+            ImportErrorBar.IsOpen = false;
+            ImportProgressBar.IsOpen = true;
+            await this.Get<IAuthenticationService>().SignInAsync(new Richasy.BiliKernel.Bili.AuthorizeExecutionSettings { Cookies = cookieDict }, token);
+            if (!_isClosed)
+            {
+                Close();
             }
         }
         catch (Exception) when (_isClosed)
         {
             // In-flight WebView/sign-in calls may finish after the window closes.
+        }
+        catch (Exception ex)
+        {
+            // Cookies stay out of the log; the exception type is enough to tell the cases apart.
+            this.Get<ILogger<WebSignInWindow>>().LogWarning("Importing the web session failed: {ExceptionType}", ex.GetType().FullName);
+            isFailed = true;
+        }
+        finally
+        {
+            _isImporting = false;
+            if (!_isClosed)
+            {
+                ImportProgressBar.IsOpen = false;
+                if (isFailed)
+                {
+                    ImportErrorBar.IsOpen = true;
+                    ImportRetryButton.Focus(FocusState.Programmatic);
+                }
+            }
         }
     }
 }

@@ -27,4 +27,10 @@ public sealed class MpvMediaSource(string url, string? id = default, string? tit
     /// 播放选项.
     /// </summary>
     public MpvPlayOptions Options { get; } = options ?? new MpvPlayOptions();
+
+    /// <summary>
+    /// The addresses of the streams, for a source the player may read through its loopback relay
+    /// instead of opening <see cref="Url"/> itself. Null always plays <see cref="Url"/> directly.
+    /// </summary>
+    public MpvRelaySource? Relay { get; init; }
 }

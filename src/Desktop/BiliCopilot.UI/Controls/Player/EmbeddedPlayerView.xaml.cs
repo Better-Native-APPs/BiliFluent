@@ -292,6 +292,8 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
             if (args.PropertyName is null or "" or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.ErrorMessage))
                 UpdateLoadingErrorLease();
             if (!IsCurrentAttachment(viewModel, epoch)) return;
+            OnRoomOwnerChanged(viewModel, args.PropertyName);
+            if (!IsCurrentAttachment(viewModel, epoch)) return;
             if (viewModel.IsPlaybackClosing || args.PropertyName is null or "" or nameof(PlayerViewModel.Connector)
                 or nameof(PlayerViewModel.MediaGeneration) or nameof(PlayerViewModel.Presentation) or nameof(PlayerViewModel.IsPlaybackClosing))
             {
@@ -610,6 +612,20 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
 
     private void UpdateSidePanel()
     {
+        // A room lays the side column out by its own rules; the result of the other layout is never carried over.
+        var forRoom = ViewModel?.HasRoomChat == true;
+        if (forRoom != _isRoomSidePanel)
+        {
+            _isRoomSidePanel = forRoom;
+            _isSidePanelShown = null;
+        }
+
+        if (forRoom)
+        {
+            UpdateRoomSidePanel();
+            return;
+        }
+
         var width = XamlRoot?.Size.Width ?? ActualWidth;
         var show = _active && _loaded && !_suspended && ViewModel is not null
             && _mode == PlayerPresentationMode.Normal && width >= SidePanelMinWidth
@@ -638,7 +654,7 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
         }
 
         // 只有当前实际显示时才改渲染列；隐藏/非 Normal 下保持列 0，避免迟到回写强行显示.
-        if (view._isSidePanelShown == true && view.SidePanelColumn is { } column)
+        if (view._isSidePanelShown == true && !view._isRoomSidePanel && view.SidePanelColumn is { } column)
         {
             column.Width = new GridLength(view._expandedSidePanelWidth);
         }

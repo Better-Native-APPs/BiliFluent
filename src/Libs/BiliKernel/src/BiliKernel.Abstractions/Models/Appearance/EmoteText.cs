@@ -36,6 +36,11 @@ public sealed class EmoteText
     /// </summary>
     public IList<BiliImage>? Pictures { get; }
 
+    /// <summary>
+    /// 文本中的提及、话题与链接. 来源没有描述这些内容时为 null.
+    /// </summary>
+    public IReadOnlyList<TextLink>? Links { get; set; }
+
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is EmoteText text && Text == text.Text;
 

@@ -113,6 +113,53 @@
                     HorizontalAlignment="Left"
                     Text="{x:Bind ViewModel.Content, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}" />
+                <!--
+                    The poll attached to the comment. The text no longer carries its {vote:ID} placeholder;
+                    the poll is offered here instead and opens next to the comment it belongs to.
+                -->
+                <Button
+                    x:Name="VoteEntry"
+                    MaxWidth="360"
+                    Padding="10,6,12,7"
+                    HorizontalAlignment="Left"
+                    HorizontalContentAlignment="Left"
+                    x:Load="{x:Bind ViewModel.HasVote, Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind ViewModel.Vote.EntryName, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.SponsorContent.IsBodyVisible, Mode=OneWay}">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ic:SymbolIcon
+                            VerticalAlignment="Center"
+                            FontSize="18"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Symbol="Poll" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock
+                                MaxLines="2"
+                                Text="{x:Bind ViewModel.Vote.EntryTitle, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Vote.EntryCaption, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{x:Bind ViewModel.Vote.HasEntryCaption, Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                    <Button.Flyout>
+                        <!--  May reach past the window edge: a small player window is shorter than a long poll.  -->
+                        <Flyout
+                            Opening="OnVoteFlyoutOpening"
+                            Placement="BottomEdgeAlignedLeft"
+                            ShouldConstrainToRootBounds="False">
+                            <local:CommentVotePanel Width="340" ViewModel="{x:Bind ViewModel.Vote, Mode=OneWay}" />
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </StackPanel>
             <Grid Grid.Row="2" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>

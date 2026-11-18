@@ -16,18 +16,24 @@ using Richasy.MpvKernel.Player.Models;
 
 namespace BiliCopilot.UI.Resolvers;
 
-internal sealed partial class VideoMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<VideoMediaSourceResolver> logger) : MediaSourceResolverBase
+internal sealed partial class VideoMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<VideoMediaSourceResolver> logger) : MediaSourceResolverBase, IAdaptiveQualityResolver
 {
     private MediaSnapshot _snapshot;
     private VideoPart _part;
     private Task? _initTask;
     private DashMediaInformation? _playbackInfo;
+    private AdaptiveQualityDecision? _adaptiveStartDecision;
+
+    // The dubbing language the loaded play detail actually serves; null is the original audio.
+    private string? _servedLanguage;
 
     public void Initialize(MediaSnapshot snapshot, VideoPart part)
     {
         lock (InitializationSync)
         {
             InvalidateInitialization();
+            ResetPlayingSelection();
+            _adaptiveStartDecision = null;
             _snapshot = snapshot;
             _part = part;
         }
@@ -37,6 +43,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     {
         _playbackInfo = default;
         _initTask = default;
+        _servedLanguage = default;
     }
 
     internal void ResetSnapshot(MediaSnapshot snapshot)
@@ -47,49 +54,102 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         }
     }
 
-    internal PlayerFormatInformation? GetCurrentFormat()
+    /// <summary>
+    /// Takes over the audio choices of <paramref name="snapshot"/>. Another language needs a new play detail
+    /// request, so the loaded one is dropped; another quality of the same language is already loaded.
+    /// </summary>
+    internal void ResetAudioSelection(MediaSnapshot snapshot, bool reloadLanguage)
     {
-        var preferFormatSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.PreferQuality, PreferQualityType.Auto);
-        var availableFormats = _playbackInfo.Formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default));
+        lock (InitializationSync)
+        {
+            _snapshot = snapshot;
+            if (_initTask is null)
+            {
+                return;
+            }
+
+            // A failed request is dropped as well, so choosing again retries it.
+            if (_initTask.IsFaulted || _initTask.IsCanceled || reloadLanguage)
+            {
+                InvalidateInitialization(keepPlayingStreams: true);
+            }
+        }
+    }
+
+    internal AudioSelections GetAudioSelections()
+    {
+        lock (InitializationSync)
+        {
+            return PlayingSelection?.AudioSelections ?? GetResolvedAudioSelections(new(GetPreferences()));
+        }
+    }
+
+    private AudioSelections GetResolvedAudioSelections(OnDemandSelectionRequest request)
+        => _playbackInfo is { } info
+            ? new(info.AudioLanguages is { } languages ? [.. languages] : [],
+                _servedLanguage ?? AudioLanguageInformation.OriginalId,
+                info.AudioQualities is { } qualities ? [.. qualities] : [],
+                GetSelectedAudioQuality(request)?.Id, info.AudioLanguageGroupTitle)
+            : AudioSelections.Empty;
+
+    /// <summary>
+    /// The quality that plays: the one chosen by hand when there is one, otherwise the automatic choice.
+    /// Null until the media is loaded.
+    /// </summary>
+    internal PlayerFormatInformation? GetCurrentFormat()
+        => PlayingSelection?.Format ?? ResolveFormat(GetManualQuality(_snapshot));
+
+    private PlayerFormatInformation? ResolveFormat(int? preferQuality)
+        => VideoQualityPreference.Pick(GetPlayableFormats(), preferQuality ?? 0,
+            SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto));
+
+    private IEnumerable<PlayerFormatInformation> GetPlayableFormats()
+    {
+        if (_playbackInfo?.Formats is not { } formats)
+        {
+            return [];
+        }
+
+        var availableFormats = formats.ToList().ConvertAll(p => new SourceItemViewModel(p, default));
         if (_snapshot.Video.Publisher?.User?.Id != this.Get<AccountViewModel>().MyProfile.User.Id)
         {
             availableFormats = [.. availableFormats.Where(p => p.IsEnabled)];
         }
 
-        SourceItemViewModel? selectedFormat = default;
-        if (_snapshot.PreferQuality > 0)
+        return KeepFormatsWithStream(availableFormats.Select(p => p.Data), _playbackInfo.Videos);
+    }
+
+    IReadOnlyList<AdaptiveQualityCandidate> IAdaptiveQualityResolver.GetAdaptiveCandidates()
+    {
+        lock (InitializationSync) return AdaptiveQualitySelection.BuildCandidates(GetPlayableFormats(), GetVideoSegment);
+    }
+
+    AdaptiveQualityDecision? IAdaptiveQualityResolver.AdaptiveStartDecision
+    {
+        get { lock (InitializationSync) return _adaptiveStartDecision; }
+    }
+
+    /// <summary>
+    /// Whether no quality is chosen by hand, so that <see cref="GetCurrentFormat"/> is the automatic choice.
+    /// </summary>
+    internal bool IsAutoQuality() => PlayingSelection is { } playing ? playing.Preferences.VideoQuality is not > 0 : GetManualQuality(_snapshot) <= 0;
+
+    // The quality chosen by hand: the one of this playback, or the one remembered from an earlier media.
+    internal static int GetManualQuality(MediaSnapshot snapshot)
+        => snapshot.PreferQuality is int quality and > 0 ? quality : SettingsToolkit.ReadLocalSetting(SettingNames.ManualVideoQuality, 0);
+
+    // The format list names every quality of the media, also those this response carries no stream for.
+    // Only a quality with a stream can play; a response without any stream list is left as it is.
+    internal static IEnumerable<PlayerFormatInformation> KeepFormatsWithStream(IEnumerable<PlayerFormatInformation> formats, IList<DashSegmentInformation>? streams)
+    {
+        if (streams is not { Count: > 0 })
         {
-            selectedFormat = availableFormats.Find(p => p.Data.Quality == _snapshot.PreferQuality);
+            return formats;
         }
 
-        if (selectedFormat == null)
-        {
-            if (preferFormatSetting == PreferQualityType.Auto)
-            {
-                var lastSelectedFormat = SettingsToolkit.ReadLocalSetting(SettingNames.LastSelectedVideoQuality, 0);
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == lastSelectedFormat);
-            }
-            else if (preferFormatSetting == PreferQualityType.UHD)
-            {
-                selectedFormat = availableFormats.Find(p => p.Data.Quality == 120);
-            }
-            else if (preferFormatSetting == PreferQualityType.HD)
-            {
-                var hdFormats = availableFormats.Where(p => p.Data.Quality == 116 || p.Data.Quality == 80).ToList();
-                selectedFormat = hdFormats.OrderByDescending(p => p.Data.Quality).FirstOrDefault();
-            }
-        }
-
-        if (selectedFormat is null)
-        {
-            // Auto without a remembered choice stays at 1080p60 (qn 116) or below.
-            selectedFormat = availableFormats
-                .Where(p => preferFormatSetting != PreferQualityType.Auto || _snapshot.PreferQuality > 0 || p.Data.Quality <= 116)
-                .OrderByDescending(p => p.Data.Quality)
-                .FirstOrDefault();
-        }
-
-        return selectedFormat?.Data;
+        var ids = streams.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        var withStream = formats.Where(p => ids.Contains(p.Quality.ToString(System.Globalization.CultureInfo.InvariantCulture))).ToList();
+        return withStream.Count > 0 ? withStream : formats;
     }
 
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
@@ -123,7 +183,9 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         {
             ThrowIfInitializationInvalid(request);
             options.MediaName = _snapshot.Video.Identifier.Title;
-            var (videoUrl, audioUrl) = GetPlayUrls();
+            var upstreamHeaders = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase) { ["User-Agent"] = userAgent };
+            var selection = CreateSelection(GetLoadSelection(GetPreferences()), upstreamHeaders);
+            var (videoUrl, audioUrl) = StageSelection(selection);
             var fileUrl = string.Empty;
             if (!string.IsNullOrEmpty(videoUrl))
             {
@@ -139,8 +201,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 fileUrl = audioUrl;
             }
 
+            var streamUrl = fileUrl;
             InjectDebugReplayFailure(ref fileUrl, options);
-            return new MpvMediaSource(fileUrl, _snapshot.Video.Identifier.Id, _snapshot.Video.Identifier.Title, options);
+            return new MpvMediaSource(fileUrl, _snapshot.Video.Identifier.Id, _snapshot.Video.Identifier.Title, options)
+            {
+                // The player reads the streams through its relay, so a node can change while the media plays.
+                Relay = fileUrl.Length > 0 && string.Equals(fileUrl, streamUrl, StringComparison.Ordinal) ? CreateRelaySource(userAgent, headers, logger) : null,
+            };
         }
     }
 
@@ -171,7 +238,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 throw new InvalidOperationException("必须先初始化媒体信息.");
             }
 
-            loadTask = _initTask ??= LoadMediaInfoCoreAsync(_snapshot, _part, request);
+            if (_initTask is null || _initTask.IsFaulted || _initTask.IsCanceled)
+            {
+                // A failed request is not kept: the next source asks again, as a reload does.
+                _initTask = LoadMediaInfoCoreAsync(_snapshot, _part, GetRequestedLanguage(_snapshot.PreferAudioLanguageId), request);
+            }
+
+            loadTask = _initTask;
         }
 
         await loadTask;
@@ -181,15 +254,30 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         }
     }
 
-    private async Task LoadMediaInfoCoreAsync(MediaSnapshot snapshot, VideoPart part, (long Generation, CancellationToken CancellationToken) request)
+    private async Task LoadMediaInfoCoreAsync(MediaSnapshot snapshot, VideoPart part, string? curLanguage, (long Generation, CancellationToken CancellationToken) request)
     {
         try
         {
-            var info = await playerService.GetVideoPlayDetailAsync(snapshot.Video.Identifier, Convert.ToInt64(part.Identifier.Id), request.CancellationToken);
+            var cid = Convert.ToInt64(part.Identifier.Id);
+            var info = await playerService.GetVideoPlayDetailAsync(snapshot.Video.Identifier, cid, request.CancellationToken, curLanguage);
+            var servedLanguage = curLanguage;
+            if (curLanguage is not null && !AudioLanguageInformation.MatchesCode(curLanguage, info?.CurrentLanguage))
+            {
+                // The response names the language it serves. An empty name is the original audio: the
+                // language is not offered here, or not to this account. Any other name is a third
+                // language, so the original audio is requested instead of playing something unasked for.
+                servedLanguage = default;
+                if (!string.IsNullOrEmpty(info?.CurrentLanguage))
+                {
+                    info = await playerService.GetVideoPlayDetailAsync(snapshot.Video.Identifier, cid, request.CancellationToken);
+                }
+            }
+
             lock (InitializationSync)
             {
                 ThrowIfInitializationInvalid(request);
                 _playbackInfo = info;
+                _servedLanguage = servedLanguage;
             }
         }
         catch (OperationCanceledException)
@@ -203,51 +291,79 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 ThrowIfInitializationInvalid(request);
             }
 
-            logger.LogError(ex, "获取视频播放信息失败");
+            logger.LogError("Playback | play detail request failed kind=video error={Error}", ex.GetType().Name);
             throw;
         }
     }
 
-    private (string? video, string? audio) GetPlayUrls()
+    internal override async Task<OnDemandPlaybackSelection?> DescribeSelectionAsync(OnDemandSelectionRequest selectionRequest)
     {
-        var videoSegments = _playbackInfo.Videos;
+        var request = CaptureInitialization();
+        await LoadMediaInfoAsync(request);
+        lock (InitializationSync)
+        {
+            ThrowIfInitializationInvalid(request);
+            return CreateSelection(selectionRequest, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Cookie"] = cookiesResolver.GetCookieString(),
+                ["Referer"] = InternalHttpExtensions.VideoReferer,
+                ["User-Agent"] = InternalHttpExtensions.VideoUserAgent,
+            });
+        }
+    }
+
+    private OnDemandPlaybackSelection CreateSelection(OnDemandSelectionRequest request, IReadOnlyDictionary<string, string> headers)
+    {
         var audioSegments = _playbackInfo.Audios;
-        var selectedFormat = GetCurrentFormat();
+        var maxAudioQuality = audioSegments?.Max(p => Convert.ToInt32(p.Id));
+        // Automatic audio keeps its existing ordering and never participates in quality adaptation.
+        var audioQuality = GetSelectedAudioQuality(request);
+        var aSeg = audioQuality?.Segment
+            ?? audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
+        var selectedFormat = ResolveFormat(request.ResolvedVideoQuality ?? request.Preferences.VideoQuality);
+        if (AdaptiveQualitySelection.IsEnabled(request, SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto)))
+        {
+            var formats = GetPlayableFormats().ToList();
+            var candidates = AdaptiveQualitySelection.BuildCandidates(formats, GetVideoSegment);
+            var policy = new AdaptiveQualityPolicy(AdaptiveBandwidthHistory.Session);
+            var decision = policy.SelectStart(TimeSpan.FromMilliseconds(Environment.TickCount64), candidates, aSeg?.Bandwidth ?? 0,
+                SettingsToolkit.ReadLocalSetting(SettingNames.PlayerSpeed, 1d));
+            _adaptiveStartDecision = decision with { FromQuality = PlayingSelection?.Format.Quality ?? 0 };
+            AdaptiveQualityDiagnostics.LogDecision(logger, _adaptiveStartDecision.Value);
+            selectedFormat = AdaptiveQualitySelection.PickStartFormat(formats, decision);
+        }
+
         if (selectedFormat is null)
         {
             throw new InvalidCastException("无法获取到有效的播放地址");
         }
 
-        var maxAudioQuality = audioSegments?.Max(p => Convert.ToInt32(p.Id));
+        var vSeg = GetVideoSegment(selectedFormat.Quality);
+        return DescribeSelection(selectedFormat, GetResolvedAudioSelections(request), request.Preferences,
+            vSeg, aSeg, audioQuality?.Kind ?? AudioQualityKind.Standard, headers);
+    }
+
+    private DashSegmentInformation? GetVideoSegment(int selectedQuality)
+    {
+        var videoSegments = _playbackInfo?.Videos;
         var preferCodec = AppToolkit.GetPreferCodecId();
         var preferCodecId = preferCodec switch { "hev" => 12, "av01" => 13, _ => 7 };
-        var quality = selectedFormat.Quality.ToString();
-        var vSeg = videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == preferCodecId || p.Codecs.Contains(preferCodec, StringComparison.Ordinal)))
+        var quality = selectedQuality.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == preferCodecId || p.Codecs.Contains(preferCodec, StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 7 || p.Codecs.Contains("avc", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 12 || p.Codecs.Contains("hev", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality && (p.CodecId == 13 || p.Codecs.Contains("av01", StringComparison.Ordinal)))
             ?? videoSegments?.FirstOrDefault(p => p.Id == quality);
-        var aSeg = audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
-
-        var videoUrl = vSeg?.BaseUrl;
-        var audioUrl = aSeg?.BaseUrl;
-
-        if (SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false))
-        {
-            if (vSeg?.BackupUrls is not null)
-            {
-                string[] videoUrls = [vSeg?.BaseUrl, .. vSeg?.BackupUrls];
-                videoUrl = Array.Find(videoUrls, p => !AppToolkit.IsP2PUrl(p)) ?? vSeg?.BaseUrl;
-            }
-
-            if (aSeg?.BackupUrls is not null)
-            {
-                string[] audioUrls = [aSeg?.BaseUrl, .. aSeg?.BackupUrls];
-                audioUrl = Array.Find(audioUrls, p => !AppToolkit.IsP2PUrl(p)) ?? aSeg?.BaseUrl;
-            }
-        }
-
-        SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
-        return (videoUrl, audioUrl);
     }
+
+    // The language code to request with cur_language; the original audio is requested without one.
+    private static string? GetRequestedLanguage(string? languageId)
+        => string.IsNullOrWhiteSpace(languageId) || languageId == AudioLanguageInformation.OriginalId ? default : languageId;
+
+    private OnDemandSelectionPreferences GetPreferences()
+        => new(GetManualQuality(_snapshot), _snapshot.PreferAudioQualityId, _snapshot.PreferAudioLanguageId, _snapshot.IsAutomaticAudioStandardOnly);
+
+    private AudioQualityInformation? GetSelectedAudioQuality(OnDemandSelectionRequest request)
+        => AudioSelections.PickQuality(_playbackInfo?.AudioQualities, request.ResolvedAudioQualityId ?? request.Preferences.AudioQualityId,
+            request.Preferences.StandardAudioOnly);
 }

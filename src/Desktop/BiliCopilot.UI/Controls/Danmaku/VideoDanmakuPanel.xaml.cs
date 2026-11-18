@@ -17,6 +17,8 @@ using Richasy.Danmaku.Models;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.MpvKernel.Player;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace BiliCopilot.UI.Controls.Danmaku;
 
@@ -217,9 +219,14 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         {
             ResetDanmakuStyle();
         }
+        else if (e.PropertyName == nameof(DanmakuRenderViewModel.DanmakuFontFamily))
+        {
+            _danmakuMaster?.SetFontFamilyName(ViewModel.DanmakuFontFamily);
+            UpdateMpvStyle();
+        }
         else if (_mpvRenderer is not null && e.PropertyName is nameof(DanmakuRenderViewModel.DanmakuOpacity)
             or nameof(DanmakuRenderViewModel.DanmakuFontSize) or nameof(DanmakuRenderViewModel.DanmakuArea)
-            or nameof(DanmakuRenderViewModel.DanmakuSpeed) or nameof(DanmakuRenderViewModel.DanmakuFontFamily)
+            or nameof(DanmakuRenderViewModel.DanmakuSpeed)
             or nameof(DanmakuRenderViewModel.IsDanmakuBold) or nameof(DanmakuRenderViewModel.OutlineSize)
             or nameof(DanmakuRenderViewModel.IsRollingEnabled) or nameof(DanmakuRenderViewModel.IsTopEnabled)
             or nameof(DanmakuRenderViewModel.IsBottomEnabled))
@@ -316,7 +323,7 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private void UpdateMpvStyle(int delay = 300)
     {
         if (_mpvRenderer is null || ViewModel is not { } vm) return;
-        _mpvRenderer.SetStyle(new MpvAssDanmakuStyle(vm.DanmakuFontFamily ?? "Segoe UI", vm.DanmakuFontSize,
+        _mpvRenderer.SetStyle(new MpvAssDanmakuStyle(vm.DanmakuFontFamily ?? DanmakuRenderViewModel.DefaultDanmakuFontFamily, vm.DanmakuFontSize,
             vm.IsDanmakuBold, vm.DanmakuOpacity, vm.OutlineSize, vm.DanmakuArea, vm.DanmakuSpeed,
             vm.IsRollingEnabled, vm.IsTopEnabled, vm.IsBottomEnabled, vm.IsDanmakuLimit, ActualWidth, ActualHeight,
             XamlRoot?.RasterizationScale ?? 1), delay);
@@ -385,7 +392,15 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         try
         {
             // Snapshot the UI-owned pool; parsing, duplicate merging and sorting create only data objects.
+            var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
+            var snapshotStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
             var snapshot = viewModel.GetCachedDanmakus().ToArray();
+            if (diagnostics && PlaybackStutterDiagnostics.IsSlow(snapshotStarted, out var snapshotMs))
+            {
+                PlaybackStutterDiagnostics.ReportSlow("DanmakuRedrawSnapshot", snapshotMs,
+                    string.Create(CultureInfo.InvariantCulture, $"items={snapshot.Length} renderer={PlaybackStutterDiagnostics.RendererName(_rendererType)}"));
+            }
+
             var useMpv = _rendererType == DanmakuRendererType.Mpv;
             var parsed = await Task.Run(() =>
             {
@@ -399,6 +414,8 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             {
                 if (version != _redrawVersion || ViewModel != viewModel || !CanShowDanmaku()) return;
 
+                var commitDiagnostics = PlaybackStutterDiagnostics.IsEnabled;
+                var commitStarted = commitDiagnostics ? Stopwatch.GetTimestamp() : 0;
                 _danmakuMaster?.SetDanmakuList(danmakus);
                 if (parsed.AssItems is { } assItems) _mpvRenderer?.SetItems(assItems);
                 _hasDanmakuList = danmakus.Count > 0;
@@ -411,6 +428,11 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
 
                 ResetDanmakuStyle();
                 UpdateRendererPlaybackState(force: true);
+                if (commitDiagnostics && PlaybackStutterDiagnostics.IsSlow(commitStarted, out var commitMs))
+                {
+                    PlaybackStutterDiagnostics.ReportSlow("DanmakuRedrawCommit", commitMs,
+                        string.Create(CultureInfo.InvariantCulture, $"items={danmakus.Count} renderer={PlaybackStutterDiagnostics.RendererName(_rendererType)}"));
+                }
             });
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -460,10 +482,13 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             _ = _mpvRenderer.DisposeAsync().AsTask();
             _mpvRenderer = null;
         }
+
+        AttachHover();
     }
 
     private void DetachPlaybackHost()
     {
+        DetachHover();
         if (_observedPlayer is not null) _observedPlayer.PropertyChanged -= OnObservedPlayerPropertyChanged;
         if (_playerViewModel is not null)
         {

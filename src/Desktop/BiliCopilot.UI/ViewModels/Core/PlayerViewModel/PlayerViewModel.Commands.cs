@@ -8,7 +8,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.WinUIKernel.Share.Base;
-using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Streams;
@@ -79,10 +78,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChangePlaybackRate))]
     private async Task IncreaseSpeedAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (!CanChangePlaybackRate || IsPlaybackClosing || IsPlayerInputCancellationPending) return;
         if (Player is null)
         {
             return;
@@ -93,10 +92,10 @@ public sealed partial class PlayerViewModel
         await ChangeSpeedAsync(newSpeed);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChangePlaybackRate))]
     private async Task DecreaseSpeedAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (!CanChangePlaybackRate || IsPlaybackClosing || IsPlayerInputCancellationPending) return;
         if (Player is null)
         {
             return;
@@ -121,20 +120,20 @@ public sealed partial class PlayerViewModel
                 ? PlayerPresentationModes.Normalize(_returnPresentation) : PlayerPresentationMode.Normal);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSeek))]
     private Task SkipBackwardAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
+        if (!CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
         var backwardSeconds = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.StepBackwardSecond, 10d);
         IsProgressChanging = true;
         LastProgressChangingTime = DateTimeOffset.Now;
         return ChangePositionAsync(Math.Max(Player.Position - backwardSeconds, 0));
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSeek))]
     private Task SkipForwardAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
+        if (!CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
         var forwardSeconds = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.StepForwardSecond, 30d);
         IsProgressChanging = true;
         LastProgressChangingTime = DateTimeOffset.Now;
@@ -146,11 +145,11 @@ public sealed partial class PlayerViewModel
     /// </summary>
     /// <returns><see cref="Task"/>.</returns>
     public Task ChangePositionAsync(double position)
-        => IsPlaybackClosing || IsPlayerInputCancellationPending ? Task.CompletedTask : OwnWork(ChangePositionCoreAsync(position));
+        => !CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending ? Task.CompletedTask : OwnWork(ChangePositionCoreAsync(position));
 
     private async Task ChangePositionCoreAsync(double position)
     {
-        if (Player is null || !double.IsFinite(position) || position < 0 || position > Player.Duration)
+        if (!CanSeek || Player is null || !double.IsFinite(position) || position < 0 || position > Player.Duration)
         {
             return;
         }
@@ -186,6 +185,12 @@ public sealed partial class PlayerViewModel
     private async Task PlayPauseAsync()
     {
         if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (IsLiveMedia)
+        {
+            if (LiveLoadState == LiveMediaLoadState.Ready) await PauseLiveAsync();
+            else await PlayLiveAsync();
+            return;
+        }
         if (Player is null || Player.PlaybackState == MpvPlayerState.Idle)
         {
             return;
@@ -221,17 +226,18 @@ public sealed partial class PlayerViewModel
             ? PlayerPresentationModes.Normalize(_returnPresentation) : PlayerPresentationMode.CompactOverlay);
     }
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
+    [RelayCommand(CanExecute = nameof(CanChangePlaybackRate), AllowConcurrentExecutions = true)]
     private Task TripleSpeedAsync()
-        => IsTouching ? BeginTemporarySpeedAsync(TouchSpeedOwner) : Task.CompletedTask;
+        => CanChangePlaybackRate && IsTouching ? BeginTemporarySpeedAsync(TouchSpeedOwner) : Task.CompletedTask;
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task RestoreSpeedAsync() => ReleaseTemporarySpeedAsync(TouchSpeedOwner);
+    [RelayCommand(CanExecute = nameof(CanChangePlaybackRate), AllowConcurrentExecutions = true)]
+    private Task RestoreSpeedAsync()
+        => CanChangePlaybackRate ? ReleaseTemporarySpeedAsync(TouchSpeedOwner) : Task.CompletedTask;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ResetSubtitlePositionAsync()
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         if (Client != null && Player != null)
         {
             SubtitlePosition = IsVerticalScreen ? _verticalSubtitlePosition : _horizontalSubtitlePosition;
@@ -239,10 +245,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ChangeSubtitlePositionAsync(double position)
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         if (Client != null && Player != null && Math.Abs(SubtitlePosition - position) >= 1)
         {
             if (IsVerticalScreen)
@@ -259,18 +265,19 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ReloadFontsAsync()
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         var version = _mediaVersion;
         if (Fonts.Count > 0)
         {
             return;
         }
 
-        var fonts = await this.Get<IFontToolkit>().GetFontsAsync();
-        if (!IsCurrentPlayback(version)) return;
+        // The shared font toolkit hands out a list it is still filling; read a private snapshot instead.
+        var fonts = await DanmakuFontCatalog.LoadAsync();
+        if (!IsCurrentPlayback(version) || Fonts.Count > 0) return;
         foreach (var item in fonts)
         {
             Fonts.Add(item);
@@ -285,10 +292,10 @@ public sealed partial class PlayerViewModel
         ChangeSubtitleFontFamilyCommand.Execute(localFont);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ChangeSubtitleFontSizeAsync(double fontSize)
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         if (Client != null && Player != null && Math.Abs(SubtitleFontSize - fontSize) >= 1)
         {
             SubtitleFontSize = fontSize;
@@ -297,10 +304,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ChangeSubtitleFontFamilyAsync(string font)
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         if (Client != null && Player != null && !string.IsNullOrEmpty(font) && SubtitleFontFamily != font && Window?.IsClosed == false)
         {
             SubtitleFontFamily = font;
@@ -309,10 +316,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseChapters))]
     private async Task SwitchToPreviousChapterAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (!CanUseChapters || IsPlaybackClosing || IsPlayerInputCancellationPending) return;
         if (Player is null || Player.PlaybackState == MpvPlayerState.Idle)
         {
             return;
@@ -327,10 +334,10 @@ public sealed partial class PlayerViewModel
         await SeekUserAsync(lastSelectedChapter.Position);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseChapters))]
     private async Task SwitchToNextChapterAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (!CanUseChapters || IsPlaybackClosing || IsPlayerInputCancellationPending) return;
         if (Player is null || Player.PlaybackState == MpvPlayerState.Idle)
         {
             return;
@@ -345,10 +352,10 @@ public sealed partial class PlayerViewModel
         await SeekUserAsync(nextSelectedChapter.Position);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSendOpaquePlayerKey))]
     private async Task SendKeyAsync(string key)
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (!CanSendOpaquePlayerKey(key) || IsPlaybackClosing || IsPlayerInputCancellationPending) return;
         if (Player is null)
         {
             return;
@@ -384,10 +391,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task SetSubtitleDelaySecondsAsync(double seconds)
     {
-        if (IsPlaybackClosing) return;
+        if (!CanUseSubtitles || IsPlaybackClosing) return;
         if (Player is null)
         {
             return;
@@ -404,10 +411,10 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUseSubtitles))]
     private async Task ToggleSubtitleEnabledAsync()
     {
-        if (IsPlaybackClosing || Client is null) return;
+        if (!CanUseSubtitles || IsPlaybackClosing || Client is null) return;
         if (IsSubtitleEnabled)
         {
             var selected = Subtitles.FirstOrDefault(p => p.IsSelected);
@@ -531,10 +538,10 @@ public sealed partial class PlayerViewModel
 
     private ContentDialog? _activeDanmakuDialog;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSendOnDemandDanmaku))]
     private async Task SendDanmakuAsync()
     {
-        if (IsPlaybackClosing || Player is null || IsConnecting || IsDanmakuLoading)
+        if (!CanSendOnDemandDanmaku || IsPlaybackClosing || Player is null || IsConnecting || IsDanmakuLoading)
         {
             return;
         }

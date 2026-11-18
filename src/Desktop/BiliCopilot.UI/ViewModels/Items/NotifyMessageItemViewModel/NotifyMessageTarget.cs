@@ -43,7 +43,7 @@ internal sealed record NotifyMessageTarget(NotifyMessageTargetKind Kind, string?
         return new(NotifyMessageTargetKind.Web, null, fallback);
     }
 
-    private static NotifyMessageTarget FromUri(string? value)
+    internal static NotifyMessageTarget FromUri(string? value)
     {
         var empty = new NotifyMessageTarget(NotifyMessageTargetKind.Web, null, null);
         if (string.IsNullOrWhiteSpace(value)) return empty;

@@ -22,6 +22,11 @@ internal sealed partial class PlayerComponentTemplateSelector : DataTemplateSele
         {
             return PgcTemplate;
         }
+        else if (item is LiveConnectorViewModel)
+        {
+            // Every host sets it, an empty template included: without one the host would print the type name.
+            return LiveTemplate;
+        }
 
         return default;
     }

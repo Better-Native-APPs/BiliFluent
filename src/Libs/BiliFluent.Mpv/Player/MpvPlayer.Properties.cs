@@ -10,17 +10,21 @@ namespace Richasy.MpvKernel.Player;
 
 public sealed partial class MpvPlayer
 {
+    private const int ObservedPropertyRefreshTicks = 6;
     private IMpvMediaSourceResolver? _sourceResolver;
     private IMpvMediaHistoryResolver? _historyResolver;
     private IMpvMediaSubtitleResolver? _subtitleResolver;
     private readonly ILogger _logger;
     private readonly SynchronizationContext _uiContext;
+#pragma warning disable CA2213 // The one cached disposal worker stops and disposes both timers after segment drain.
     private readonly System.Timers.Timer _statusTimer;
     private readonly System.Timers.Timer _historyTimer;
-    private readonly System.Timers.Timer _progressTimer;
+#pragma warning restore CA2213
+    private long _statusRefreshTicks;
+    private long _positionUpdateVersion;
 
     private MpvMediaSource? _cachedSource;
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
     private bool _isTlsError;
 
     /// <summary>

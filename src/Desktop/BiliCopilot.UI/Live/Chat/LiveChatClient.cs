@@ -1,7 +1,9 @@
 #nullable enable
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.WebSockets;
+using BiliCopilot.UI.Live.Application;
 using BiliCopilot.UI.Toolkits;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
@@ -9,7 +11,7 @@ using Richasy.BiliKernel.Bili.Authorization;
 
 namespace BiliCopilot.UI.Live;
 
-internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
+internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource, ILiveChatDiagnosticSink
 {
     private readonly object _gate = new();
     private readonly LiveHttpApi _http;
@@ -29,6 +31,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     private Task? _disconnectWorker;
     private TaskCompletionSource<bool>? _disposeCompletion;
     private Task? _disposeWorker;
+    private bool _disconnectReleased;
     private bool _poisoned;
 
     internal LiveChatClient(HttpMessageHandler handler, IBiliCookiesResolver cookies, IBiliTokenResolver tokens,
@@ -92,7 +95,8 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     {
         lock (_gate)
         {
-            if (_disconnectTask is not null)
+            var retry = _disconnectTask is { IsFaulted: true };
+            if (_disconnectTask is not null && !_disconnectTask.IsFaulted)
                 return _disconnectTask;
             var owner = _current;
             var send = _send;
@@ -109,7 +113,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
             _messages.Clear();
             _pendingStatus = null;
             _pendingAudience = null;
-            _disconnectWorker = DrainAsync(owner, send, completion);
+            _disconnectWorker = DrainAsync(owner, send, completion, retry);
             return completion.Task;
         }
     }
@@ -137,7 +141,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     {
         lock (_gate)
         {
-            if (_disposeCompletion is null)
+            if (_disposeCompletion is null || _disposeCompletion.Task.IsFaulted)
             {
                 _disposeCompletion = Completion<bool>(); // Permanently close new admission.
                 _disposeWorker = DisposeCoreAsync(_disposeCompletion);
@@ -155,6 +159,9 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
             while (true)
             {
                 owner.Stop.Token.ThrowIfCancellationRequested();
+                var startedAt = Stopwatch.GetTimestamp();
+                owner.ConnectionAttempts++;
+                owner.CloseReason = LiveFailureCategory.AccountResolver.ToString();
                 owner.LastStableDuration = TimeSpan.Zero;
                 LiveChatFailure failure;
                 try
@@ -182,6 +189,9 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 }
                 catch (Exception exception) { failure = Classify(exception); }
                 lock (_gate) owner.IsConnected = false;
+                ReportStatistics(owner.Statistics, final: true);
+                ReportClosed(owner.Stop.IsCancellationRequested ? LiveChatState.Closed.ToString() : owner.CloseReason,
+                    Stopwatch.GetElapsedTime(startedAt));
                 if (owner.Stop.IsCancellationRequested)
                     break;
                 ReportFailure(failure);
@@ -220,13 +230,13 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         {
             // The callback only requests cancellation. Join its actual unregister before Done,
             // so DrainAsync cannot dispose Stop while that callback is still using it.
-            try { await owner.AccountCancellation.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception)
+            try { await CloseStepAsync("chat-account-unregister", () => owner.AccountCancellation.DisposeAsync().AsTask()).ConfigureAwait(false); }
+            catch (Exception error)
             {
                 RecordFailure(LiveFailureCategory.RegistrationRelease);
-                owner.ReleaseFailed = true;
+                owner.RegistrationReleaseError = error;
                 lock (_gate) _poisoned = true;
-                terminalFailure = new LiveChatFailure("Live chat cleanup is incomplete.", false);
+                terminalFailure = LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error);
                 // Keep the registration on the retained owner; still publish actual worker completion.
             }
             lock (_gate) owner.IsConnected = false;
@@ -239,12 +249,16 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     private async Task RunSocketAsync(Owner owner, LiveCredentials credentials)
     {
         owner.LastStableDuration = TimeSpan.Zero;
+        owner.CloseReason = LiveFailureCategory.Discovery.ToString();
         var discovery = await _http.DiscoverAsync(owner.Binding, credentials, owner.Stop.Token).ConfigureAwait(false);
+        ReportPreparation(credentials.UserId != 0, discovery.Preparation, owner.ConnectionAttempts);
+        owner.CloseReason = LiveFailureCategory.AccountResolver.ToString();
         await LiveChatDispatch.InvokeAsync(_dispatcher, () =>
         {
             lock (_gate) { RequireCurrentAccount(owner); return true; }
         }, owner.Stop.Token).ConfigureAwait(false);
-        var attempt = new SocketAttempt(_socketFactory, owner.Stop.Token);
+        owner.CloseReason = LiveFailureCategory.SocketConnect.ToString();
+        var attempt = new SocketAttempt(_socketFactory, owner.Stop.Token, owner.Statistics);
         owner.Attempt = attempt; // Retain every allocated socket, including failed connections.
         try
         {
@@ -255,6 +269,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 await attempt.Connector.ConfigureAwait(false);
             }
             QueueStatus(owner, LiveChatState.Authenticating, null);
+            attempt.CloseReason = LiveFailureCategory.Authentication.ToString();
             using (var authDeadline = CancellationTokenSource.CreateLinkedTokenSource(attempt.Stop.Token))
             {
                 authDeadline.CancelAfter(TimeSpan.FromSeconds(10));
@@ -262,6 +277,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 var authentication = LiveProtocol.Authentication(credentials.UserId, owner.Binding.RoomId, discovery.Key, discovery.Buvid);
                 try
                 {
+                    attempt.AuthSentAt = Stopwatch.GetTimestamp();
                     attempt.AuthWriter = WriteAsync(attempt, authentication, authDeadline.Token);
                     await attempt.AuthWriter.ConfigureAwait(false);
                 }
@@ -272,6 +288,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 await attempt.Auth.Task.ConfigureAwait(false); // Only an explicit op-8 code:0 can complete it.
                 #pragma warning restore VSTHRD003
             }
+            attempt.CloseReason = LiveFailureCategory.SocketReceive.ToString();
             if (attempt.Receiver.IsCompleted)
                 await attempt.Receiver.ConfigureAwait(false);
             await LiveChatDispatch.InvokeAsync(_dispatcher, () =>
@@ -302,37 +319,72 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 {
                     using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                     attempt.Closer = CloseOutputAsync(attempt, closeDeadline.Token);
-                    await ObserveAsync(attempt.Closer, LiveFailureCategory.CloseHandshake).ConfigureAwait(false);
+                    await ObserveAsync(attempt.Closer, "chat-close-output", LiveFailureCategory.CloseHandshake, attempt.Stop.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception) { RecordFailure(LiveFailureCategory.CloseHandshake); }
             try { attempt.Socket.Abort(); }
             catch (Exception) { RecordFailure(LiveFailureCategory.SocketAbort); }
-            await ObserveAsync(attempt.Connector).ConfigureAwait(false);
-            await ObserveAsync(attempt.AuthWriter).ConfigureAwait(false);
-            await ObserveAsync(attempt.Receiver).ConfigureAwait(false);
-            await ObserveAsync(attempt.Heartbeat).ConfigureAwait(false);
+            await ObserveAsync(attempt.Connector, "chat-connect", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.AuthWriter, "chat-auth-send", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Receiver, "chat-receive", shutdown: attempt.Stop.Token).ConfigureAwait(false);
+            await ObserveAsync(attempt.Heartbeat, "chat-heartbeat", shutdown: attempt.Stop.Token).ConfigureAwait(false);
             try
             {
-                attempt.Socket.Dispose();
-                owner.Attempt = null;
+                await ReleaseSocketAsync(owner, attempt).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception error)
             {
-                owner.ReleaseFailed = true;
+                attempt.CloseReason = LiveFailureCategory.ChatRelease.ToString();
                 lock (_gate) _poisoned = true;
                 // Keep owner.Attempt/socket strongly owned and reject all replacement.
                 // A failed release must override an earlier transport failure: replacement is unsafe.
                 #pragma warning disable CA2219
-                throw new LiveChatFailure("Live chat transport could not be released.", false);
+                throw LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat transport could not be released.", false), error);
                 #pragma warning restore CA2219
             }
             finally
             {
-                attempt.Writes.Dispose();
-                attempt.Stop.Dispose();
+                owner.CloseReason = owner.ReleaseFailed ? LiveFailureCategory.ChatRelease.ToString()
+                    : attempt.HeartbeatFailure is not null ? LiveFailureCategory.Heartbeat.ToString()
+                    : attempt.ServerCloseReason ?? attempt.CloseReason;
             }
         }
+    }
+
+    private async Task ReleaseSocketAsync(Owner owner, SocketAttempt attempt)
+    {
+        Exception? failure = null;
+        if (!attempt.SocketReleased)
+        {
+            try
+            {
+                await CloseStepAsync("chat-socket-dispose", () => { attempt.Socket.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+                attempt.SocketReleased = true;
+            }
+            catch (Exception error) { failure = error; }
+        }
+        if (!attempt.WritesReleased)
+        {
+            try
+            {
+                await CloseStepAsync("chat-write-lock-dispose", () => { attempt.Writes.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+                attempt.WritesReleased = true;
+            }
+            catch (Exception error) { failure ??= error; }
+        }
+        if (!attempt.LifetimeReleased)
+        {
+            try
+            {
+                await CloseStepAsync("chat-attempt-lifetime-dispose", () => { attempt.Stop.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+                attempt.LifetimeReleased = true;
+            }
+            catch (Exception error) { failure ??= error; }
+        }
+        owner.SocketReleaseError = failure;
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        owner.Attempt = null;
     }
 
     private async Task ReceiveAsync(Owner owner, SocketAttempt attempt)
@@ -347,6 +399,8 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 var result = await attempt.Socket.ReceiveAsync(new ArraySegment<byte>(fragment), attempt.Stop.Token).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    attempt.ServerCloseReason = result.CloseStatus is { } closeStatus && Enum.IsDefined(closeStatus)
+                        ? closeStatus.ToString() : LiveChatState.Closed.ToString();
                     // Only known server-restart/internal/try-later closes are transient.
                     var code = (int?)result.CloseStatus;
                     throw new LiveChatFailure("Live chat connection closed.", code is 1011 or 1012 or 1013,
@@ -358,15 +412,28 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 await assembled.WriteAsync(fragment.AsMemory(0, result.Count)).ConfigureAwait(false);
                 if (!result.EndOfMessage)
                     continue;
+                Interlocked.Increment(ref attempt.Statistics.WsMessages);
                 LiveProtocol.Decode(assembled.ToArray(), (operation, body) =>
                 {
+                    Interlocked.Increment(ref attempt.Statistics.Packets);
+                    if (operation == 5)
+                    {
+                        Interlocked.Increment(ref attempt.Statistics.Op5);
+                        var command = LiveChatDiagnosticFacts.CommandName(body, out var danmaku);
+                        if (danmaku) Interlocked.Increment(ref attempt.Statistics.Danmaku);
+                        else Interlocked.Increment(ref attempt.Statistics.Other);
+                        attempt.Statistics.RecordCommand(command);
+                    }
                     if (operation == 8)
                     {
+                        ReportAuthentication(LiveChatDiagnosticFacts.AuthenticationCode(body),
+                            Stopwatch.GetElapsedTime(attempt.AuthSentAt));
                         LiveProtocol.RequireAuthenticationSuccess(body);
                         attempt.Auth.TrySetResult(true);
                     }
                     else if (operation == 3)
                     {
+                        Interlocked.Increment(ref attempt.Statistics.HeartbeatReply);
                         if (body.Length < 4)
                             throw LiveProtocol.Invalid();
                         _ = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(body.Span);
@@ -385,6 +452,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                         {
                             QueueMessage(owner, message);
                         }
+                        else Interlocked.Increment(ref attempt.Statistics.ParseNull);
                     }
                 });
                 assembled.SetLength(0);
@@ -393,6 +461,9 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         }
         catch (Exception exception)
         {
+            var stopped = LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested);
+            ReportOwnedTaskFault("chat-receive", exception, stopped);
+            if (stopped) throw new OperationCanceledException(attempt.Stop.Token);
             var failure = Classify(exception);
             attempt.Auth.TrySetException(failure);
             throw failure;
@@ -408,13 +479,19 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(attempt.Stop.Token);
                 deadline.CancelAfter(TimeSpan.FromSeconds(10));
                 await WriteAsync(attempt, LiveProtocol.Encode(2, ReadOnlySpan<byte>.Empty), deadline.Token).ConfigureAwait(false);
+                Interlocked.Increment(ref attempt.Statistics.HeartbeatSent);
                 await _delay(TimeSpan.FromSeconds(30), attempt.Stop.Token).ConfigureAwait(false);
+                ReportStatistics(attempt.Statistics, final: false);
             }
         }
         catch (Exception exception)
         {
+            ReportOwnedTaskFault("chat-heartbeat", exception, LiveCloseTermination.IsExpected(exception, attempt.Stop.IsCancellationRequested));
             if (!attempt.Stop.IsCancellationRequested)
+            {
+                attempt.CloseReason = LiveFailureCategory.Heartbeat.ToString();
                 attempt.HeartbeatFailure = Classify(exception);
+            }
             Cancel(attempt.Stop);
             try { attempt.Socket.Abort(); }
             catch (Exception) { RecordFailure(LiveFailureCategory.SocketAbort); }
@@ -489,7 +566,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         }
     }
 
-    private async Task DrainAsync(Owner? owner, SendAttempt? send, TaskCompletionSource<bool> completion)
+    private async Task DrainAsync(Owner? owner, SendAttempt? send, TaskCompletionSource<bool> completion, bool retry)
     {
         try
         {
@@ -515,10 +592,24 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 await send.Worker.ConfigureAwait(false);
                 #pragma warning restore VSTHRD003
             }
+            if (retry && owner?.SocketReleaseError is not null && owner.Attempt is { } attempt)
+                await ReleaseSocketAsync(owner, attempt).ConfigureAwait(false);
+            if (retry && owner?.RegistrationReleaseError is not null)
+            {
+                await CloseStepAsync("chat-account-unregister", () => owner.AccountCancellation.DisposeAsync().AsTask()).ConfigureAwait(false);
+                owner.RegistrationReleaseError = null;
+            }
             lock (_gate)
             {
+                var startedAt = Stopwatch.GetTimestamp();
                 if (owner?.ReleaseFailed == true)
-                    throw new LiveChatFailure("Live chat transport could not be released.", false);
+                {
+                    var error = new LiveChatFailure("Live chat transport could not be released.", false);
+                    error = LiveCloseDiagnostics.Forward(error, owner.ReleaseFailure!);
+                    ReportCloseStep("chat-transport-release-confirmed", error, Stopwatch.GetElapsedTime(startedAt));
+                    throw error;
+                }
+                ReportCloseStep("chat-transport-release-confirmed", null, Stopwatch.GetElapsedTime(startedAt));
                 owner?.Stop.Dispose();
                 if (_current == owner)
                     _current = null;
@@ -526,10 +617,10 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                 _disconnectTask = null;
             }
         }
-        catch (Exception)
+        catch (Exception error)
         {
             lock (_gate) _poisoned = true;
-            completion.TrySetException(new LiveChatFailure("Live chat cleanup is incomplete.", false));
+            completion.TrySetException(LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error));
         }
     }
 
@@ -537,14 +628,18 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     {
         try
         {
-            await DisconnectAsync().ConfigureAwait(false);
-            _http.Dispose();
+            if (!_disconnectReleased)
+            {
+                await CloseStepAsync("chat-disconnect", DisconnectAsync).ConfigureAwait(false);
+                _disconnectReleased = true;
+            }
+            await CloseStepAsync("chat-http-handler-dispose", () => { _http.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
             completion.TrySetResult(true);
         }
-        catch (Exception)
+        catch (Exception error)
         {
             lock (_gate) _poisoned = true;
-            completion.TrySetException(new LiveChatFailure("Live chat cleanup is incomplete.", false));
+            completion.TrySetException(LiveCloseDiagnostics.Forward(new LiveChatFailure("Live chat cleanup is incomplete.", false), error));
         }
     }
 
@@ -563,9 +658,15 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     {
         lock (_gate)
         {
-            if (!CanUse(owner) || !owner.Dedupe.Admit(message) || _messages.Count >= 256)
+            if (!CanUse(owner) || !owner.Dedupe.Admit(message))
                 return;
+            if (_messages.Count >= 256)
+            {
+                Interlocked.Increment(ref owner.Statistics.QueueDrop);
+                return;
+            }
             _messages.Enqueue(message);
+            Interlocked.Increment(ref owner.Statistics.QueueIn);
             ScheduleDrain();
         }
     }
@@ -630,7 +731,14 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
                     var message = _messages.Dequeue();
                     if (!CanUse(owner) || !CurrentAccountMatches(owner) || message.Binding != owner.Binding)
                         continue;
-                    try { MessageReceived?.Invoke(this, message); }
+                    try
+                    {
+                        if (MessageReceived is { } handlers)
+                        {
+                            Interlocked.Increment(ref owner.Statistics.Dispatched);
+                            handlers(this, message);
+                        }
+                    }
                     catch (Exception) { RecordFailure(LiveFailureCategory.MessageSubscriber); }
                 }
             }
@@ -690,7 +798,8 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         catch (ObjectDisposedException) { RecordFailure(LiveFailureCategory.CancellationAfterRelease); }
     }
 
-    private async Task ObserveAsync(Task task, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault)
+    private async Task ObserveAsync(Task task, string name, LiveFailureCategory category = LiveFailureCategory.OwnedTaskFault,
+        CancellationToken shutdown = default)
     {
         try {
             // T2-09: This observer consumes already-issued owned work; it cannot be the producer of the completion it observes.
@@ -699,8 +808,45 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
             #pragma warning restore VSTHRD003
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception) { RecordFailure(category); }
+        catch (Exception error)
+        {
+            var stopped = LiveCloseTermination.IsExpected(error, shutdown.IsCancellationRequested);
+            if (!stopped) RecordFailure(category);
+            ReportOwnedTaskFault(name, error, stopped);
+        }
     }
+
+    private void ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown = false)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            var level = expectedShutdown ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+                logger.Log(level, "Live | task-fault name={Name:l} result={Result:l} error={Error:l} inner={Inner:l}",
+                    name, expectedShutdown ? "stopped" : "failed", error.GetType().Name, error.InnerException?.GetType().Name ?? "none");
+        });
+
+    void ILiveChatDiagnosticSink.ReportOwnedTaskFault(string name, Exception error, bool expectedShutdown) => ReportOwnedTaskFault(name, error, expectedShutdown);
+
+    private async Task CloseStepAsync(string name, Func<Task> operation)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        Exception? failure = null;
+        try { await operation().ConfigureAwait(false); }
+        catch (Exception error) { failure = error; LiveCloseDiagnostics.Record(error, name); throw; }
+        finally { ReportCloseStep(name, failure, Stopwatch.GetElapsedTime(startedAt)); }
+    }
+
+    void ILiveChatDiagnosticSink.ReportCloseStep(string name, Exception? error, TimeSpan elapsed) => ReportCloseStep(name, error, elapsed);
+
+    private void ReportCloseStep(string name, Exception? error, TimeSpan elapsed)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            var level = error is null ? LogLevel.Information : LogLevel.Warning;
+            if (logger.IsEnabled(level))
+                logger.Log(level, "Live | close-step name={Name:l} result={Result:l} error={Error:l} inner={Inner:l} ms={Milliseconds}",
+                    name, error is null ? "ok" : "failed", error?.GetType().Name ?? "none",
+                    error?.InnerException?.GetType().Name ?? "none", (long)elapsed.TotalMilliseconds);
+        });
 
     private void RecordFailure(LiveFailureCategory category)
         => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(),
@@ -709,6 +855,56 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
     private void ReportFailure(LiveChatFailure failure)
         => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(),
             logger => logger.LogWarning("Live chat failed: {Reason}", failure.Message));
+
+    private void ReportPreparation(bool uidSet, LiveChatPreparation preparation, int attempt)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation(
+                    "LiveChat | prepare uid-set={UidSet:l} sessdata={Sessdata:l} bili-jct={BiliJct:l} buvid={Buvid:l} nav-code={NavCode:l} nav-login={NavLogin:l} nav-mid-match={NavMidMatch:l} hosts={Hosts} attempt={Attempt}",
+                    LiveChatDiagnosticFacts.Boolean(uidSet), LiveChatDiagnosticFacts.Boolean(preparation.Sessdata),
+                    LiveChatDiagnosticFacts.Boolean(preparation.BiliJct), LiveChatDiagnosticFacts.Boolean(preparation.Buvid),
+                    LiveChatDiagnosticFacts.Code(preparation.NavCode), LiveChatDiagnosticFacts.Boolean(preparation.NavLogin),
+                    LiveChatDiagnosticFacts.Boolean(preparation.NavMidMatch), preparation.Hosts, attempt);
+        });
+
+    private void ReportAuthentication(int? code, TimeSpan elapsed)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("LiveChat | auth code={Code:l} ms={Milliseconds}",
+                    LiveChatDiagnosticFacts.Code(code), (long)elapsed.TotalMilliseconds);
+        });
+
+    private void ReportStatistics(LiveChatStatistics statistics, bool final)
+    {
+        if (statistics.TakeSnapshot(final) is not { } snapshot) return;
+        SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation(
+                    "LiveChat | stats secs={Seconds:l} ws-messages={WsMessages} packets={Packets} op5={Op5} danmaku={Danmaku} other={Other} parse-null={ParseNull} queue-in={QueueIn} queue-drop={QueueDrop} dispatched={Dispatched} heartbeat-sent={HeartbeatSent} heartbeat-reply={HeartbeatReply} top-cmds={TopCommands:l}",
+                    snapshot.Seconds.ToString("F1", CultureInfo.InvariantCulture), snapshot.WsMessages, snapshot.Packets,
+                    snapshot.Op5, snapshot.Danmaku, snapshot.Other, snapshot.ParseNull, snapshot.QueueIn, snapshot.QueueDrop,
+                    snapshot.Dispatched, snapshot.HeartbeatSent, snapshot.HeartbeatReply, snapshot.TopCommands);
+        });
+    }
+
+    private void ReportClosed(string reason, TimeSpan elapsed)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("LiveChat | closed reason={Reason:l} lasted-secs={Seconds:l}",
+                    reason, elapsed.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture));
+        });
+
+    void ILiveChatDiagnosticSink.ReportRoomStatistics(long inboxIn, long inboxDrop, long published, long dispatchFail)
+        => SafeFailureContext.TryWriteFacts(() => this.Get<ILogger<LiveChatClient>>(), logger =>
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("LiveChat | room inbox-in={InboxIn} inbox-drop={InboxDrop} published={Published} dispatch-fail={DispatchFail}",
+                    inboxIn, inboxDrop, published, dispatchFail);
+        });
 
     private static TaskCompletionSource<T> Completion<T>() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -724,21 +920,28 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         internal readonly TaskCompletionSource<bool> Ready = Completion<bool>();
         internal readonly TaskCompletionSource<bool> Done = Completion<bool>();
         internal readonly LiveEventDeduplicator Dedupe = new();
+        internal readonly LiveChatStatistics Statistics = new();
         internal Task Worker = Task.CompletedTask;
         internal LiveAccountStamp? Stamp;
         internal CancellationTokenRegistration AccountCancellation;
         internal bool AccountLinked;
         internal bool Accepting = true;
         internal bool IsConnected;
-        internal bool ReleaseFailed;
+        internal Exception? SocketReleaseError;
+        internal Exception? RegistrationReleaseError;
+        internal bool ReleaseFailed => ReleaseFailure is not null;
+        internal Exception? ReleaseFailure => SocketReleaseError ?? RegistrationReleaseError;
         internal TimeSpan LastStableDuration;
         internal SocketAttempt? Attempt;
+        internal int ConnectionAttempts;
+        internal string CloseReason = LiveFailureCategory.AccountResolver.ToString();
     }
 
     private sealed class SocketAttempt
     {
-        internal SocketAttempt(Func<ILiveChatSocket> factory, CancellationToken token)
+        internal SocketAttempt(Func<ILiveChatSocket> factory, CancellationToken token, LiveChatStatistics statistics)
         {
+            Statistics = statistics;
             Stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             try { Socket = factory() ?? throw LiveProtocol.Invalid(); }
             catch { Stop.Dispose(); Writes.Dispose(); throw; }
@@ -747,6 +950,7 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         internal readonly CancellationTokenSource Stop;
         internal readonly SemaphoreSlim Writes = new(1, 1);
         internal readonly TaskCompletionSource<bool> Auth = Completion<bool>();
+        internal readonly LiveChatStatistics Statistics;
         internal Task Connector = Task.CompletedTask;
         internal Task AuthWriter = Task.CompletedTask;
         internal Task Receiver = Task.CompletedTask;
@@ -754,6 +958,12 @@ internal sealed class LiveChatClient : ILiveChatClient, ILiveAudienceSource
         internal Task Closer = Task.CompletedTask;
         internal LiveChatFailure? HeartbeatFailure;
         internal long? ConnectedAt;
+        internal long AuthSentAt;
+        internal string CloseReason = LiveFailureCategory.SocketConnect.ToString();
+        internal string? ServerCloseReason;
+        internal bool SocketReleased;
+        internal bool WritesReleased;
+        internal bool LifetimeReleased;
     }
 
     private sealed class SendAttempt

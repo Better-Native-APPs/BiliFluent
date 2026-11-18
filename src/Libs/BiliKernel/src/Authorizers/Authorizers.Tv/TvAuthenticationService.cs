@@ -26,14 +26,16 @@ public sealed class TVAuthenticationService : IAuthenticationService
         IQRCodeResolver qrCodeResolver,
         IBiliCookiesResolver localCookiesResolver,
         IBiliTokenResolver localTokenResolver,
-        BiliAuthenticator basicAuthenticator)
+        BiliAuthenticator basicAuthenticator,
+        IBiliLoginDeviceResolver loginDeviceResolver)
     {
         _qrCodeResolver = qrCodeResolver;
         _client = new TVAuthorizeClient(
             httpClient: biliHttpClient,
             localCookiesResolver: localCookiesResolver,
             localTokenResolver: localTokenResolver,
-            basicAuthenticator: basicAuthenticator);
+            basicAuthenticator: basicAuthenticator,
+            deviceIdentity: new LoginDeviceIdentity(loginDeviceResolver.GetOrCreateDeviceId()));
     }
 
     /// <inheritdoc/>

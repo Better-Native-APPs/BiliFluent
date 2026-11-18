@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Core.ChapterPreviewTip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    AutomationProperties.AccessibilityView="Raw"
+    IsHitTestVisible="False"
+    IsTabStop="False"
+    mc:Ignorable="d">
+
+    <!--
+        The bubble over the progress bar while the pointer hovers or drags it: the chapter under the pointer, then the time.
+        Drawing only. It never takes the pointer or the focus, so the slider below keeps every input.
+    -->
+    <Border
+        Padding="10,6,10,7"
+        Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="{StaticResource ControlCornerRadius}"
+        Translation="0,0,16">
+        <Border.Shadow>
+            <ThemeShadow />
+        </Border.Shadow>
+        <StackPanel Spacing="1">
+            <TextBlock
+                x:Name="TitleBlock"
+                MaxWidth="240"
+                HorizontalAlignment="Center"
+                FontWeight="SemiBold"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                x:Name="TimeBlock"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}" />
+        </StackPanel>
+    </Border>
+</UserControl>

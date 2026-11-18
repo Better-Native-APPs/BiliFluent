@@ -60,7 +60,9 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
         }
 
         SelectedSortType = sortType;
+        _videoGeneration++;
         _childPartitionVideoCache.Clear();
+        _recentChildPartitions.Clear();
         Videos.Clear();
         _childPartitionOffsetCache.Clear();
         await LoadVideosAsync();
@@ -69,15 +71,15 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
     [RelayCommand]
     private async Task RefreshAsync()
     {
+        _videoGeneration++;
         if (IsRecommend)
         {
             _recommendOffset = 0;
-            _recommendVideoCache?.Clear();
+            _recommendVideoCache = null;
         }
         else
         {
-            _childPartitionVideoCache.Remove(CurrentPartition.Data.Id);
-            _childPartitionOffsetCache.Remove(CurrentPartition.Data.Id);
+            EvictChildPartition(CurrentPartition.Data.Id);
         }
 
         Videos.Clear();
@@ -92,20 +94,10 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
             return;
         }
 
+        CacheCurrentPartition();
         IsRecommend = partition.Data.Id == Data.Data.Id;
-        if (Videos.Count > 0)
-        {
-            if (IsRecommend)
-            {
-                _recommendVideoCache = Videos.ToList();
-            }
-            else
-            {
-                _childPartitionVideoCache[CurrentPartition.Data.Id] = Videos.ToList();
-            }
-        }
-
         CurrentPartition = partition;
+        _videoGeneration++;
         Videos.Clear();
         if (IsRecommend && _recommendVideoCache is not null && _recommendVideoCache.Count > 0)
         {
@@ -113,13 +105,21 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
             {
                 Videos.Add(item);
             }
+
+            _recommendVideoCache = null;
         }
-        else if (_childPartitionVideoCache.TryGetValue(CurrentPartition.Data.Id, out var cache))
+        else if (!IsRecommend && _childPartitionVideoCache.Remove(CurrentPartition.Data.Id, out var cache))
         {
+            _recentChildPartitions.Remove(CurrentPartition.Data.Id);
             foreach (var item in cache)
             {
                 Videos.Add(item);
             }
+        }
+
+        while (_recentChildPartitions.Count > ChildPartitionCacheLimit)
+        {
+            EvictChildPartition(_recentChildPartitions.Last!.Value);
         }
 
         if (Videos.Count == 0)
@@ -132,6 +132,35 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
         }
     }
 
+    private void CacheCurrentPartition()
+    {
+        if (CurrentPartition is null) return;
+        // Keep whole lists with their exact cursors, or restart from the first page.
+        if (IsRecommend)
+        {
+            _recommendVideoCache = Videos.Count is > 0 and <= VideoCacheLimit ? Videos.ToList() : null;
+            if (_recommendVideoCache is null) _recommendOffset = 0;
+        }
+        else if (Videos.Count is > 0 and <= VideoCacheLimit)
+        {
+            var id = CurrentPartition.Data.Id;
+            _childPartitionVideoCache[id] = Videos.ToList();
+            _recentChildPartitions.Remove(id);
+            _recentChildPartitions.AddFirst(id);
+        }
+        else
+        {
+            EvictChildPartition(CurrentPartition.Data.Id);
+        }
+    }
+
+    private void EvictChildPartition(string id)
+    {
+        _childPartitionVideoCache.Remove(id);
+        _childPartitionOffsetCache.Remove(id);
+        _recentChildPartitions.Remove(id);
+    }
+
     [RelayCommand]
     private async Task LoadVideosAsync()
     {
@@ -141,24 +170,33 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
         }
 
         IsVideoLoading = true;
+        var generation = _videoGeneration;
         if (IsRecommend)
         {
-            await LoadRecommendVideosAsync();
+            await LoadRecommendVideosAsync(generation);
         }
         else
         {
-            await LoadChildPartitionVideosAsync();
+            await LoadChildPartitionVideosAsync(generation);
         }
 
         IsVideoLoading = false;
+        if (generation != _videoGeneration && Videos.Count == 0)
+        {
+            // A switch/refresh during the old request still needs its own first page.
+            await LoadVideosAsync();
+            return;
+        }
+
         VideoListUpdated?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task LoadRecommendVideosAsync()
+    private async Task LoadRecommendVideosAsync(long generation)
     {
         try
         {
             var (videos, offset) = await _service.GetPartitionRecommendVideoListAsync(Data.Data, _recommendOffset);
+            if (generation != _videoGeneration) return;
             _recommendOffset = offset;
             TryAddVideos(videos, VideoCardStyle.Partition);
         }
@@ -168,25 +206,27 @@ public sealed partial class VideoPartitionDetailViewModel : ViewModelBase<Partit
         }
     }
 
-    private async Task LoadChildPartitionVideosAsync()
+    private async Task LoadChildPartitionVideosAsync(long generation)
     {
+        var partition = CurrentPartition;
         try
         {
             var offset = 0L;
             var pn = 0;
-            if (_childPartitionOffsetCache.TryGetValue(CurrentPartition.Data.Id, out var offsetCache))
+            if (_childPartitionOffsetCache.TryGetValue(partition.Data.Id, out var offsetCache))
             {
                 offset = offsetCache.Offset;
                 pn = offsetCache.PageNumber;
             }
 
-            var (videos, nextOffset, nextPn) = await _service.GetChildPartitionVideoListAsync(CurrentPartition.Data, offset, pn, SelectedSortType);
-            _childPartitionOffsetCache[CurrentPartition.Data.Id] = (nextOffset, nextPn);
+            var (videos, nextOffset, nextPn) = await _service.GetChildPartitionVideoListAsync(partition.Data, offset, pn, SelectedSortType);
+            if (generation != _videoGeneration) return;
+            _childPartitionOffsetCache[partition.Data.Id] = (nextOffset, nextPn);
             TryAddVideos(videos, VideoCardStyle.Partition);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"尝试加载 {Data.Data.Name}/{CurrentPartition.Data.Name} 分区视频时出错.");
+            _logger.LogError(ex, $"尝试加载 {Data.Data.Name}/{partition.Data.Name} 分区视频时出错.");
         }
     }
 

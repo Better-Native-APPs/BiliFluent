@@ -3,6 +3,7 @@
     x:Class="BiliCopilot.UI.Controls.Player.StoreIsland.IslandFormatButton"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:core="using:BiliCopilot.UI.Controls.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
@@ -23,9 +24,13 @@
         </ResourceDictionary>
     </core:PlayerControlBase.Resources>
 
-    <!--  Store 源 Controls/Player/VideoPlayerFormatButton.xaml：Hd 图标、Quality 提示、ItemsView(220) 清晰度列表原样保留  -->
-    <Grid Visibility="{x:Bind ViewModel.IsSourceSelectable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-        <Button Style="{StaticResource CircleIconButtonStyle}" ToolTipService.ToolTip="{ext:Locale Name=Quality}">
+    <!--  Store 源 Controls/Player/VideoPlayerFormatButton.xaml：Hd 图标、Quality 提示、ItemsView(220) 清晰度列表原样保留；媒体带杜比或 Hi-Res 音频时，下方多一段音质列表  -->
+    <!--  A live room uses this same button and menu: its list holds the tiers of the room, without an automatic entry and without audio qualities.  -->
+    <Grid Visibility="{x:Bind ViewModel.HasQualityMenu, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+        <Button
+            AutomationProperties.Name="{ext:Locale Name=Quality}"
+            Style="{StaticResource CircleIconButtonStyle}"
+            ToolTipService.ToolTip="{ext:Locale Name=Quality}">
             <ic:SymbolIcon FontSize="14" Symbol="Hd" />
             <Button.Flyout>
                 <Flyout
@@ -43,6 +48,7 @@
                         <ItemsView
                             x:Name="FormatView"
                             Width="220"
+                            AutomationProperties.Name="{ext:Locale Name=Quality}"
                             IsItemInvokedEnabled="True"
                             ItemInvoked="OnFormatItemInvoked"
                             SelectionMode="Single">
@@ -50,6 +56,7 @@
                                 <DataTemplate x:DataType="items:SourceItemViewModel">
                                     <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
                                     <ItemContainer
+                                        AutomationProperties.Name="{x:Bind core:PlayerOverlay.GetSourceItemName(Eotf, Name), Mode=OneWay}"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         IsEnabled="{x:Bind IsEnabled}"
                                         Style="{StaticResource AppItemContainerStyle}">
@@ -59,7 +66,25 @@
                                             Background="Transparent"
                                             Tag="{x:Bind}"
                                             Tapped="OnFormatItemTapped">
-                                            <TextBlock VerticalAlignment="Center" Text="{x:Bind Name}" />
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <!--  The automatic entry is renamed after the quality it picks.  -->
+                                            <TextBlock VerticalAlignment="Center" Text="{x:Bind Name, Mode=OneWay}" />
+                                            <!--
+                                                A quiet note at the far end, as on an audio quality row: this tier of a live room is HDR and
+                                                its name does not say so. Two tiers of one name differ by it. No other row has it.
+                                            -->
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="HDR"
+                                                Visibility="{x:Bind core:PlayerOverlay.GetHdrNoteVisibility(Eotf, Name)}" />
                                         </Grid>
                                     </ItemContainer>
                                 </DataTemplate>
@@ -68,6 +93,62 @@
                                 <StackLayout Spacing="4" />
                             </ItemsView.Layout>
                         </ItemsView>
+                        <!--  Dolby and Hi-Res, when the media has them. Without them the menu is the quality list alone.  -->
+                        <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasMultipleAudioQualities, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock
+                                Margin="0,8,0,0"
+                                HorizontalAlignment="Left"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{ext:Locale Name=AudioTrackQuality}" />
+                            <ItemsView
+                                x:Name="AudioQualityView"
+                                Width="220"
+                                AutomationProperties.Name="{ext:Locale Name=AudioTrackQuality}"
+                                IsItemInvokedEnabled="True"
+                                ItemInvoked="OnFormatItemInvoked"
+                                SelectionMode="Single">
+                                <ItemsView.ItemTemplate>
+                                    <DataTemplate x:DataType="items:AudioQualityItemViewModel">
+                                        <!--  The card fill sits on the container; the transparent Grid keeps the whole row tappable.  -->
+                                        <ItemContainer
+                                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            IsEnabled="{x:Bind IsEnabled}"
+                                            Style="{StaticResource AppItemContainerStyle}">
+                                            <Grid
+                                                MinHeight="40"
+                                                Padding="12,0"
+                                                Background="Transparent"
+                                                ColumnSpacing="8"
+                                                Tag="{x:Bind}"
+                                                Tapped="OnFormatItemTapped">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <base:TrimTextBlock
+                                                    VerticalAlignment="Center"
+                                                    MaxLines="1"
+                                                    Text="{x:Bind Name}" />
+                                                <!--  A quiet note at the far end: this entry needs a premium membership.  -->
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AccessibilityView="Raw"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{ext:Locale Name=AudioTrackVip}"
+                                                    Visibility="{x:Bind NeedVip}" />
+                                            </Grid>
+                                        </ItemContainer>
+                                    </DataTemplate>
+                                </ItemsView.ItemTemplate>
+                                <ItemsView.Layout>
+                                    <StackLayout Spacing="4" />
+                                </ItemsView.Layout>
+                            </ItemsView>
+                        </StackPanel>
                     </StackPanel>
                 </Flyout>
             </Button.Flyout>

@@ -133,6 +133,25 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         BottomProgressBar.RegisterPropertyChangedCallback(ProgressBar.MaximumProperty, OnBottomProgressMaximumChanged);
     }
 
+    // A send of a live room that did not go through: the draft stays in the box and the tip tells why.
+    private void OnRoomComposerNoticed(object? sender, BiliCopilot.UI.Live.Controls.LiveComposerNotice notice)
+        => ShowTip(notice.Message, notice.Type);
+
+    // The button of the ended state: ask for the newest picture of the room once.
+    private async void OnRoomRefreshClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanRefreshLive: true } owner) return;
+        try
+        {
+            await owner.RefreshLiveAsync();
+        }
+        catch (Exception ex)
+        {
+            // The player shows what went wrong with the picture; nothing is retried here.
+            System.Diagnostics.Debug.WriteLine($"Live refresh failed: {ex.Message}");
+        }
+    }
+
     public void ShowTip(string text, InfoType type = InfoType.Error)
     {
         // Capture the requesting owner/media on the UI thread; an off-thread caller is bound when dispatched.
@@ -254,6 +273,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         QueueHeaderWidthUpdate();
         // Re-associate SponsorBlock views registered through BindSponsorViews (view state only).
         ApplySponsorViews();
+        HookCommandDanmakuChrome(true);
+        AttachCommandDanmaku(ViewModel);
         RequestHostChromeRegionUpdate();
     }
 
@@ -273,6 +294,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         CancelPendingInput();
         // Drop SponsorBlock view subscriptions; the registration is kept for a later reload.
         DetachSponsorViews();
+        AttachCommandDanmaku(null);
+        HookCommandDanmakuChrome(false);
         if (IslandTransport is not null)
         {
             IslandTransport.InteractionStateChanged -= OnTransportInteractionChanged;
@@ -312,6 +335,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         {
             bar.SizeChanged -= OnSponsorLayoutSizeChanged;
             if (_sponsorLayoutHooked) bar.SizeChanged += OnSponsorLayoutSizeChanged;
+            HookCommandDanmakuTransport(bar, true);
         }
         ApplySponsorViews();
         OnTransportInteractionChanged(sender, false);
@@ -333,7 +357,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
                 break;
         }
         // Use the sender: x:Load can already have cleared the generated named field.
-        if (sender is FrameworkElement bar) bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+        if (sender is FrameworkElement bar)
+        {
+            bar.SizeChanged -= OnSponsorLayoutSizeChanged;
+            HookCommandDanmakuTransport(bar, false);
+        }
         OnTransportInteractionChanged(sender, false);
         if (_loaded) QueueSponsorChrome();
     }
@@ -350,6 +378,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         CancelPendingInput();
         if (!ReferenceEquals(ViewModel, newValue)) return;
         SubscribeViewModel(_loaded ? newValue : null);
+        AttachCommandDanmaku(_loaded ? newValue : null);
         RefreshEmbeddedInteractionNotice();
         // Retire a width callback captured for the old VM; requeue only the latest width for the new one.
         if (_headerWidthTicket is not null) QueueHeaderWidthUpdate();
@@ -494,6 +523,18 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         TransportControls?.CancelPendingInput();
     }
 
+    internal bool TryDismissNavigationTransient()
+    {
+        if (_sponsorFlyout?.IsOpen == true)
+        {
+            _sponsorFlyout.Hide();
+            return true;
+        }
+        if (ViewModel?.IsPopupVisible != true) return false;
+        CancelPendingInput(); // Existing popup leases own Hide and their Closed callbacks.
+        return true;
+    }
+
     /// <summary>Restore physical surface input without retiring transport-owned flyouts.</summary>
     public void CancelSurfaceInput()
         => CancelSurfaceInput(preserveMouseTap: true);
@@ -536,6 +577,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         args.Handled = true;
         ShowControlsForInput();
         if (args.KeyStatus.WasKeyDown) return;
+        if (args.Key == VirtualKey.Escape && owner.IsEmbedded)
+        {
+            this.Get<NavigationViewModel>().Back();
+            return;
+        }
         try { await command.ExecuteAsync(null); }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Player shortcut failed: {ex.Message}"); }
     }
@@ -565,7 +611,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         => NextTip?.Hide();
 
     private void OnRequestShowNextTip(object? sender, EventArgs e)
-        => NextTip?.Show();
+    {
+        // The countdown to the next item belongs to a media with a playlist.
+        if (ViewModel is { } vm && !IsCapabilityShown(vm.CanNavigatePlaylist, vm.HasAdmittedMedia)) return;
+        NextTip?.Show();
+    }
 
     private void OnWarningOccurred(object? sender, string e)
     {
@@ -655,6 +705,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             RequestHostChromeRegionUpdate();
         }
         OnSponsorHostPropertyChanged(e.PropertyName);
+        OnCommandDanmakuHostPropertyChanged(e.PropertyName);
         if (e.PropertyName is null or "" or nameof(PlayerViewModel.Connector) or nameof(PlayerViewModel.MediaGeneration)
             or nameof(PlayerViewModel.Presentation) or nameof(PlayerViewModel.IsEmbedded) or nameof(PlayerViewModel.Player)
             or nameof(PlayerViewModel.IsConnecting) or nameof(PlayerViewModel.IsPlaybackClosing) or nameof(PlayerViewModel.ErrorMessage)
@@ -681,7 +732,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
         else if (e.PropertyName == nameof(ViewModel.CurrentVolume))
         {
-            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / ViewModel.MaxVolume);
+            var thumbHeight = VolumeContainer.ActualHeight * (ViewModel.CurrentVolume / GetVolumeCeiling(ViewModel.MaxVolume));
             VolumeThumb?.Height = Math.Max(0, thumbHeight);
         }
         else if (e.PropertyName == nameof(ViewModel.IsWindowDeactivated) && ViewModel.IsWindowDeactivated)
@@ -854,7 +905,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
 
         if (_isTransportInteracting || ViewModel.IsPopupVisible || ViewModel.IsExtraPanelVisible || ViewModel.IsSubtitleSettingsVisible
-            || ViewModel.IsPreviewProgressChanging || ViewModel.IsHoldingSpeedChanging)
+            || ViewModel.IsPreviewProgressChanging || ViewModel.IsHoldingSpeedChanging || IsCommandDanmakuPointerOver)
         {
             return;
         }
@@ -1071,9 +1122,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
     }
 
-    // 返回：恢复标准视图（BackToDefaultModeCommand），不是关闭播放的 BackCommand.
-    private async void OnEmbeddedBackClick(object sender, RoutedEventArgs e)
-        => await RunEmbeddedHeaderCommandAsync(owner => owner.BackToDefaultModeCommand);
+    // The global Back owner preserves panel/presentation priority before walking visit history.
+    private void OnEmbeddedBackClick(object sender, RoutedEventArgs e)
+    {
+        if (CaptureEmbeddedHeaderRequest() is not { } request || !IsCurrentHeaderRequest(request)) return;
+        this.Get<NavigationViewModel>().Back();
+    }
 
     private async void OnEmbeddedCompactClick(object sender, RoutedEventArgs e)
         => await RunEmbeddedHeaderCommandAsync(owner => owner.ToggleCompactOverlayCommand);
@@ -1389,8 +1443,19 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (!_loaded || ViewModel?.IsControlsVisible != true || ViewModel.IsWindowDeactivated
             || GetCurrentSourceFlyout() is not { } flyout
             || selectedSource?.IsEnabled != true
-            || !ViewModel.Sources.Any(item => ReferenceEquals(item, selectedSource))) return;
+            || !ViewModel.QualityMenuSources.Any(item => ReferenceEquals(item, selectedSource))) return;
         selectedSource?.ActiveCommand.Execute(default);
+        flyout.Hide();
+    }
+
+    private void OnAudioQualityItemClick(object sender, RoutedEventArgs e)
+    {
+        var quality = (sender as FrameworkElement)?.DataContext as AudioQualityItemViewModel;
+        if (!_loaded || ViewModel?.IsControlsVisible != true || ViewModel.IsWindowDeactivated
+            || GetCurrentSourceFlyout() is not { } flyout
+            || quality?.IsEnabled != true
+            || !ViewModel.AudioQualities.Any(item => ReferenceEquals(item, quality))) return;
+        quality.ActiveCommand.Execute(default);
         flyout.Hide();
     }
 

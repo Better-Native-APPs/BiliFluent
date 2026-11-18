@@ -7,6 +7,7 @@ using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
 using Humanizer;
 using Microsoft.Extensions.Logging;
+using Richasy.BiliKernel.Models.Media;
 using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core.Enums;
 using Richasy.WinUIKernel.Share;
@@ -29,6 +30,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [RelayCommand]
     private async Task InitializeAsync()
     {
+        IsCommandDanmakuEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsCommandDanmakuEnabled, true);
         if (_isInitialized)
         {
             await LoadCacheSizeAsync();
@@ -38,6 +40,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         AppTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
         CheckTheme();
         LogLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+        PlaybackStutterDiagnosticsEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false);
+        DisableMpvCurlForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false);
+        UseDisplaySyncForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false);
         HideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
         IsTopNavShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
         IsAutoPlayNextRecommendVideo = SettingsToolkit.ReadLocalSetting(SettingNames.AutoPlayNextRecommendVideo, false);
@@ -53,12 +58,16 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
-        PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
+        // "High" plays what "Auto" plays, so the list offers it only as "Auto".
+        PreferQualityCollection = [PreferQualityType.Auto, PreferQualityType.UHD, PreferQualityType.HD];
         PreferDecodeCollection = Enum.GetValues<PreferDecodeType>().ToList();
         MTCBehaviorCollection = Enum.GetValues<MTCBehavior>().ToList();
         DefaultPlayerDisplayMode = SettingsToolkit.ReadLocalSetting(SettingNames.DefaultPlayerDisplayMode, PlayerDisplayMode.Default);
         PreferCodec = SettingsToolkit.ReadLocalSetting(SettingNames.PreferCodec, PreferCodecType.H264);
-        PreferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        var preferQuality = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        PreferQuality = preferQuality == PreferQualityType.High ? PreferQualityType.Auto : preferQuality;
+        HomeRecommendationFeedSourceCollection = [RecommendationFeedSource.Web, RecommendationFeedSource.App];
+        HomeRecommendationFeedSource = SettingsToolkit.ReadLocalSetting(SettingNames.HomeRecommendationFeedSource, RecommendationFeedSource.Web);
         IsPopularNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(PopularPage).Name}Visible", true);
         IsMomentNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(MomentPage).Name}Visible", true);
         IsVideoNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(VideoPartitionPage).Name}Visible", true);
@@ -94,8 +103,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
         MTCBehavior = SettingsToolkit.ReadLocalSetting(SettingNames.MTCBehavior, MTCBehavior.Automatic);
         BottomProgressVisible = SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
-        UseWebPlayerWhenLive = SettingsToolkit.ReadLocalSetting(SettingNames.UseWebPlayerWhenLive, false);
-        ShowSearchRecommend = SettingsToolkit.ReadLocalSetting(SettingNames.ShowSearchRecommend, false);
+        ShowSearchRecommend = SettingsToolkit.ReadLocalSetting(SettingNames.ShowSearchRecommend, true);
 
         ScreenshotAction = SettingsToolkit.ReadLocalSetting(SettingNames.ScreenshotAction, ScreenshotAction.Open);
         var customScreenshotFolderPath = SettingsToolkit.ReadLocalSetting(SettingNames.CustomScreenshotFolderPath, string.Empty);
@@ -113,7 +121,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         PackageVersion = this.Get<IAppToolkit>().GetPackageVersion();
         CheckMpvConfigVisible();
         LoadCustomLibmpvSettings();
-        InitializeClassicSettings();
         await LoadCacheSizeAsync();
 
         if (GpuDevices.Count == 0)
@@ -327,6 +334,29 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnLogLevelChanged(MpvLogLevel value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MpvLogLevel, value);
 
+    partial void OnPlaybackStutterDiagnosticsEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, value);
+        foreach (var player in this.Get<AppViewModel>().Players)
+        {
+            player.RefreshPlaybackDiagnostics();
+        }
+    }
+
+    partial void OnDisableMpvCurlForDiagnosticsChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, value);
+
+    partial void OnUseDisplaySyncForDiagnosticsChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, value);
+
+    partial void OnIsCommandDanmakuEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.IsCommandDanmakuEnabled, value);
+        var app = this.Get<AppViewModel>();
+        foreach (var player in app.Players) player.IsCommandDanmakuEnabled = value;
+        if (app.EmbeddedPlayer is { } embedded) embedded.IsCommandDanmakuEnabled = value;
+    }
+
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);
 
@@ -389,7 +419,19 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.AutoPlayNextRecommendVideo, value);
 
     partial void OnPreferQualityChanged(PreferQualityType value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.PreferQuality, value);
+    {
+        var saved = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
+        if (saved == value || (saved == PreferQualityType.High && value == PreferQualityType.Auto))
+        {
+            // Loading the page is not a change.
+            return;
+        }
+
+        SettingsToolkit.WriteLocalSetting(SettingNames.PreferQuality, value);
+
+        // A new preference takes effect at once: a quality chosen by hand in the player no longer overrides it.
+        SettingsToolkit.DeleteLocalSetting(SettingNames.ManualVideoQuality);
+    }
 
     partial void OnHideWhenCloseWindowChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideWhenCloseWindow, value);
@@ -421,11 +463,11 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnMTCBehaviorChanged(MTCBehavior value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MTCBehavior, value);
 
-    partial void OnUseWebPlayerWhenLiveChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.UseWebPlayerWhenLive, value);
-
     partial void OnShowSearchRecommendChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.ShowSearchRecommend, value);
+
+    partial void OnHomeRecommendationFeedSourceChanged(RecommendationFeedSource value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.HomeRecommendationFeedSource, value);
 
     partial void OnIsPopularNavVisibleChanged(bool value)
         => WriteNavVisibleSetting(typeof(PopularPage), value);
