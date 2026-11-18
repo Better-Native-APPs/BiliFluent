@@ -57,6 +57,6 @@ internal static class EmoteAdapter
             pictures = content.Pictures.Select(p => p.ImgSrc.ToImage(p.ImgWidth, p.ImgHeight)).ToList();
         }
 
-        return new EmoteText(text, emoteDict, pictures);
+        return new EmoteText(text, emoteDict, pictures) { Links = content.ToTextLinks() };
     }
 }
