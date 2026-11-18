@@ -136,12 +136,17 @@ internal static class SponsorCachePolicy
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (elapsed() >= MaximumSwitchWait) return;
-            var observation = await read();
+            var remaining = MaximumSwitchWait - elapsed();
+            if (remaining <= TimeSpan.Zero) return;
+            SponsorCacheSwitchObservation observation;
+            try { observation = await read().WaitAsync(remaining, cancellationToken); }
+            catch (TimeoutException) { return; }
             var decision = DecideSwitchWait(skipEnd, observation, elapsed(), cancellationToken.IsCancellationRequested);
             if (decision == SponsorCacheSwitchWaitDecision.Cancelled) cancellationToken.ThrowIfCancellationRequested();
             if (decision == SponsorCacheSwitchWaitDecision.Proceed) return;
-            await delay(SwitchPollInterval, cancellationToken);
+            remaining = MaximumSwitchWait - elapsed();
+            if (remaining <= TimeSpan.Zero) return;
+            await delay(remaining < SwitchPollInterval ? remaining : SwitchPollInterval, cancellationToken);
         }
     }
 

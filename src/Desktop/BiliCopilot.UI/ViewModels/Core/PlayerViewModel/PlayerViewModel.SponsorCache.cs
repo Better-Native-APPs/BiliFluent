@@ -229,17 +229,24 @@ public sealed partial class PlayerViewModel
 
     private async Task WaitForSponsorSkipAsync(MpvPlayer player, CancellationToken token)
     {
-        var initial = await ReadPlaybackObservationAsync(player);
-        if (initial is not { Playing: true, Paused: false } observation
-            || SponsorCachePolicy.SwitchSkipEnd(observation.Position, _sponsorCacheIntervals, observation.Speed) is not { } end) return;
         var clock = Stopwatch.StartNew();
-        await SponsorCachePolicy.WaitForSkipAsync(end, async () =>
+        try
         {
-            var actual = await ReadPlaybackObservationAsync(player);
-            var pending = _sponsorCacheSeekClaims.Any(claim => claim.Effect.RequestId is null && claim.Effect.To >= end
-                && claim.Phase is SponsorOperationPhase.Pending or SponsorOperationPhase.SucceededUnobserved or SponsorOperationPhase.Unknown);
-            var expected = CanAccountSponsorCache && _sponsorCacheIntervals.Any(interval => interval.EndSeconds >= end && interval.StartSeconds < end);
-            return new(actual?.Position ?? double.NaN, actual is { Playing: true, Seeking: false, Buffering: false }, expected || pending);
-        }, () => clock.Elapsed, (delay, cancellation) => Task.Delay(delay, cancellation), token);
+            var initial = await ReadPlaybackObservationAsync(player).WaitAsync(SponsorCachePolicy.MaximumSwitchWait, token);
+            if (initial is not { Playing: true, Paused: false } observation
+                || SponsorCachePolicy.SwitchSkipEnd(observation.Position, _sponsorCacheIntervals, observation.Speed) is not { } end) return;
+            await SponsorCachePolicy.WaitForSkipAsync(end, async () =>
+            {
+                var actual = await ReadPlaybackObservationAsync(player);
+                var pending = _sponsorCacheSeekClaims.Any(claim => claim.Effect.RequestId is null && claim.Effect.To >= end
+                    && claim.Phase is SponsorOperationPhase.Pending or SponsorOperationPhase.SucceededUnobserved or SponsorOperationPhase.Unknown);
+                var expected = CanAccountSponsorCache && _sponsorCacheIntervals.Any(interval => interval.EndSeconds >= end && interval.StartSeconds < end);
+                return new(actual?.Position ?? double.NaN, actual is { Playing: true, Seeking: false, Buffering: false }, expected || pending);
+            }, () => clock.Elapsed, (delay, cancellation) => Task.Delay(delay, cancellation), token);
+        }
+        catch (TimeoutException)
+        {
+            // The initial read shares the same deadline; an expired wait resumes normal selection.
+        }
     }
 }
