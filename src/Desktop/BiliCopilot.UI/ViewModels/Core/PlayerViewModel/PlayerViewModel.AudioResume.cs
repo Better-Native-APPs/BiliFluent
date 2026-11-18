@@ -11,16 +11,78 @@ public sealed partial class PlayerViewModel
     private long _audioResumeUserIntent;
     private Task? _audioResumeSourceWork;
     private bool _audioResumeSourceResumeWanted;
+    private bool? _requestedUserPause;
+    private long _pauseRequestVersion;
+    private bool _pauseRequestCompleted;
 
     private bool IsAudioResumeSourceWaiting => _audioResumeSourceWork is { IsCompleted: false };
     private bool IsAudioResumeRequested => Client?.IsPausedAudioOutputRecoveryResuming == true
         || IsAudioResumeSourceWaiting && _audioResumeSourceResumeWanted;
 
+    internal static bool IsAudioResumeInputCancellationBlocking(bool cancelling, bool sourceWaiting, bool pauseOrSeek)
+        => cancelling && (!sourceWaiting || !pauseOrSeek);
+
     private void CancelAudioResumeUserIntent()
     {
         Interlocked.Increment(ref _audioResumeUserIntent);
         _audioResumeSourceResumeWanted = false;
-        Client?.CancelPendingAudioOutputRecovery();
+        if (Client?.EnablePausedAudioOutputRecovery == true) Client.CancelPendingAudioOutputRecovery();
+        _requestedUserPause = null;
+        _pauseRequestVersion++;
+    }
+
+    private Task ToggleOnDemandPauseAsync()
+        => SetUserPausedAsync(_requestedUserPause is { } paused ? !paused
+            : Player?.IsPlaying == true || IsAudioResumeRequested);
+
+    private long NoteUserPauseRequest(bool paused)
+    {
+        _requestedUserPause = paused;
+        _pauseRequestCompleted = false;
+        return ++_pauseRequestVersion;
+    }
+
+    private async Task CompleteUserPauseRequestAsync(Task work, long version)
+    {
+        try
+        {
+#pragma warning disable VSTHRD003 // This request joins its already-owned native/source work; the version rejects an older completion.
+            await work;
+#pragma warning restore VSTHRD003
+            if (version != _pauseRequestVersion) return;
+            _pauseRequestCompleted = true;
+            ObserveUserPauseAcknowledgement();
+        }
+        catch
+        {
+            if (version == _pauseRequestVersion) _requestedUserPause = null;
+            throw;
+        }
+    }
+
+    private void ObserveUserPauseAcknowledgement()
+    {
+        if (!_pauseRequestCompleted || _requestedUserPause is not { } paused || Player is not { } player) return;
+        if (paused ? player.PlaybackState == MpvPlayerState.Paused : player.IsPlaying)
+            _requestedUserPause = null;
+    }
+
+    private async Task<bool> PreflightExpiredAudioResumeAsync(long version, long intent)
+    {
+        if (Client is not { EnablePausedAudioOutputRecovery: true } client || !CanUseOnDemandNetwork
+            || !_hasLoadedFile || IsPlaybackClosing || IsConnecting
+            || OnDemandResolver?.CurrentStreams?.Deadline is not { } deadline
+            || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime)
+            return true;
+
+        // The library both preflights and resumes with one native requirement. An ordinary
+        // cached resume must keep its existing background refresh and refresh throttling.
+        var requirement = await client.CheckPausedAudioOutputRecoveryAsync();
+        if (intent != Interlocked.Read(ref _audioResumeUserIntent) || !IsCurrentPlayback(version)
+            || !ReferenceEquals(client, Client)) return false;
+        if (requirement.IsSuccess) return true;
+        client.PreparePausedAudioOutputRecoveryResume();
+        return false;
     }
 
     private Task StartAudioResumeSourceRefresh(MpvPlayer player, MediaSourceResolverBase resolver,
@@ -34,6 +96,8 @@ public sealed partial class PlayerViewModel
 
     private void ObserveAudioResumeSourcePresentation(string? propertyName)
     {
+        if (propertyName is nameof(Player.PlaybackState) or nameof(Player.IsPlaying) or nameof(Player.IsBuffering))
+            ObserveUserPauseAcknowledgement();
         if (!IsAudioResumeSourceWaiting || !_audioResumeSourceResumeWanted || Player is not { } player) return;
         // The native pause belongs to source renewal, not to the user. Keep the same
         // buffering presentation even if an expired source requires a whole-file reload.

@@ -31,6 +31,7 @@ internal sealed class MpvAudioResumeRecovery
     public bool NeedsRecovery { get { lock (_sync) return _enabled && _needsRecovery; } }
     public bool IsResumeBuffering { get { lock (_sync) return _current is not null; } }
     public long PresentationVersion { get { lock (_sync) return _presentationVersion; } }
+    public long Intent { get { lock (_sync) return _intent; } }
 
     public bool OutputReconfigured(bool paused)
     {
@@ -63,8 +64,20 @@ internal sealed class MpvAudioResumeRecovery
         {
             CancelCore();
             if (_enabled && (_needsRecovery || waitingForSource))
+            {
                 _current = new Operation(_intent);
+                _presentationVersion++;
+            }
             return _intent;
+        }
+    }
+
+    public bool CheckResumeRequirement(long intent, bool nativePaused, bool missingAudioPts)
+    {
+        lock (_sync)
+        {
+            if (intent == _intent && NeedsRecoveryCore(nativePaused, missingAudioPts)) _needsRecovery = true;
+            return _enabled && _needsRecovery;
         }
     }
 
@@ -74,9 +87,9 @@ internal sealed class MpvAudioResumeRecovery
         {
             if (intent != _intent || !_enabled || !nativePaused) return null;
             // The native event queue can lag a command reply. Missing output PTS after an
-            // already-started paused audio stream also requires the same synchronized restart.
-            if (_mediaStarted && missingAudioPts) _needsRecovery = true;
-            if (!_needsRecovery) return null;
+            // selected paused audio stream also requires the same synchronized restart.
+            if (!NeedsRecoveryCore(nativePaused, missingAudioPts)) return null;
+            _needsRecovery = true;
             if (_current is null || _current.SeekHasStarted)
             {
                 _current = new Operation(intent);
@@ -85,6 +98,9 @@ internal sealed class MpvAudioResumeRecovery
             return _current;
         }
     }
+
+    private bool NeedsRecoveryCore(bool nativePaused, bool missingAudioPts)
+        => _enabled && (_needsRecovery || nativePaused && missingAudioPts);
 
     public void SeekStarted()
     {
@@ -144,7 +160,7 @@ internal sealed class MpvAudioResumeRecovery
     private void CancelCore()
     {
         _intent++;
-        _presentationVersion++;
+        if (_current is not null) _presentationVersion++;
         _current?.Started.TrySetResult(false);
         _current = null;
     }

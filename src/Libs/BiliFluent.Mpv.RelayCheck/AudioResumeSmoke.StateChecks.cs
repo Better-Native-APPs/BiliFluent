@@ -83,6 +83,28 @@ internal static partial class AudioResumeSmoke
         var seeks = 0;
         state.ExecuteSeek(intent, () => { seeks++; return MpvError.Success; });
         report.Check("audio recovery: cancelled pool work cannot seek the next media", seeks == 0);
+
+        state = NewStartedState();
+        var presentation = state.PresentationVersion;
+        foreach (var action in new[] { "pause", "seek", "repeated pause" })
+        {
+            state.Cancel();
+            report.Check("audio recovery: ordinary " + action + " retains pending state notifications", state.PresentationVersion == presentation);
+        }
+        intent = state.RequestResume();
+        report.Check("audio recovery: ordinary resume does not invalidate presentation", state.PresentationVersion == presentation);
+        report.Check("audio recovery: ordinary paused audio does not require source renewal", !state.CheckResumeRequirement(intent, true, false));
+        report.Check("audio recovery: native missing PTS arms the shared preflight requirement", state.CheckResumeRequirement(intent, true, true));
+        report.Check("audio recovery: resume uses the preflight requirement", state.PrepareResume(intent, true, false) is not null);
+        presentation = state.PresentationVersion;
+        state.Cancel();
+        report.Check("audio recovery: cancelling an active wait invalidates old presentation", state.PresentationVersion > presentation);
+
+        state = NewStartedState();
+        intent = state.Intent;
+        state.ResetMedia();
+        state.CheckResumeRequirement(intent, true, true);
+        report.Check("audio recovery: stale preflight cannot dirty a replacement media", !state.NeedsRecovery);
     }
 
     private static MpvAudioResumeRecovery NewStartedState()

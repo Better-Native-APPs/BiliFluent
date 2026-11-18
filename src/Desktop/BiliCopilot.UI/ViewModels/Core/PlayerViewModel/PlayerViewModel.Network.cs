@@ -866,9 +866,9 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var resolver = OnDemandResolver;
         var now = Environment.TickCount64;
-        // The audio event queue can lag the resume request. Serialize expiry handling for
-        // every on-demand client that can need recovery, not only an already-observed flag.
-        var audioRecovery = Client?.EnablePausedAudioOutputRecovery == true;
+        // The resume entry point has checked native pause/audio PTS before this snapshot.
+        // Only a recovery that rereads streams bypasses ordinary background refresh policy.
+        var audioRecovery = Client?.NeedsPausedAudioOutputRecovery == true;
         if (!CanUseOnDemandNetwork || player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
             || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime
             || IsPlaybackClosing || IsConnecting

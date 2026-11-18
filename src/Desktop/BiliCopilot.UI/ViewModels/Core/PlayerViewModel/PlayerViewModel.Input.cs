@@ -49,15 +49,20 @@ public sealed partial class PlayerViewModel
 
     internal void FocusPlayerInput() => _playerOverlay?.Focus(FocusState.Pointer);
 
-    internal bool IsPlayerInputCancellationPending => _inputCancellations != 0 && !IsAudioResumeSourceWaiting;
+    internal bool IsPlayerInputCancellationPending => _inputCancellations != 0;
+
+    internal bool IsPlayerPauseOrSeekInputCancellationPending
+        => IsAudioResumeInputCancellationBlocking(IsPlayerInputCancellationPending, IsAudioResumeSourceWaiting, pauseOrSeek: true);
 
     // A mouse double-click restores an explicit pre-click state, never another toggle based on a delayed mpv event.
     internal Task RestoreMouseClickPlaybackAsync(long generation, bool wasPlaying)
         => generation != MediaGeneration || IsPlaybackClosing || Client?.IsDisposed != false || Player?.IsPlaybackInitialized != true
             ? Task.CompletedTask : SetUserPausedAsync(!wasPlaying);
 
-    private bool CanAcceptPlayerInput => !IsPlaybackClosing && !IsConnecting
-        && !IsWindowDeactivated && !IsPlayerInputCancellationPending
+    private bool CanAcceptPlayerInput => CanAcceptPlayerInputCore(pauseOrSeek: false);
+
+    private bool CanAcceptPlayerInputCore(bool pauseOrSeek) => !IsPlaybackClosing && !IsConnecting
+        && !IsWindowDeactivated && !(pauseOrSeek ? IsPlayerPauseOrSeekInputCancellationPending : IsPlayerInputCancellationPending)
         && Client?.IsDisposed == false && Player?.IsPlaybackInitialized == true
         && !IsPopupVisible && !IsExtraPanelVisible && !IsSubtitleSettingsVisible;
 
@@ -299,7 +304,8 @@ public sealed partial class PlayerViewModel
                 return;
             }
 
-            if (args.Handled || !CanAcceptPlayerInput || !IsPlayerKeyboardSource(args.OriginalSource)
+            if (args.Handled || !CanAcceptPlayerInputCore(args.Key is VirtualKey.Space or VirtualKey.Left or VirtualKey.Right)
+                || !IsPlayerKeyboardSource(args.OriginalSource)
                 || !IsPlayerKeyboardSource(FocusManager.GetFocusedElement(_playerOverlay!.XamlRoot)))
             {
                 return;

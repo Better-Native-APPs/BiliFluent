@@ -206,11 +206,6 @@ public sealed partial class MpvClient
             return MpvPlayerState.Playing;
         }
 
-        await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(Pause, out result));
-        stateResult = WrapAsResult(errorCode, "Mpv | get pause failed");
-        if (stateResult.IsFailed) return stateResult;
-        if (result) return PresentAudioRecoveryState(MpvPlayerState.Paused);
-
         await Task.Run(() => errorCode = IsDisposed ? MpvError.Uninitialized : _handle.GetProperty(PausedForCache, out result));
         stateResult = WrapAsResult(errorCode, "Mpv | get paused-for-cache failed");
         if (stateResult.IsFailed)

@@ -208,7 +208,11 @@ public sealed partial class PlayerViewModel
         return new(_mediaVersion, active, input, initialized, CanSeek, CanChangePlaybackRate, CanNavigatePlaylist,
             playlist && IsNextButtonEnabled && PlayNextCommand.CanExecute(null),
             playlist && IsPrevButtonEnabled && PlayPreviousCommand.CanExecute(null),
-            status, Player?.Position ?? 0, Player?.Duration ?? 0, Player?.PlaybackRate ?? 1);
+            status, Player?.Position ?? 0, Player?.Duration ?? 0, Player?.PlaybackRate ?? 1)
+        {
+            AllowRecoveryPauseOrSeek = active && !IsConnecting && IsAudioResumeSourceWaiting
+                && Client?.IsDisposed == false && Player is not null,
+        };
     }
 
     private void RefreshSystemMediaState(bool forceTimeline = false)

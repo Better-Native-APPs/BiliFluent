@@ -22,6 +22,19 @@ public sealed partial class MpvClient
     public bool NeedsPausedAudioOutputRecovery => _audioResumeRecovery.NeedsRecovery;
 
     /// <summary>
+    /// Checks the same native requirement used by ResumeAsync before the application
+    /// decides whether expired source renewal must finish before playback can resume.
+    /// </summary>
+    public async Task<MpvResult<bool>> CheckPausedAudioOutputRecoveryAsync()
+    {
+        if (!EnablePausedAudioOutputRecovery) return false;
+        var intent = _audioResumeRecovery.Intent;
+        var state = await ReadAudioResumeStateAsync().ConfigureAwait(false);
+        if (state.Error != MpvError.Success) return WrapAsResult(state.Error, "Mpv | get pause failed");
+        return _audioResumeRecovery.CheckResumeRequirement(intent, state.Paused, state.MissingAudioPts);
+    }
+
+    /// <summary>
     /// A user has requested playback, but source renewal or synchronized startup is still pending.
     /// </summary>
     public bool IsPausedAudioOutputRecoveryResuming => _audioResumeRecovery.IsResumeBuffering;
@@ -71,14 +84,10 @@ public sealed partial class MpvClient
         var missingAudioPts = false;
         if (EnablePausedAudioOutputRecovery)
         {
-            var error = await Task.Run(() =>
-            {
-                if (IsDisposed) return MpvError.Uninitialized;
-                var pauseError = _handle.GetProperty(MpvClientProperties.Pause, out paused);
-                if (paused && _handle.GetProperty("aid", out long aid) == MpvError.Success && aid > 0)
-                    missingAudioPts = _handle.GetProperty("audio-pts", out double pts) != MpvError.Success || !double.IsFinite(pts);
-                return pauseError;
-            }).ConfigureAwait(false);
+            var state = await ReadAudioResumeStateAsync().ConfigureAwait(false);
+            var error = state.Error;
+            paused = state.Paused;
+            missingAudioPts = state.MissingAudioPts;
             if (error != MpvError.Success) return WrapAsResult(error, "Mpv | get pause failed");
             if (!paused && NeedsPausedAudioOutputRecovery)
             {
@@ -116,4 +125,14 @@ public sealed partial class MpvClient
             return WrapAsResult(result.Error, "Mpv | set pause failed");
         }
     }
+
+    private Task<(MpvError Error, bool Paused, bool MissingAudioPts)> ReadAudioResumeStateAsync()
+        => Task.Run(() =>
+        {
+            if (IsDisposed) return (MpvError.Uninitialized, false, false);
+            var error = _handle.GetProperty(MpvClientProperties.Pause, out bool paused);
+            var missingAudioPts = paused && _handle.GetProperty("aid", out long aid) == MpvError.Success && aid > 0
+                && (_handle.GetProperty("audio-pts", out double pts) != MpvError.Success || !double.IsFinite(pts));
+            return (error, paused, missingAudioPts);
+        });
 }

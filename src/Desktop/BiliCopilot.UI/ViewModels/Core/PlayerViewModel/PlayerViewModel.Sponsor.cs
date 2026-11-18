@@ -176,20 +176,31 @@ public sealed partial class PlayerViewModel
 
     private Task SetUserPausedAsync(bool paused)
     {
-        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
-        CancelAudioResumeUserIntent();
-        _audioResumeSourceResumeWanted = !paused;
         if (IsLiveMedia) return paused ? PauseLiveAsync() : PlayLiveAsync();
+        var sourceWork = IsAudioResumeSourceWaiting ? _audioResumeSourceWork : null;
+        if (Client?.EnablePausedAudioOutputRecovery == true) CancelAudioResumeUserIntent();
+        _audioResumeSourceResumeWanted = !paused;
+        var pauseVersion = NoteUserPauseRequest(paused);
         if (!paused && sourceWork is not null)
-            return OwnWork(ResumeAfterAudioSourceWorkAsync(sourceWork, _mediaVersion, Interlocked.Read(ref _audioResumeUserIntent)));
-        if (_sponsor?.CanUseBinding != true) return Task.CompletedTask;
-        if (!paused && TryReloadExpiredSourceOnResume(out var reload)) return reload;
+            return CompleteUserPauseRequestAsync(OwnWork(ResumeAfterAudioSourceWorkAsync(sourceWork, _mediaVersion, Interlocked.Read(ref _audioResumeUserIntent))), pauseVersion);
+        if (_sponsor?.CanUseBinding != true) return CompleteUserPauseRequestAsync(Task.CompletedTask, pauseVersion);
+        var audioIntent = Interlocked.Read(ref _audioResumeUserIntent);
+        var version = _mediaVersion;
         var ticket = _sponsor.NoteUserIntent(PlayerIntentKind.Pause);
-        return OwnWork(ApplyAsync());
+        return CompleteUserPauseRequestAsync(OwnWork(ApplyAsync()), pauseVersion);
         async Task ApplyAsync()
         {
             try
             {
+                if (!paused)
+                {
+                    if (!await PreflightExpiredAudioResumeAsync(version, audioIntent)) return;
+                    if (TryReloadExpiredSourceOnResume(out var reload))
+                    {
+                        await reload;
+                        return;
+                    }
+                }
                 await RestorePhysicalPlayerInputAsync();
                 await _sponsor.SetPausedAsync(ticket, paused);
             }

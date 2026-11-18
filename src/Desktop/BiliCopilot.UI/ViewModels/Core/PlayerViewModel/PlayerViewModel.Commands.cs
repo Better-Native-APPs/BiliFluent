@@ -123,7 +123,7 @@ public sealed partial class PlayerViewModel
     [RelayCommand(CanExecute = nameof(CanSeek))]
     private Task SkipBackwardAsync()
     {
-        if (!CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
+        if (!CanSeek || IsPlaybackClosing || IsPlayerPauseOrSeekInputCancellationPending || Player is null) return Task.CompletedTask;
         var backwardSeconds = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.StepBackwardSecond, 10d);
         IsProgressChanging = true;
         LastProgressChangingTime = DateTimeOffset.Now;
@@ -133,7 +133,7 @@ public sealed partial class PlayerViewModel
     [RelayCommand(CanExecute = nameof(CanSeek))]
     private Task SkipForwardAsync()
     {
-        if (!CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending || Player is null) return Task.CompletedTask;
+        if (!CanSeek || IsPlaybackClosing || IsPlayerPauseOrSeekInputCancellationPending || Player is null) return Task.CompletedTask;
         var forwardSeconds = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.StepForwardSecond, 30d);
         IsProgressChanging = true;
         LastProgressChangingTime = DateTimeOffset.Now;
@@ -145,7 +145,7 @@ public sealed partial class PlayerViewModel
     /// </summary>
     /// <returns><see cref="Task"/>.</returns>
     public Task ChangePositionAsync(double position)
-        => !CanSeek || IsPlaybackClosing || IsPlayerInputCancellationPending ? Task.CompletedTask : OwnWork(ChangePositionCoreAsync(position));
+        => !CanSeek || IsPlaybackClosing || IsPlayerPauseOrSeekInputCancellationPending ? Task.CompletedTask : OwnWork(ChangePositionCoreAsync(position));
 
     private async Task ChangePositionCoreAsync(double position)
     {
@@ -184,7 +184,7 @@ public sealed partial class PlayerViewModel
     [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task PlayPauseAsync()
     {
-        if (IsPlaybackClosing || IsPlayerInputCancellationPending) return;
+        if (IsPlaybackClosing || IsPlayerPauseOrSeekInputCancellationPending) return;
         if (IsLiveMedia)
         {
             if (LiveLoadState == LiveMediaLoadState.Ready) await PauseLiveAsync();
@@ -196,17 +196,13 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        if (Player.PlaybackState == MpvPlayerState.Playing || IsAudioResumeRequested)
-        {
-            await SetUserPausedAsync(true);
-        }
-        else if (Player.IsStopped)
+        if (Player.IsStopped)
         {
             await ReplayAsync();
         }
         else
         {
-            await SetUserPausedAsync(false);
+            await ToggleOnDemandPauseAsync();
         }
     }
 
