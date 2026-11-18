@@ -32,22 +32,32 @@ internal enum TextLinkDestinationKind
 
     /// <summary>A web page, in the default browser.</summary>
     Browser,
+
+    /// <summary>
+    /// A short link of the site itself. Where it leads is only known once the site is asked, which
+    /// happens when the link is opened: usually a place inside the app, otherwise the browser.
+    /// </summary>
+    ShortLink,
 }
 
 /// <summary>
 /// Where a link leads. <see cref="Value"/> is the identifier or the search words for places inside the app;
-/// <see cref="WebUri"/> is the http(s) address for <see cref="TextLinkDestinationKind.Browser"/>.
+/// <see cref="WebUri"/> is the http(s) address for <see cref="TextLinkDestinationKind.Browser"/> and
+/// <see cref="TextLinkDestinationKind.ShortLink"/>.
 /// </summary>
 internal sealed record TextLinkDestination(TextLinkDestinationKind Kind, string? Value, Uri? WebUri = null)
 {
     /// <summary>Gets a value indicating whether the link leaves the app.</summary>
     public bool IsExternal => Kind == TextLinkDestinationKind.Browser;
+
+    /// <summary>Gets a value indicating whether the site has to be asked where the link leads.</summary>
+    public bool IsShortLink => Kind == TextLinkDestinationKind.ShortLink;
 }
 
 /// <summary>
 /// Decides where a link in a text leads. Only http, https and the bilibili:// addresses this app has a
 /// page for are accepted; anything else leads nowhere and stays plain text. Nothing is fetched here:
-/// short links are not followed, they go to the browser as they are.
+/// a short link of the site is only recognised as one, see <see cref="ShortLinkResolver"/> for the rest.
 /// </summary>
 internal static partial class TextLinkResolver
 {
@@ -56,6 +66,19 @@ internal static partial class TextLinkResolver
     /// something the author linked, so they stay plain text. Set to true to make them open a search.
     /// </summary>
     internal static bool PlatformKeywordsEnabled => false;
+
+    /// <summary>
+    /// The short-link hosts of the site, all registered to its operator. This is the whole list of
+    /// hosts the app itself ever asks where a link leads; anything else is left to the browser.
+    /// </summary>
+    private static readonly HashSet<string> ShortLinkHosts = new(StringComparer.Ordinal)
+    {
+        "b23.tv",
+        "bili2233.cn",
+        "bili22.cn",
+        "bili23.cn",
+        "bili33.cn",
+    };
 
     private const string BvAlphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -76,9 +99,11 @@ internal static partial class TextLinkResolver
                 // Shops are never opened inside the app, whatever address the server gives.
                 return link.Addresses.Select(ResolveBrowser).FirstOrDefault(p => p is not null);
             default:
-                // A place inside the app wins over a web page, whichever address names it.
-                return link.Addresses.Select(ResolveAddress).FirstOrDefault(p => p is { IsExternal: false })
-                    ?? link.Addresses.Select(ResolveBrowser).FirstOrDefault(p => p is not null);
+                // A place inside the app wins over a web page, whichever address names it. Failing that
+                // the first usable address counts, so a short link is only asked about when the server
+                // did not already say which page it stands for.
+                var places = link.Addresses.Select(ResolveAddress).Where(p => p is not null).ToList();
+                return places.FirstOrDefault(p => p is { IsExternal: false, IsShortLink: false }) ?? places.FirstOrDefault();
         }
     }
 
@@ -119,6 +144,18 @@ internal static partial class TextLinkResolver
     public static TextLinkDestination? ResolveBrowser(string? address)
         => ParseUri(address?.Trim()) is { } uri && uri.Scheme != "bilibili" ? new(TextLinkDestinationKind.Browser, null, uri) : null;
 
+    /// <summary>
+    /// Whether an address is a short link of the site: http(s) on the usual port, nothing before the
+    /// host, and the host exactly one of <see cref="ShortLinkHosts"/>. A look-alike host, a host that
+    /// merely ends or starts the same way, or another port is an ordinary web address.
+    /// </summary>
+    public static bool IsShortLink(Uri uri)
+        => uri.IsAbsoluteUri
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && uri.IsDefaultPort
+            && string.IsNullOrEmpty(uri.UserInfo)
+            && ShortLinkHosts.Contains(uri.IdnHost.ToLowerInvariant());
+
     private static Uri? ParseUri(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -150,6 +187,11 @@ internal static partial class TextLinkResolver
         var first = segments.Length > 0 ? segments[0] : string.Empty;
         var second = segments.Length > 1 ? segments[1] : string.Empty;
         var third = segments.Length > 2 ? segments[2] : string.Empty;
+        if (IsShortLink(uri))
+        {
+            return ResolveShortLink(uri, segments);
+        }
+
         switch (host)
         {
             case "www.bilibili.com" or "bilibili.com" or "m.bilibili.com":
@@ -203,6 +245,34 @@ internal static partial class TextLinkResolver
             default:
                 return browser;
         }
+    }
+
+    // Short links that spell out what they lead to need no asking. Only the spellings the site was
+    // seen to redirect to the very same page are read this way: /BV1…, /av…, /ep…, /ss…, written
+    // exactly so. Everything else (random codes, /cv…, longer paths) waits until it is opened.
+    private static TextLinkDestination ResolveShortLink(Uri uri, string[] segments)
+    {
+        if (segments.Length == 1)
+        {
+            var name = segments[0];
+            if ((name.StartsWith("BV1", StringComparison.Ordinal) || name.StartsWith("av", StringComparison.Ordinal))
+                && VideoId(name, allowNumber: false) is { } video)
+            {
+                return new(TextLinkDestinationKind.Video, video);
+            }
+
+            if (name.StartsWith("ep", StringComparison.Ordinal) && Prefixed(name, "ep") is { } episode)
+            {
+                return new(TextLinkDestinationKind.Episode, episode);
+            }
+
+            if (name.StartsWith("ss", StringComparison.Ordinal) && Prefixed(name, "ss") is { } season)
+            {
+                return new(TextLinkDestinationKind.Season, season);
+            }
+        }
+
+        return new(TextLinkDestinationKind.ShortLink, null, uri);
     }
 
     // The app's own addresses, only the ones there is a page for. The rest lead nowhere on purpose:
