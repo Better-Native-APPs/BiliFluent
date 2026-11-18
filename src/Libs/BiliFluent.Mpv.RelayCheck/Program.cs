@@ -32,6 +32,10 @@ internal static class Program
                 await RelayChecks.RunAsync(report);
                 await MemoryRelayChecks.RunAsync(report);
                 await DisposeChecks.RunAsync(report);
+                await ThroughputChecks.RunAsync(report);
+                break;
+            case "throughput":
+                await ThroughputChecks.RunAsync(report);
                 break;
             case "drain":
                 await DisposeChecks.RunAsync(report);
