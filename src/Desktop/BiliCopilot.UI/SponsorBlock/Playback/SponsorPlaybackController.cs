@@ -34,6 +34,7 @@ internal sealed record SponsorControllerResult(long Sequence, PlaybackOwner? Own
 {
     internal SponsorPreviewStatus? PreviewPlayback { get; init; }
     internal SponsorRequestResult? RequestResult { get; init; }
+    internal ImmutableArray<PlaybackSeekInterval> AutomaticSeekIntervals { get; init; } = [];
 }
 internal sealed record SponsorSeekStatus(string Token, PlaybackEffect Effect, PlaybackStamp Stamp, SponsorOperationPhase Phase)
 {
@@ -124,7 +125,8 @@ internal sealed partial class SponsorPlaybackController
     internal event Action<SponsorControllerResult>? Updated;
     internal SponsorControllerResult Snapshot => new(_sequence, _owner, CurrentStamp, _actual, _plan,
         _operation, _mute, _rate, _rateClaims, _applied, _rateReceipt, _appliedId, _rateReceiptId, _seekClaims, _failure)
-        { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus, RequestResult = _requestResult };
+        { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus, RequestResult = _requestResult,
+            AutomaticSeekIntervals = ProjectAutomaticSeekIntervals() };
     internal bool HasBinding => _backend is not null && !_sealed;
     internal bool CanUseBinding => HasBinding && !_retiring && _bindingCurrent?.Invoke() == true;
     #pragma warning disable VSTHRD003 // Read-only view of the actual-completion task owned by this controller.
