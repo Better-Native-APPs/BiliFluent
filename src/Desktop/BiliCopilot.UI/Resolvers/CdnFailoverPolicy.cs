@@ -291,6 +291,9 @@ internal sealed class CdnFailoverPolicy
         _noPredictionBefore = now + PlaybackNetworkPolicy.PredictionWindow;
     }
 
+    /// <summary>A new watchable-cache projection is an accounting discontinuity, not a slow node.</summary>
+    public void OnCacheAccountingChanged() => _cacheTrend.Clear();
+
     /// <summary>
     /// Playback restarted after a load or a seek: data has arrived, and the cache starts over.
     /// </summary>

@@ -114,6 +114,7 @@ public sealed partial class PlayerViewModel
             () => version == _mediaVersion && ReferenceEquals(client, Client)
                 && ReferenceEquals(player, Player) && !client.IsDisposed,
             GetSelectedSponsorIdentity());
+        ResumeSponsorCache();
     }
 
     private SponsorPlaybackController CreateSponsorController()
@@ -122,7 +123,7 @@ public sealed partial class PlayerViewModel
         {
             if (!queue.TryEnqueue(() => action())) throw new InvalidOperationException("Player dispatcher is unavailable for Sponsor work.");
         }, () => queue.HasThreadAccess, () => Stopwatch.GetElapsedTime(_sponsorClockOrigin).TotalSeconds);
-        controller.Updated += result => SponsorUpdated?.Invoke(result);
+        controller.Updated += result => { UpdateSponsorCacheProjection(result); SponsorUpdated?.Invoke(result); };
         return controller;
     }
 
@@ -146,7 +147,11 @@ public sealed partial class PlayerViewModel
         return !string.IsNullOrEmpty(cid) && MediaIdentity.TryParse(bvId + "+" + cid, out var identity) ? identity : null;
     }
 
-    private void RetireSponsorBinding(RetirementReason reason) => _sponsor?.BeginNativeRetirement(reason);
+    private void RetireSponsorBinding(RetirementReason reason)
+    {
+        RetireSponsorCache();
+        _sponsor?.BeginNativeRetirement(reason);
+    }
 
     private Task DrainInputAndSponsorAsync(bool seal)
     {
@@ -160,6 +165,11 @@ public sealed partial class PlayerViewModel
     private async Task DrainInputAndSponsorCoreAsync(bool seal)
     {
         var errors = new List<Exception>();
+        var cacheCleanup = Task.CompletedTask;
+        DrainSponsorCache(ref cacheCleanup);
+#pragma warning disable VSTHRD003 // This is the exact cache restoration owned by this native boundary, not the VM work set.
+        await cacheCleanup;
+#pragma warning restore VSTHRD003
         // Always join both cleanup paths. Physical restoration calls the still-owned native lane.
         try { await CancelPlayerInputAsync(); } catch (Exception ex) { errors.Add(ex); }
         try { if (_sponsor is not null) await _sponsor.DrainAndRestoreAsync(); }
@@ -167,6 +177,11 @@ public sealed partial class PlayerViewModel
         if (errors.Count != 0) throw new AggregateException("Input/Sponsor cleanup failed; player ownership retained.", errors);
         if (seal) _sponsor?.SealAfterDrain();
     }
+
+    partial void UpdateSponsorCacheProjection(SponsorControllerResult result);
+    partial void ResumeSponsorCache();
+    partial void RetireSponsorCache();
+    partial void DrainSponsorCache(ref Task cleanup);
 
     private Task SetUserPausedAsync(bool paused)
     {

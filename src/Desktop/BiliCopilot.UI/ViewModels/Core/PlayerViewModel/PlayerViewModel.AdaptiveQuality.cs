@@ -62,6 +62,7 @@ public sealed partial class PlayerViewModel
         var nodeChanging = _failover.IsAwaitingLoad || nodeDecision.Action is CdnFailoverAction.SwitchNode or CdnFailoverAction.RefreshPlayUrl;
         var reloading = IsConnecting || _onDemandReplayNeedsLoad || !_hasLoadedFile || !player.IsPlaybackInitialized;
         var switching = IsSeamlessSwitching || _selectionIntent is not null || !_adaptiveSwitchWork.IsCompleted;
+        DeferSponsorCacheAutomaticSelection(raw.Position, speed, ref switching);
         var videoNode = raw.VideoRelay?.Current.Url ?? streams.Video.Url;
         var audioNode = raw.AudioRelay?.Current.Url ?? streams.Audio?.Url;
         var nodeChanged = _adaptiveCacheMark is { } mark && mark.StreamEpoch == raw.StreamEpoch
@@ -159,6 +160,7 @@ public sealed partial class PlayerViewModel
 
     partial void LogAdaptiveDecision(AdaptiveQualityDecision decision);
     partial void DescribeAdaptiveSample(TimeSpan now, bool automatic);
+    partial void DeferSponsorCacheAutomaticSelection(double position, double speed, ref bool switching);
 
     private readonly record struct AdaptiveCacheMark(TimeSpan Time, long StreamEpoch, string? VideoNode, string? AudioNode, double CacheSeconds, long ForwardBytes);
     private sealed record AdaptiveReload(long IntentId, long Version, MediaSourceResolverBase Resolver, int FromQuality, int TargetQuality, long? LoadGeneration);

@@ -92,6 +92,12 @@ public sealed partial class PlayerViewModel
                 ? MpvRelayStreamKind.Audio : MpvRelayStreamKind.Video;
         try
         {
+            var sponsorWait = Task.CompletedTask;
+            PrepareSponsorCacheSwitchWait(intent.Player, cancellation.Token, ref sponsorWait);
+#pragma warning disable VSTHRD003 // The wait belongs to this cancellable selection and runs before the media gate.
+            await sponsorWait;
+#pragma warning restore VSTHRD003
+            cancellation.Token.ThrowIfCancellationRequested();
             await _initializationGate.WaitAsync(cancellation.Token);
             entered = true;
             if (!IsCurrentSelection(intent)) return;
@@ -461,6 +467,7 @@ public sealed partial class PlayerViewModel
     }
 
     partial void PrepareAdaptiveSelection(ref OnDemandSelectionRequest request, bool silent);
+    partial void PrepareSponsorCacheSwitchWait(MpvPlayer player, CancellationToken token, ref Task wait);
     partial void OnAdaptiveSelectionCommitted(SelectionIntent intent, int fromQuality, int toQuality);
     partial void OnAdaptiveSelectionReloading(SelectionIntent intent, int? targetQuality);
     partial void OnAdaptiveSelectionFinished(SelectionIntent intent, bool loadIssued);
