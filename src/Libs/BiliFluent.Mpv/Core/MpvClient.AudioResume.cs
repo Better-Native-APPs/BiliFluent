@@ -39,6 +39,21 @@ public sealed partial class MpvClient
     /// </summary>
     public bool IsPausedAudioOutputRecoveryResuming => _audioResumeRecovery.IsResumeBuffering;
 
+    /// <summary>
+    /// Allows recovery seeks against the current source table. The application clears this
+    /// while known-expiring URLs are renewed; ordinary resumes still unpause immediately.
+    /// </summary>
+    public bool AllowPausedAudioOutputRecovery
+    {
+        get => _audioResumeRecovery.AllowCorrection;
+        set => _audioResumeRecovery.AllowCorrection = value;
+    }
+
+    /// <summary>
+    /// A reconstruction detected after preflight was kept paused for application source renewal.
+    /// </summary>
+    public bool IsPausedAudioOutputRecoveryDeferredForSource => _audioResumeRecovery.IsDeferredForSource;
+
     internal long AudioResumePresentationVersion => _audioResumeRecovery.PresentationVersion;
 
     /// <summary>
@@ -108,9 +123,14 @@ public sealed partial class MpvClient
                 // ao-reload only resets audio, discarding its output queue. A real seek resets
                 // video as well and mpv's restart gate waits for both chains to become ready.
                 // Its command response only means queued: keep pause until MPV_EVENT_SEEK.
-                var error = await Task.Run(() => _audioResumeRecovery.ExecuteSeek(intent,
+                var synchronization = await Task.Run(() => _audioResumeRecovery.ExecuteRecoverySeek(intent,
                     () => IsDisposed ? MpvError.Uninitialized : _handle.Command(["seek", "0", "relative+exact"]))).ConfigureAwait(false);
-                if (error != MpvError.Success) return WrapAsResult(error, "Mpv | audio resume synchronization failed");
+                if (synchronization.Error != MpvError.Success) return WrapAsResult(synchronization.Error, "Mpv | audio resume synchronization failed");
+                if (synchronization.DeferredForSource)
+                {
+                    _ = NotifyPlayerStateAsync();
+                    return MpvResult.Ok();
+                }
 #pragma warning disable VSTHRD003 // This operation owns the native seek-event completion, which never requires the UI thread.
                 if (!await recovery.Started.Task.ConfigureAwait(false)) return MpvResult.Ok();
 #pragma warning restore VSTHRD003

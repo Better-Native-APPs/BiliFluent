@@ -11,6 +11,7 @@ internal sealed class MpvAudioResumeRecovery
     private bool _enabled;
     private bool _mediaStarted;
     private bool _needsRecovery;
+    private bool _allowCorrection = true;
     private long _intent;
     private long _presentationVersion;
     private Operation? _current;
@@ -32,6 +33,8 @@ internal sealed class MpvAudioResumeRecovery
     public bool IsResumeBuffering { get { lock (_sync) return _current is not null; } }
     public long PresentationVersion { get { lock (_sync) return _presentationVersion; } }
     public long Intent { get { lock (_sync) return _intent; } }
+    public bool AllowCorrection { get { lock (_sync) return _allowCorrection; } set { lock (_sync) _allowCorrection = value; } }
+    public bool IsDeferredForSource { get { lock (_sync) return _current?.DeferredForSource == true; } }
 
     public bool OutputReconfigured(bool paused)
     {
@@ -50,6 +53,7 @@ internal sealed class MpvAudioResumeRecovery
             CancelCore();
             _mediaStarted = false;
             _needsRecovery = false;
+            _allowCorrection = true;
         }
     }
 
@@ -137,12 +141,23 @@ internal sealed class MpvAudioResumeRecovery
         lock (_sync) return intent == _intent ? seek() : MpvError.Success;
     }
 
-    public (MpvError Error, bool Retry) CommitResume(long intent, Func<MpvError> unpause)
+    public (MpvError Error, bool DeferredForSource) ExecuteRecoverySeek(long intent, Func<MpvError> seek)
     {
         lock (_sync)
         {
             if (intent != _intent) return (MpvError.Success, false);
-            if (_enabled && _needsRecovery) return (MpvError.Success, true);
+            if (DeferForSourceCore(intent)) return (MpvError.Success, true);
+            return (seek(), false);
+        }
+    }
+
+    public (MpvError Error, bool Retry, bool DeferredForSource) CommitResume(long intent, Func<MpvError> unpause)
+    {
+        lock (_sync)
+        {
+            if (intent != _intent) return (MpvError.Success, false, false);
+            if (DeferForSourceCore(intent)) return (MpvError.Success, false, true);
+            if (_enabled && _needsRecovery) return (MpvError.Success, true, false);
             var error = unpause();
             if (error == MpvError.Success && _current is not null)
             {
@@ -153,8 +168,20 @@ internal sealed class MpvAudioResumeRecovery
                     _presentationVersion++;
                 }
             }
-            return (error, false);
+            return (error, false, false);
         }
+    }
+
+    private bool DeferForSourceCore(long intent)
+    {
+        if (!_enabled || !_needsRecovery || _allowCorrection) return false;
+        if (_current is null)
+        {
+            _current = new Operation(intent);
+            _presentationVersion++;
+        }
+        _current.DeferredForSource = true;
+        return true;
     }
 
     private void CancelCore()
@@ -172,5 +199,6 @@ internal sealed class MpvAudioResumeRecovery
         public bool Ready { get; set; }
         public bool Unpaused { get; set; }
         public bool SeekHasStarted { get; set; }
+        public bool DeferredForSource { get; set; }
     }
 }

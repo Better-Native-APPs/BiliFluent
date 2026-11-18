@@ -899,6 +899,7 @@ public sealed partial class PlayerViewModel
         }
 
         _lastResumeRefresh = now;
+        if (Client?.EnablePausedAudioOutputRecovery == true) Client.AllowPausedAudioOutputRecovery = false;
         var version = _mediaVersion;
         if (audioRecovery)
         {
@@ -908,7 +909,7 @@ public sealed partial class PlayerViewModel
         }
         if (IsRelayingEvery(player, from))
         {
-            _ = ObserveNetworkReloadAsync(OwnWork(RefreshRelayAsync(player, resolver, from, version, _activeMediaToken, "resume-expired", reloadOnFailure: true)));
+            _ = ObserveNetworkReloadAsync(OwnWork(StartAudioResumeBackgroundSourceRefresh(player, resolver, from, version, _activeMediaToken)));
             return false;
         }
 

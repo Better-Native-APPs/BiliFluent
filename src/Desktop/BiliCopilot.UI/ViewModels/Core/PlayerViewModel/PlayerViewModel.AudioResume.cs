@@ -14,6 +14,8 @@ public sealed partial class PlayerViewModel
     private bool? _requestedUserPause;
     private long _pauseRequestVersion;
     private bool _pauseRequestCompleted;
+    private Task? _audioResumeBackgroundSourceWork;
+    private long _audioResumeBackgroundSourceVersion;
 
     private bool IsAudioResumeSourceWaiting => _audioResumeSourceWork is { IsCompleted: false };
     private bool IsAudioResumeRequested => Client?.IsPausedAudioOutputRecoveryResuming == true
@@ -71,9 +73,11 @@ public sealed partial class PlayerViewModel
     {
         if (Client is not { EnablePausedAudioOutputRecovery: true } client || !CanUseOnDemandNetwork
             || !_hasLoadedFile || IsPlaybackClosing || IsConnecting
-            || OnDemandResolver?.CurrentStreams?.Deadline is not { } deadline
-            || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime)
+            || OnDemandResolver?.CurrentStreams is not { } current)
             return true;
+
+        client.AllowPausedAudioOutputRecovery = HasFreshAudioResumeSource(current);
+        if (client.AllowPausedAudioOutputRecovery) return true;
 
         // The library both preflights and resumes with one native requirement. An ordinary
         // cached resume must keep its existing background refresh and refresh throttling.
@@ -83,6 +87,40 @@ public sealed partial class PlayerViewModel
         if (requirement.IsSuccess) return true;
         client.PreparePausedAudioOutputRecoveryResume();
         return false;
+    }
+
+    private static bool HasFreshAudioResumeSource(PlaybackStreamSelection selection)
+        => selection.Deadline is not { } deadline || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime;
+
+    private Task StartAudioResumeBackgroundSourceRefresh(MpvPlayer player, MediaSourceResolverBase resolver,
+        PlaybackStreamSelection from, long version, CancellationToken token)
+    {
+        _audioResumeBackgroundSourceVersion = version;
+        _audioResumeBackgroundSourceWork = RefreshAudioResumeBackgroundSourceAsync(player, resolver, from, version, token);
+        return _audioResumeBackgroundSourceWork;
+    }
+
+    private async Task RefreshAudioResumeBackgroundSourceAsync(MpvPlayer player, MediaSourceResolverBase resolver,
+        PlaybackStreamSelection from, long version, CancellationToken token)
+    {
+        await RefreshRelayAsync(player, resolver, from, version, token, "resume-expired", reloadOnFailure: true);
+        if (IsCurrentPlayback(version) && ReferenceEquals(player, Player) && ReferenceEquals(resolver, OnDemandResolver)
+            && resolver.CurrentStreams is { } current && Client is { } client)
+            client.AllowPausedAudioOutputRecovery = HasFreshAudioResumeSource(current);
+    }
+
+    private async Task ResumeDeferredForAudioSourceAsync(long version, long intent)
+    {
+        if (intent != Interlocked.Read(ref _audioResumeUserIntent) || !IsCurrentPlayback(version)
+            || Client?.IsPausedAudioOutputRecoveryDeferredForSource != true) return;
+        if (TryReloadExpiredSourceOnResume(out var reload))
+        {
+            await reload;
+            return;
+        }
+        // A background table refresh may have completed while the native resume was queued.
+        if (OnDemandResolver?.CurrentStreams is { } current && HasFreshAudioResumeSource(current))
+            await SetUserPausedAsync(false);
     }
 
     private Task StartAudioResumeSourceRefresh(MpvPlayer player, MediaSourceResolverBase resolver,
@@ -136,7 +174,17 @@ public sealed partial class PlayerViewModel
             // A recovery seek rereads both streams. Unlike an ordinary cached resume, it must
             // not race an asynchronous address-table refresh with expired upstream URLs.
             if (IsRelayingEvery(player, from))
-                await RefreshRelayAsync(player, resolver, from, version, token, "audio-resume-expired", reloadOnFailure: true);
+            {
+                if (_audioResumeBackgroundSourceVersion == version && _audioResumeBackgroundSourceWork is { } background)
+                {
+                    _audioResumeBackgroundSourceWork = null;
+#pragma warning disable VSTHRD003 // Recovery joins this media's already-owned background refresh, never starts a second table request.
+                    await background;
+#pragma warning restore VSTHRD003
+                }
+                else
+                    await RefreshRelayAsync(player, resolver, from, version, token, "audio-resume-expired", reloadOnFailure: true);
+            }
             else
                 await ReloadExpiredSourceAsync(player, resolver, from, version, player.Position,
                     player.PlaybackRate > 0 ? player.PlaybackRate : null, refreshed: false, preservePause: true);
@@ -154,6 +202,7 @@ public sealed partial class PlayerViewModel
             // A whole-file reload has already synchronized both chains; an in-place refresh
             // still needs the native seek guarantee before it can unpause.
             _audioResumeSourceWork = null;
+            Client!.AllowPausedAudioOutputRecovery = true;
             await SetUserPausedAsync(false);
         }
         catch

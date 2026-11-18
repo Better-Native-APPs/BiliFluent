@@ -105,6 +105,43 @@ internal static partial class AudioResumeSmoke
         state.ResetMedia();
         state.CheckResumeRequirement(intent, true, true);
         report.Check("audio recovery: stale preflight cannot dirty a replacement media", !state.NeedsRecovery);
+
+        state = NewStartedState();
+        state.AllowCorrection = false;
+        intent = state.RequestResume();
+        report.Check("audio recovery: expired-source ordinary preflight needs no correction", !state.CheckResumeRequirement(intent, true, false));
+        state.OutputReconfigured(true);
+        state.PrepareResume(intent, true, false);
+        seeks = 0;
+        var synchronization = state.ExecuteRecoverySeek(intent, () => { seeks++; return MpvError.Success; });
+        unpauses = 0;
+        var deferred = state.CommitResume(intent, () => { unpauses++; return MpvError.Success; });
+        report.Check("audio recovery: late rebuild against expired URLs emits no seek or unpause", synchronization.DeferredForSource
+            && deferred.DeferredForSource && seeks == 0 && unpauses == 0 && state.IsDeferredForSource && state.IsResumeBuffering);
+        state.AllowCorrection = true;
+        intent = state.RequestResume();
+        state.PrepareResume(intent, true, false);
+        state.ExecuteRecoverySeek(intent, () => { seeks++; return MpvError.Success; });
+        state.SeekStarted();
+        state.CommitResume(intent, () => { unpauses++; return MpvError.Success; });
+        state.PlaybackRestarted();
+        report.Check("audio recovery: refreshed table releases one synchronized recovery", seeks == 1 && unpauses == 1
+            && !state.IsDeferredForSource && !state.IsResumeBuffering);
+
+        state = NewStartedState();
+        state.AllowCorrection = false;
+        intent = state.RequestResume();
+        unpauses = 0;
+        deferred = state.CommitResume(intent, () => { unpauses++; return MpvError.Success; });
+        report.Check("audio recovery: expired URLs without reconstruction keep immediate resume", unpauses == 1 && !deferred.Retry
+            && !deferred.DeferredForSource && !state.IsDeferredForSource);
+
+        state = NewStartedState();
+        intent = state.RequestResume();
+        state.OutputReconfigured(true);
+        unpauses = 0;
+        deferred = state.CommitResume(intent, () => { unpauses++; return MpvError.Success; });
+        report.Check("audio recovery: fresh URLs allow late rebuild to retry locally", deferred.Retry && !deferred.DeferredForSource && unpauses == 0);
     }
 
     private static MpvAudioResumeRecovery NewStartedState()

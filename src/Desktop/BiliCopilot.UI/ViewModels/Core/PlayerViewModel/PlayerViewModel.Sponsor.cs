@@ -215,6 +215,7 @@ public sealed partial class PlayerViewModel
                 }
                 await RestorePhysicalPlayerInputAsync();
                 await _sponsor.SetPausedAsync(ticket, paused);
+                if (!paused) await ResumeDeferredForAudioSourceAsync(version, audioIntent);
             }
             finally { _sponsor.AbandonIntent(ticket); }
         }

@@ -6,8 +6,10 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Richasy.MpvKernel;
 using Richasy.MpvKernel.Core;
 using Richasy.MpvKernel.Core.Enums;
+using Richasy.MpvKernel.Core.Models;
 
 namespace BiliFluent.Mpv.RelayCheck;
 
@@ -25,7 +27,11 @@ internal static partial class AudioResumeSmoke
         }) Ensure(client.SetOptionString(name, value), name);
 
         var state = await client.GetPlayerStateAsync();
-        report.Check("native state: unloaded player reports Idle", state.IsSuccess && state.Value == MpvPlayerState.Idle);
+        NoteNativeState(report, client, state, "unloaded");
+        report.Check("native state: unloaded player preserves unavailable result without state notification",
+            state.IsFailed && state.ErrorMessage?.Contains("paused-for-cache", StringComparison.Ordinal) == true
+            && client.GetProperty("paused-for-cache", out bool _) == MpvError.PropertyUnavailable
+            && await NativeUnavailableStateDoesNotNotifyAsync(client));
         var ending = Path.Combine(output, "native-state-ending.wav");
         await File.WriteAllBytesAsync(ending, SilentWave(0.4));
         await client.PlayAsync(ending);
@@ -35,6 +41,7 @@ internal static partial class AudioResumeSmoke
 
         await using var media = new NativeStateMediaNode(SilentWave(9));
         await client.PlayAsync(media.Url);
+        Ensure(await client.ResumeAsync(), "native state resume fixture");
         var started = await WaitAsync(() => ReadDouble(client, "time-pos") > 0.1 && double.IsFinite(ReadDouble(client, "audio-pts")), 5_000);
         report.Check("native state: local fixture starts on muted WASAPI", started && Flag(client, "mute") && client.GetPropertyString("current-ao") == "wasapi");
         Ensure(await client.PauseAsync(), "native state pause");
@@ -50,8 +57,45 @@ internal static partial class AudioResumeSmoke
         Ensure(client.Command("stop"), "native state stop");
         await WaitAsync(() => Flag(client, "idle-active"), 5_000);
         state = await client.GetPlayerStateAsync();
-        report.Check("native state: stopped player reports Idle", state.IsSuccess && state.Value == MpvPlayerState.Idle);
+        NoteNativeState(report, client, state, "stopped");
+        report.Check("native state: stopped player preserves unavailable result without state notification",
+            state.IsFailed && state.ErrorMessage?.Contains("paused-for-cache", StringComparison.Ordinal) == true
+            && client.GetProperty("paused-for-cache", out bool _) == MpvError.PropertyUnavailable
+            && await NativeUnavailableStateDoesNotNotifyAsync(client));
         report.Check("native state: all fixture playback remains muted", Flag(client, "mute"));
+    }
+
+    private static async Task<bool> NativeUnavailableStateDoesNotNotifyAsync(MpvClient client)
+    {
+        var notify = typeof(MpvClient).GetMethod("NotifyPlayerStateAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+#pragma warning disable VSTHRD003 // Invoke the real, owned notifier directly without adding a production test API.
+        await (Task)notify.Invoke(client, null)!;
+#pragma warning restore VSTHRD003
+        var notifications = 0;
+        void OnNotify(object? sender, MpvClientNotifyEventArgs e)
+        {
+            if (e.Id == MpvClientEventId.StateChanged) Interlocked.Increment(ref notifications);
+        }
+        client.DataNotify += OnNotify;
+        try
+        {
+#pragma warning disable VSTHRD003 // This invocation completes after the same native state-read path as production notifications.
+            await (Task)notify.Invoke(client, null)!;
+#pragma warning restore VSTHRD003
+            return Volatile.Read(ref notifications) == 0;
+        }
+        finally { client.DataNotify -= OnNotify; }
+    }
+
+    private static void NoteNativeState(Report report, MpvClient client, MpvResult<MpvPlayerState> state, string checkpoint)
+    {
+        var properties = new[] { "core-idle", "paused-for-cache", "seeking", "eof-reached", "idle-active", "pause" };
+        var values = properties.Select(name =>
+        {
+            var error = client.GetProperty(name, out bool value);
+            return $"{name}={error}/{value}";
+        });
+        report.Note($"NATIVE_STATE checkpoint={checkpoint} state={(state.IsSuccess ? state.Value.ToString() : "unavailable")} {string.Join(' ', values)}");
     }
 
     private static byte[] SilentWave(double seconds)
