@@ -3,9 +3,10 @@
 namespace BiliCopilot.UI.ViewModels.Core;
 
 /// <summary>Visit history independent of cached page controls and playback ownership.</summary>
-internal sealed class NavigationHistory<T> where T : class
+internal sealed class NavigationHistory<T>(Func<T?, T?, bool>? sameVisit = null) where T : class
 {
     private readonly List<T> _entries = [];
+    private readonly Func<T?, T?, bool> _sameVisit = sameVisit ?? EqualityComparer<T?>.Default.Equals;
     private int _position = -1;
 
     internal T? Current => _position >= 0 ? _entries[_position] : null;
@@ -14,7 +15,11 @@ internal sealed class NavigationHistory<T> where T : class
 
     internal void Navigate(T entry)
     {
-        if (EqualityComparer<T>.Default.Equals(Current, entry)) return;
+        if (_sameVisit(Current, entry))
+        {
+            ReplaceCurrent(entry);
+            return;
+        }
         if (CanGoForward) _entries.RemoveRange(_position + 1, _entries.Count - _position - 1);
         _entries.Add(entry);
         _position = _entries.Count - 1;
@@ -23,7 +28,15 @@ internal sealed class NavigationHistory<T> where T : class
     internal void ReplaceCurrent(T entry)
     {
         if (_position < 0) Navigate(entry);
-        else _entries[_position] = entry;
+        else
+        {
+            _entries[_position] = entry;
+            // Keep the updated visit, including its latest resume position, without adjacent duplicates.
+            while (_position > 0 && _sameVisit(_entries[_position - 1], entry))
+                _entries.RemoveAt(--_position);
+            while (CanGoForward && _sameVisit(entry, _entries[_position + 1]))
+                _entries.RemoveAt(_position + 1);
+        }
     }
 
     internal bool TryMove(bool back, out T? entry)
@@ -39,13 +52,6 @@ internal sealed class NavigationHistory<T> where T : class
         return false;
     }
 
-    /// <summary>Drop an unavailable destination, continuing in the requested direction.</summary>
-    internal T? DiscardCurrent(bool back)
-    {
-        if (_position < 0) return null;
-        _entries.RemoveAt(_position);
-        _position = _entries.Count == 0 ? -1
-            : back ? Math.Max(0, _position - 1) : Math.Min(_position, _entries.Count - 1);
-        return Current;
-    }
+    /// <summary>Discard unavailable playback, retaining its page instead of restoring another player.</summary>
+    internal void DiscardCurrent(T page) => ReplaceCurrent(page);
 }

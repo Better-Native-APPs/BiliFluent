@@ -523,6 +523,18 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         TransportControls?.CancelPendingInput();
     }
 
+    internal bool TryDismissNavigationTransient()
+    {
+        if (_sponsorFlyout?.IsOpen == true)
+        {
+            _sponsorFlyout.Hide();
+            return true;
+        }
+        if (ViewModel?.IsPopupVisible != true) return false;
+        CancelPendingInput(); // Existing popup leases own Hide and their Closed callbacks.
+        return true;
+    }
+
     /// <summary>Restore physical surface input without retiring transport-owned flyouts.</summary>
     public void CancelSurfaceInput()
         => CancelSurfaceInput(preserveMouseTap: true);

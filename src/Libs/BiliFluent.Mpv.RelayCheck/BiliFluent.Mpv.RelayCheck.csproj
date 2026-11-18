@@ -18,5 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BiliFluent.Mpv\BiliFluent.Mpv.csproj" />
+    <Compile Include="..\..\Desktop\BiliCopilot.UI\Resolvers\SponsorCachePolicy.cs" Link="SponsorCachePolicy.cs" />
   </ItemGroup>
 </Project>

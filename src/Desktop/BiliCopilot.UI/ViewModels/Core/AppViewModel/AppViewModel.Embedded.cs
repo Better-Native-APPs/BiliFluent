@@ -54,6 +54,7 @@ public sealed partial class AppViewModel
     partial void OnMainPlayerHostAttached(PlayerViewModel player);
     partial void OnMainPlayerClosing(PlayerViewModel? player);
     partial void OnMainPlayerReleased(PlayerViewModel player);
+    partial void OnMainPlaybackNavigationChanged();
 
     private async Task OpenMainPlayerCoreAsync(MediaSnapshot snapshot, CancellationToken admissionToken,
         LiveRouteCoordinator.Admission admission, LiveLaunchAccount? account = null)
@@ -190,6 +191,7 @@ public sealed partial class AppViewModel
             if (entered) _embeddedGate.Release();
             if (ReferenceEquals(_embeddedOpenCancellation, request)) _embeddedOpenCancellation = null;
             if (ReferenceEquals(_embeddedPlayerOpeningCancellation, request)) _embeddedPlayerOpeningCancellation = null;
+            OnMainPlaybackNavigationChanged();
             // InitializeAsync links this request for the lifetime of the active media.
             // Dispose releases registrations without cancelling successfully loaded playback.
             request.Dispose();
@@ -330,6 +332,7 @@ public sealed partial class AppViewModel
             OnMainPlayerReleased(vm);
             Windows.OfType<MainWindow>().FirstOrDefault()?.ClearEmbeddedPlayer(vm);
             EmbeddedPlayer = null;
+            OnMainPlaybackNavigationChanged();
         }
         Players.Remove(vm);
         NotifyPlaybackActivityChanged();

@@ -609,4 +609,43 @@
   <data name="RecommendationFeedApp" xml:space="preserve">
     <value>Mobile app</value>
   </data>
+  <data name="TextLinkUser" xml:space="preserve">
+    <value>View this user's space</value>
+  </data>
+  <data name="TextLinkTopic" xml:space="preserve">
+    <value>Search this topic in the app</value>
+  </data>
+  <data name="TextLinkSearch" xml:space="preserve">
+    <value>Search in the app</value>
+  </data>
+  <data name="TextLinkVideo" xml:space="preserve">
+    <value>Play video</value>
+  </data>
+  <data name="TextLinkPgc" xml:space="preserve">
+    <value>Play this series</value>
+  </data>
+  <data name="TextLinkLive" xml:space="preserve">
+    <value>Open live room</value>
+  </data>
+  <data name="TextLinkArticle" xml:space="preserve">
+    <value>Read article</value>
+  </data>
+  <data name="TextLinkBrowserTemplate" xml:space="preserve">
+    <value>Opens {0} in your browser</value>
+  </data>
+  <data name="TextLinkGoodsTemplate" xml:space="preserve">
+    <value>Shopping or promoted link · opens {0} in your browser</value>
+  </data>
+  <data name="TextLinkNote" xml:space="preserve">
+    <value>View note</value>
+  </data>
+  <data name="TextLinkNameTemplate" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="TextLinkShortLink" xml:space="preserve">
+    <value>Open bilibili short link</value>
+  </data>
+  <data name="TextLinkOpenFailed" xml:space="preserve">
+    <value>Couldn't open this link. Try again.</value>
+  </data>
 </root>

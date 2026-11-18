@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Hosting;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
@@ -10,6 +11,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.Graphics;
@@ -53,6 +55,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
     {
         if (!IsCurrentEmbeddedHost(host, expectedOwner)) return false;
         // Avoid internal programmatic base Close() path; route explicit close requests directly to App.RequestExitAsync.
+        App.TraceExitReason("embedded-owner-close-button");
         _ = App.Current.RequestExitAsync();
         return true;
     }
@@ -223,6 +226,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // Cancel caption close button / Alt+F4 to keep the main window & dispatcher VISIBLE during cleanup.
         args.Cancel = true;
+        App.TraceExitReason("main-window-close-request");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -236,6 +240,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
         // An already-destroyed HWND cannot be restored; finish the owned exit path.
         this.Get<ILogger<App>>().LogWarning("MainWindow.Closed triggered without terminal exit permission; requesting app exit.");
+        App.TraceExitReason("main-window-already-closed");
         _ = App.Current.RequestExitAsync();
     }
 
@@ -249,6 +254,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             || !_appClosedMarked || !_handlersUnregistered)
             throw new InvalidOperationException("Main window final teardown is incomplete.");
         _isTerminalClosePermitted = true;
+        App.TraceExitReason("main-window-finalization");
         Close();
     }
 
@@ -451,6 +457,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
     private void HandleNavigationPointer(UIElement root, PointerRoutedEventArgs e)
     {
+        if (e.Handled || _isTerminalClosePermitted) return;
         var point = e.GetCurrentPoint(root);
         if (point.Properties.IsXButton1Pressed || point.Properties.IsXButton2Pressed)
         {
@@ -458,7 +465,9 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             var app = this.Get<AppViewModel>();
             var navigation = RootLayout.ViewModel;
             if (navigation.CanGoBack || navigation.CanGoForward || !navigation.LastNavigationTask.IsCompleted
-                || app.HasEmbeddedWork || app.HasLiveWork)
+                || app.HasEmbeddedWork || app.HasLiveWork
+                || RootLayout.HasNavigationPaneToDismiss
+                || root.XamlRoot is { } xamlRoot && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Count > 0)
             {
                 if (point.Properties.IsXButton1Pressed) navigation.Back();
                 else navigation.Forward();
@@ -502,13 +511,13 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
     private void OnEmbeddedNavigationKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationKey((UIElement)sender, args, _embeddedNavigationOwner);
+        if (IsEmbeddedNavigationCurrent(sender)) HandleNavigationKey((UIElement)sender, args);
     }
 
     private void OnNavigationKeyDown(object sender, KeyRoutedEventArgs args)
         => HandleNavigationKey(RootLayout, args);
 
-    private void HandleNavigationKey(UIElement root, KeyRoutedEventArgs args, PlayerViewModel? player = null)
+    private void HandleNavigationKey(UIElement root, KeyRoutedEventArgs args)
     {
         if (args.Handled || _isTerminalClosePermitted) return;
         var key = args.Key;
@@ -520,9 +529,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             && key is Windows.System.VirtualKey.Back or Windows.System.VirtualKey.Escape)
         {
             // Editing and popup dismissal keep their existing local key behavior.
-            if (IsNavigationEditing(args.OriginalSource, root) || player?.IsPopupVisible == true
-                || player?.IsSubtitleSettingsVisible == true
-                || root.XamlRoot is { } xamlRoot && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Count > 0) return;
+            if (IsNavigationEditing(args.OriginalSource, root)) return;
             back = true;
         }
         if (!back && !forward) return;
@@ -540,6 +547,72 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
             if (ReferenceEquals(current, root)) break;
         }
         return false;
+    }
+
+    /// <summary>All Back entries dismiss transient UI before touching presentation or history.</summary>
+    internal bool TryDismissNavigationTransient()
+    {
+        var player = this.Get<AppViewModel>().EmbeddedPlayer;
+        var playerRoot = player?.Window?.XamlRoot?.Content as UIElement;
+        var roots = new[] { RootLayout.XamlRoot, playerRoot?.XamlRoot }.OfType<XamlRoot>().Distinct().ToArray();
+        var popups = roots.SelectMany(VisualTreeHelper.GetOpenPopupsForXamlRoot).ToArray();
+        foreach (var popup in popups.Reverse())
+        {
+            if (WalkVisualTree(popup.Child).OfType<ContentDialog>().FirstOrDefault() is { } dialog)
+            {
+                dialog.Hide(); // Complete ShowAsync through its real owner, not by hiding its Popup.
+                return true;
+            }
+        }
+
+        if (WalkVisualTree(playerRoot).OfType<PlayerOverlay>().FirstOrDefault()?.TryDismissNavigationTransient() == true)
+            return true;
+        if (RootLayout.TryDismissNavigationPane()) return true;
+        if (player?.IsSubtitleSettingsVisible == true)
+        {
+            player.IsSubtitleSettingsVisible = false;
+            return true;
+        }
+
+        if (popups.Length == 0) return false;
+        // Main-root attached/context/button flyouts are closed through FlyoutBase.Hide.
+        foreach (var node in roots.SelectMany(root => WalkVisualTree(root.Content)))
+        {
+            var flyout = node switch
+            {
+                Button { Flyout.IsOpen: true } button => button.Flyout,
+                UIElement { ContextFlyout.IsOpen: true } element => element.ContextFlyout,
+                FrameworkElement element => FlyoutBase.GetAttachedFlyout(element),
+                _ => null,
+            };
+            if (flyout?.IsOpen == true)
+            {
+                flyout.Hide();
+                return true;
+            }
+            if (node is ComboBox { IsDropDownOpen: true } comboBox)
+            {
+                comboBox.IsDropDownOpen = false;
+                return true;
+            }
+        }
+
+        // Remaining popup controls use their existing IsOpen dismissal surface.
+        popups[^1].IsOpen = false;
+        return true;
+    }
+
+    private static IEnumerable<DependencyObject> WalkVisualTree(DependencyObject? root)
+    {
+        if (root is null) yield break;
+        var pending = new Stack<DependencyObject>();
+        pending.Push(root);
+        while (pending.TryPop(out var node))
+        {
+            yield return node;
+            for (var index = VisualTreeHelper.GetChildrenCount(node) - 1; index >= 0; index--)
+                pending.Push(VisualTreeHelper.GetChild(node, index));
+        }
     }
 
     private void OnRootLayoutLoaded(object sender, RoutedEventArgs e)

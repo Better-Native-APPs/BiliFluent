@@ -31,7 +31,11 @@ public partial class App : Application
     // This does not intercept a deliberately base-typed Application.Exit or forced process exit.
     public new static App Current => (App)Application.Current;
 
-    public new void Exit() => _ = RequestExitAsync();
+    public new void Exit()
+    {
+        TraceExitReason("application-exit-api");
+        _ = RequestExitAsync();
+    }
 
     /// <summary>Debug builds record interop failures raised on the UI thread; release builds do nothing.</summary>
     partial void InitializeFirstChanceTrace();
@@ -42,6 +46,7 @@ public partial class App : Application
         lock (_exitSync)
         {
             if (_exitRequest is not null) return _exitRequest;
+            TraceExitReason("owned-exit-request");
             var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _exitRequest = done.Task; // Publish before UI dispatch, cancellation or owner callbacks.
             try
@@ -96,6 +101,7 @@ public partial class App : Application
                 }
             }
             exitCallEntered = true; // Invocation boundary, not proof that native exit completed.
+            TraceExitReason("playback-drained-exit");
             base.Exit(); // Only after actual pending opens, sends, controls, closes and release have drained.
             done.TrySetResult(true);
         }
@@ -128,6 +134,7 @@ public partial class App : Application
     {
         InitializeComponent();
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        InitializeExitDiagnostics();
         UnhandledException += OnUnhandledException;
         InitializeFirstChanceTrace();
         _notificationManager = AppNotificationManager.Default;
@@ -180,6 +187,7 @@ public partial class App : Application
         }
         else
         {
+            TraceExitReason("secondary-instance");
             _notifications.Reject(); // No DI or playback in a redirect-only secondary.
             _activationRedirect = activatedArgs is null
                 ? RequestExitAsync()
@@ -233,6 +241,7 @@ public partial class App : Application
         // 一旦出现布局循环检测异常，就删除上次选中的功能页，然后重启应用.
         if (e.Message.Contains("Layout cycle detected"))
         {
+            TraceExitReason("layout-cycle-restart");
             SettingsToolkit.DeleteLocalSetting(Models.Constants.SettingNames.LastSelectedFeaturePage);
             this.Get<AppViewModel>().RestartCommand.Execute(default);
         }
@@ -242,7 +251,10 @@ public partial class App : Application
         => CaptureNotification(args);
 
     private void OnQuitCommandExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
-        => ExitApp();
+    {
+        TraceExitReason("tray-quit");
+        ExitApp();
+    }
 
     private void OnShowHideWindowCommandExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
         => GetMainWindow()?.Activate();

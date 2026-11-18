@@ -184,7 +184,8 @@
                         IsEnabled="False"
                         SizeChanged="OnChromePartSizeChanged"
                         Style="{StaticResource RootChromeBackButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=Back}" />
+                        ToolTipService.ToolTip="{ext:Locale Name=Back}"
+                        Visibility="Collapsed" />
 
                     <Viewbox
                         Grid.Column="1"
@@ -265,11 +266,14 @@
             <NavigationView
                 x:Name="NavView"
                 Grid.Row="1"
+                DisplayModeChanged="OnNavigationPanePresentationChanged"
                 FooterMenuItemsSource="{x:Bind ViewModel.FooterItems, Mode=OneWay}"
                 ItemInvoked="OnNavViewItemInvoked"
                 Loaded="OnNavViewLoaded"
                 MenuItemTemplate="{StaticResource AppNavItemTemplate}"
                 MenuItemsSource="{x:Bind ViewModel.MenuItems, Mode=OneWay}"
+                PaneClosed="OnNavigationPanePresentationChanged"
+                PaneOpened="OnNavigationPanePresentationChanged"
                 SelectionFollowsFocus="Disabled"
                 Style="{StaticResource NavigationViewStoreStyle}">
                 <Grid x:Name="MainGrid">

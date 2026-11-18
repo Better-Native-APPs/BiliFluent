@@ -1,11 +1,15 @@
 ﻿// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Forms;
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Richasy.BiliKernel.Models.Appearance;
 using Richasy.WinUIKernel.Share.Base;
-using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace BiliCopilot.UI.Controls.Components;
 
@@ -105,51 +109,169 @@ public sealed partial class EmoteTextBlock : LayoutUserControlBase
 
     private Paragraph? ParseText()
     {
-        if (string.IsNullOrEmpty(Text.Text))
+        if (string.IsNullOrEmpty(Text.Text) && Text.Links is not { Count: > 0 })
         {
             return default;
         }
 
-        var text = Text.Text;
-        var emotes = Text.Emotes;
-        var para = new Paragraph();
-
-        if (emotes != null && emotes.Count > 0)
+        // Without link information (moments, chat messages) only emotes are picked out, as before.
+        var segments = TextLinkParser.Parse(Text.Text, Text.Emotes, Text.Links);
+        if (segments.Count == 0)
         {
-            // 有表情存在，进行处理.
-            var emojiRegex = new Regex(@"(\[.*?\])");
-            var splitContents = emojiRegex.Split(text).Where(p => p.Length > 0).ToArray();
-            foreach (var content in splitContents)
-            {
-                if (emojiRegex.IsMatch(content))
-                {
-                    _ = emotes.TryGetValue(content, out var emoji);
-                    if (emoji != null && emoji.Uri is not null)
-                    {
-                        var inlineCon = new InlineUIContainer();
-                        var img = new Image() { Width = 20, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, -4) };
-                        var bitmap = new BitmapImage(emoji.Uri) { DecodePixelWidth = 40 };
-                        img.Source = bitmap;
-                        inlineCon.Child = img;
-                        para.Inlines.Add(inlineCon);
-                    }
-                    else
-                    {
-                        para.Inlines.Add(new Run { Text = content });
-                    }
-                }
-                else
-                {
-                    para.Inlines.Add(new Run { Text = content });
-                }
-            }
+            return default;
         }
-        else
+
+        var para = new Paragraph();
+        foreach (var segment in segments)
         {
-            para.Inlines.Add(new Run { Text = text });
+            switch (segment.Kind)
+            {
+                case TextSegmentKind.Emote:
+                    para.Inlines.Add(CreateInlineImage(Text.Emotes![segment.Text].Uri, 20, new Thickness(2, 0, 2, -4)));
+                    break;
+                case TextSegmentKind.Link:
+                    AddLink(para, segment);
+                    break;
+                default:
+                    para.Inlines.Add(new Run { Text = segment.Text });
+                    break;
+            }
         }
 
         return para;
+    }
+
+    private static InlineUIContainer CreateInlineImage(Uri uri, double width, Thickness margin)
+        => new()
+        {
+            Child = new Image
+            {
+                Width = width,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = margin,
+                Source = new BitmapImage(uri) { DecodePixelWidth = (int)(width * 2) },
+            },
+        };
+
+    // The small picture the server sends with a link. The link next to it already says everything.
+    private static InlineUIContainer CreateLinkIcon(Uri uri)
+    {
+        var icon = CreateInlineImage(uri, 16, new Thickness(2, 0, 3, -3));
+        AutomationProperties.SetAccessibilityView(icon.Child, AccessibilityView.Raw);
+        return icon;
+    }
+
+    private InlineUIContainer CreateInlineMark(string templateKey)
+        => new() { Child = (UIElement)((DataTemplate)Resources[templateKey]).LoadContent() };
+
+    private static string DescribeDestination(TextSegment segment)
+    {
+        var destination = segment.Destination!;
+        if (destination.IsShortLink)
+        {
+            // Where it leads is only known once it is opened: say what it is rather than guess.
+            return ResourceToolkit.GetLocalizedString(StringNames.TextLinkShortLink);
+        }
+
+        if (destination.IsExternal)
+        {
+            // Say which site the browser will show: the words of a link need not match where it leads.
+            var template = segment.Link?.Kind == TextLinkKind.Goods ? StringNames.TextLinkGoodsTemplate : StringNames.TextLinkBrowserTemplate;
+            return string.Format(CultureInfo.CurrentCulture, ResourceToolkit.GetLocalizedString(template), destination.WebUri!.IdnHost);
+        }
+
+        return ResourceToolkit.GetLocalizedString(destination.Kind switch
+        {
+            TextLinkDestinationKind.User => StringNames.TextLinkUser,
+            TextLinkDestinationKind.Search => segment.Link?.Kind == TextLinkKind.Topic ? StringNames.TextLinkTopic : StringNames.TextLinkSearch,
+            TextLinkDestinationKind.Video => StringNames.TextLinkVideo,
+            TextLinkDestinationKind.Live => StringNames.TextLinkLive,
+            TextLinkDestinationKind.Article => StringNames.TextLinkArticle,
+            _ => StringNames.TextLinkPgc,
+        });
+    }
+
+    // A link is a run of the sentence: accent text that wraps with the words around it. The system
+    // Hyperlink brings the hover and pressed colours, the hand pointer, the tab stop and Enter / Space.
+    private void AddLink(Paragraph para, TextSegment segment)
+    {
+        var destination = segment.Destination!;
+        var isNote = segment.IsAttached;
+        var isGoods = segment.Link?.Kind == TextLinkKind.Goods;
+        var shown = isNote ? ResourceToolkit.GetLocalizedString(StringNames.TextLinkNote) : TextLinkParser.GetDisplayText(segment);
+        var full = isNote ? null : TextLinkParser.GetFullText(segment);
+        var action = DescribeDestination(segment);
+
+        if (isNote && para.Inlines.Count > 0)
+        {
+            para.Inlines.Add(new LineBreak());
+        }
+
+        // Pictures cannot sit inside a Hyperlink, so they go right next to it.
+        var icon = isGoods
+            ? CreateInlineMark("GoodsLinkMark")
+            : segment.Link?.Icon?.Uri is { } iconUri ? CreateLinkIcon(iconUri) : null;
+        var isIconTrailing = !isGoods && segment.Link?.IsIconTrailing == true;
+        if (icon is not null && !isIconTrailing)
+        {
+            para.Inlines.Add(icon);
+        }
+
+        var link = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
+        link.Inlines.Add(new Run { Text = shown });
+        AutomationProperties.SetName(link, string.Format(
+            CultureInfo.CurrentCulture,
+            ResourceToolkit.GetLocalizedString(StringNames.TextLinkNameTemplate),
+            full ?? shown,
+            action));
+        ToolTipService.SetToolTip(link, full is null ? action : action + "\n" + TextLinkParser.Shorten(full, 200));
+
+        // The name a user space or an article opens under until its own data arrives.
+        var name = segment.Link?.Kind == TextLinkKind.Mention ? segment.Text.TrimStart('@') : segment.Link?.Title;
+        var isAsking = false;
+        link.Click += async (_, _) =>
+        {
+            // The link may sit in the "show all" flyout, which would otherwise stay open over the new page.
+            OverflowButton.Flyout?.Hide();
+            if (!destination.IsShortLink)
+            {
+                await TextLinkNavigator.OpenAsync(destination, name);
+                return;
+            }
+
+            // A short link takes a moment to find out where it leads. The link dims meanwhile, pressing
+            // it again changes nothing, and the answer is only used if this text is still what is shown
+            // when it comes.
+            if (isAsking)
+            {
+                return;
+            }
+
+            isAsking = true;
+            var text = Text;
+            link.Foreground = PendingLinkTone.Foreground;
+            try
+            {
+                await TextLinkNavigator.OpenAsync(destination, name, link, () => IsLoaded && ReferenceEquals(Text, text));
+            }
+            finally
+            {
+                link.ClearValue(TextElement.ForegroundProperty);
+                isAsking = false;
+            }
+        };
+        para.Inlines.Add(link);
+
+        if (icon is not null && isIconTrailing)
+        {
+            para.Inlines.Add(icon);
+        }
+
+        if (destination.IsExternal)
+        {
+            // Marks every link that leaves the app, so it does not read like a mention or a video.
+            para.Inlines.Add(CreateInlineMark("ExternalLinkMark"));
+        }
     }
 
     private void CheckTextTrim()

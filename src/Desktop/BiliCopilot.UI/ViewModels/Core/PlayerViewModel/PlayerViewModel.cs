@@ -134,7 +134,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _lifetime.Dispose();
         if (!IsEmbedded && UseIntegrationOperation && _independentInitializationCompleted
             && this.Get<AppViewModel>().Windows.OfType<MainWindow>().FirstOrDefault() is not null)
+        {
+            App.TraceExitReason("independent-player-integration-close");
             _ = App.Current.RequestExitAsync();
+        }
     }
 
     private async Task DrainPlayerWorkAsync()

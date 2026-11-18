@@ -80,7 +80,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             return backgroundLiveClose ? playerClose : Task.WhenAll(playerClose, liveClose);
         }
 
-        var sequence = ++_navigationSequence;
+        var sequence = SupersedeNavigation();
         var navigation = _navigationOperations.Enqueue(StartCloseAsync, () => navigate(sequence));
         OnPropertyChanged(nameof(LastNavigationTask));
         NotifyHistoryAvailability();

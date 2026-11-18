@@ -2277,4 +2277,43 @@
   <data name="RecommendationFeedApp" xml:space="preserve">
     <value>手机 App</value>
   </data>
+  <data name="TextLinkUser" xml:space="preserve">
+    <value>查看用户空间</value>
+  </data>
+  <data name="TextLinkTopic" xml:space="preserve">
+    <value>在应用内搜索这个话题</value>
+  </data>
+  <data name="TextLinkSearch" xml:space="preserve">
+    <value>在应用内搜索</value>
+  </data>
+  <data name="TextLinkVideo" xml:space="preserve">
+    <value>播放视频</value>
+  </data>
+  <data name="TextLinkPgc" xml:space="preserve">
+    <value>播放剧集</value>
+  </data>
+  <data name="TextLinkLive" xml:space="preserve">
+    <value>进入直播间</value>
+  </data>
+  <data name="TextLinkArticle" xml:space="preserve">
+    <value>阅读专栏</value>
+  </data>
+  <data name="TextLinkBrowserTemplate" xml:space="preserve">
+    <value>在浏览器中打开 {0}</value>
+  </data>
+  <data name="TextLinkGoodsTemplate" xml:space="preserve">
+    <value>商品或推广链接 · 在浏览器中打开 {0}</value>
+  </data>
+  <data name="TextLinkNote" xml:space="preserve">
+    <value>查看笔记</value>
+  </data>
+  <data name="TextLinkNameTemplate" xml:space="preserve">
+    <value>{0}，{1}</value>
+  </data>
+  <data name="TextLinkShortLink" xml:space="preserve">
+    <value>打开哔哩哔哩短链接</value>
+  </data>
+  <data name="TextLinkOpenFailed" xml:space="preserve">
+    <value>链接没有打开，请再试一次</value>
+  </data>
 </root>

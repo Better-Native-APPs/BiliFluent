@@ -19,6 +19,7 @@ internal static class Program
         var report = new Report();
         switch (mode)
         {
+            case "sponsor-cache-smoke": await SeamlessSmoke.RunSponsorCacheAsync(report, options); break;
             case "unit":
                 UnitChecks.Run(report);
                 break;
