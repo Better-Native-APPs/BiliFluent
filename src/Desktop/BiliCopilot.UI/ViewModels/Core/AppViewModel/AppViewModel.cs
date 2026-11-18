@@ -51,9 +51,12 @@ public sealed partial class AppViewModel : ViewModelBase
 
     [RelayCommand]
     private Task RestartAsync()
-        => RestartAfterPlaybackShutdownAsync(
+    {
+        App.TraceExitReason("application-restart");
+        return RestartAfterPlaybackShutdownAsync(
             () => Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().UnregisterKey(),
             Microsoft.Windows.AppLifecycle.AppInstance.Restart);
+    }
 
     // Same-assembly delegate seam permits deferred source cases without invoking a native restart.
     internal async Task RestartAfterPlaybackShutdownAsync(Action beforeRestart,
@@ -68,6 +71,7 @@ public sealed partial class AppViewModel : ViewModelBase
         {
             beforeRestart();
             restartCallEntered = true; // Invocation boundary, NOT a success/acceptance flag.
+            App.TraceExitReason("playback-drained-restart");
             var reason = restart(string.Empty);
             if (reason is AppRestartFailureReason.NotInForeground
                 or AppRestartFailureReason.InvalidUser or AppRestartFailureReason.Other)

@@ -76,6 +76,8 @@ public sealed partial class StartupWindow : WindowEx
     private void OnClosed(object sender, WindowEventArgs args)
     {
         this.Get<AppViewModel>().Windows.Remove(this);
+        if (this.Get<AppViewModel>().Windows.Count == 0)
+            App.TraceExitReason("last-startup-window-closed");
         Activated -= OnActivated;
         Closed -= OnClosed;
         var startup = this.Get<StartupPageViewModel>();

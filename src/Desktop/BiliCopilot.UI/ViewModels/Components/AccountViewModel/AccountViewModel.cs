@@ -88,6 +88,7 @@ public sealed partial class AccountViewModel : ViewModelBase
             }
             else
             {
+                App.TraceExitReason("account-initialization-declined");
                 App.Current.Exit();
             }
         }

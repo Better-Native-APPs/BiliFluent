@@ -42,6 +42,7 @@ internal sealed partial class SponsorRuntime
     private void OnMainWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (nativeExitAuthorized || requestWindowExit?.Invoke() is not { } actual) return;
+        App.TraceExitReason("sponsor-main-window-closing");
         windowExit = actual; // The existing App.RequestExitAsync task, not another shutdown driver.
         args.Cancel = true;
     }
@@ -49,6 +50,7 @@ internal sealed partial class SponsorRuntime
     private void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
         if (nativeExitAuthorized || requestWindowExit?.Invoke() is not { } actual) return;
+        App.TraceExitReason("sponsor-main-window-closed");
         windowExit = actual;
         args.Handled = true;
         mainWindow?.Activate(); // The old handler may have hidden it via its Classic keepalive branch.
