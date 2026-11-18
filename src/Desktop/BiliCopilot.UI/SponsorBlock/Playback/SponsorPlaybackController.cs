@@ -91,6 +91,7 @@ internal sealed partial class SponsorPlaybackController
     private long _requestRevision;
     private NativePlaybackSnapshot? _actual;
     private PlaybackExecutionPlan? _plan;
+    private ImmutableArray<PlaybackSeekInterval> _automaticSeekIntervals = [];
     private SponsorOperation? _operation;
     private Task? _actualCompletion;
     private string? _failure;
@@ -126,7 +127,7 @@ internal sealed partial class SponsorPlaybackController
     internal SponsorControllerResult Snapshot => new(_sequence, _owner, CurrentStamp, _actual, _plan,
         _operation, _mute, _rate, _rateClaims, _applied, _rateReceipt, _appliedId, _rateReceiptId, _seekClaims, _failure)
         { PreviewPlayback = _preview?.Status ?? _terminalPreviewStatus, RequestResult = _requestResult,
-            AutomaticSeekIntervals = ProjectAutomaticSeekIntervals() };
+            AutomaticSeekIntervals = _sponsorOpen && CanUseBinding ? _automaticSeekIntervals : [] };
     internal bool HasBinding => _backend is not null && !_sealed;
     internal bool CanUseBinding => HasBinding && !_retiring && _bindingCurrent?.Invoke() == true;
     #pragma warning disable VSTHRD003 // Read-only view of the actual-completion task owned by this controller.
@@ -341,6 +342,7 @@ internal sealed partial class SponsorPlaybackController
     {
         VerifyAccess();
         _sponsorOpen = false;
+        _automaticSeekIntervals = [];
         if (_request is { } request) ConsumeRequest(request.Id);
         if (_requestResult is { Phase: SponsorRequestPhase.Pending } pending)
             ResolveRequest(pending.Id, SponsorRequestPhase.Rejected, "SponsorAdmissionClosed");
@@ -400,6 +402,7 @@ internal sealed partial class SponsorPlaybackController
             throw new InvalidOperationException("Native binding cannot seal before actual completion and restoration.");
         _issuer!.SealAfterDrain();
         _sealed = true;
+        _automaticSeekIntervals = [];
     }
 
     internal Task SeekAsync(UserIntentTicket ticket, double seconds) => UserAsync(ticket, async () =>
@@ -713,7 +716,11 @@ internal sealed partial class SponsorPlaybackController
     {
         var owner = _issuer;
         ++_sequence;
-        try { Updated?.Invoke(Snapshot); }
+        try
+        {
+            _automaticSeekIntervals = ProjectAutomaticSeekIntervals();
+            Updated?.Invoke(Snapshot);
+        }
         catch (Exception) { RecordObservedWorkFailure(owner, ObservedWorkFailureKind.Subscriber); }
     }
 

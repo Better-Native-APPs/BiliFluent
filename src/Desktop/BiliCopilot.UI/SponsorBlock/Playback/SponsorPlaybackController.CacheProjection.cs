@@ -9,7 +9,7 @@ internal sealed partial class SponsorPlaybackController
     {
         if (!_sponsorOpen || !CanUseBinding || _intents.Count != 0 || _input is not { } facts
             || _interaction is not { } interaction || _actual is not { } actual || CurrentStamp is not { } stamp) return [];
-        // Snapshot-only counterpart of MakeInput: do not expire/consume requests or touch a visit.
+        // Publication-only counterpart of MakeInput: do not expire/consume requests or touch a visit.
         var input = new PlaybackInput(stamp, new(actual.Position, actual.Duration, actual.Rate, actual.State, SponsorMediaKind.Vod),
             new(stamp.Owner, facts.Segments), facts.Policy,
             new(actual.CanSeekExactly, actual.CanWriteMute && actual.Muted.HasValue), facts.Channel, interaction)
