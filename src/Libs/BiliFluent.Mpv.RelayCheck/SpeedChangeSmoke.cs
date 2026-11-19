@@ -110,6 +110,7 @@ internal static partial class SpeedChangeSmoke
                 row.Environment["timing-start-forward-cache-seconds"] = Number(mpv.GetNumber("demuxer-cache-duration"));
                 CaptureEnvironment(mpv, window, row);
                 if (settings.Case == "baseline") await RunBaselineAsync(report, settings, mpv, probe, row, directory).ConfigureAwait(false);
+                else if (settings.Case == "cost") await RunCostsAsync(report, settings, mpv, probe, row, directory).ConfigureAwait(false);
                 else await RunSwitchesAsync(report, settings, mpv, probe, row, directory).ConfigureAwait(false);
             }
 
@@ -137,7 +138,7 @@ internal static partial class SpeedChangeSmoke
     {
         foreach (var (name, value) in new (string, string)[]
         {
-            ("config", "no"), ("load-scripts", "no"), ("terminal", "no"), ("profile", "high-quality"),
+            ("config", "no"), ("load-scripts", "no"), ("terminal", "no"),
             ("vo", "gpu-next"), ("gpu-api", "d3d11"), ("gpu-context", "auto"), ("hwdec", "auto"),
             ("ao", "wasapi"), ("audio-exclusive", "no"), ("mute", "yes"), ("volume", "100"),
             ("cache", "yes"), ("demuxer-max-bytes", "64MiB"), ("demuxer-max-back-bytes", "32MiB"),
@@ -322,10 +323,11 @@ internal static partial class SpeedChangeSmoke
         var variant = options.GetValueOrDefault("variant", "default");
         var count = int.Parse(options.GetValueOrDefault("count", "10"), CultureInfo.InvariantCulture);
         var pass = int.Parse(options.GetValueOrDefault("pass", "1"), CultureInfo.InvariantCulture);
-        if (name is not ("baseline" or "switch" or "startup") || variant is not ("default" or "fixed" or "pitch-off")
+        if (name is not ("baseline" or "switch" or "startup" or "cost") || variant is not ("default" or "fixed" or "pitch-off")
             || from is not (1 or 1.5 or 2 or 3) || to is not (1 or 1.5 or 2 or 3) || speed is not (1 or 1.5 or 2 or 3)
             || (name == "switch" && from == to) || count is < 1 or > 10 || pass is < 1 or > 99)
             throw new ArgumentException("Unsupported measurement settings.");
+        if (name == "cost" && speed != 1) throw new ArgumentException("Costs must be measured at normal speed.");
         return new(name, from, to, speed, variant, count, pass);
     }
 
@@ -395,5 +397,6 @@ internal static partial class SpeedChangeSmoke
         public List<SpeedWrite> Writes { get; set; } = [];
         public List<Startup> Startups { get; set; } = [];
         public List<Observation> Observations { get; set; } = [];
+        public List<RecoveryCheck> RecoveryChecks { get; set; } = [];
     }
 }
