@@ -47,11 +47,26 @@ internal enum TextLinkDestinationKind
 /// </summary>
 internal sealed record TextLinkDestination(TextLinkDestinationKind Kind, string? Value, Uri? WebUri = null)
 {
+    /// <summary>Gets the requested video position, in seconds.</summary>
+    public double? StartPosition { get; init; }
+
+    /// <summary>Gets the requested video part's cid.</summary>
+    public string? PartId { get; init; }
+
+    /// <summary>Gets the requested one-based video part number.</summary>
+    public int? PartNumber { get; init; }
+
     /// <summary>Gets a value indicating whether the link leaves the app.</summary>
     public bool IsExternal => Kind == TextLinkDestinationKind.Browser;
 
     /// <summary>Gets a value indicating whether the site has to be asked where the link leads.</summary>
     public bool IsShortLink => Kind == TextLinkDestinationKind.ShortLink;
+}
+
+/// <summary>A validated protocol intent; a valid but unknown address has no destination.</summary>
+internal sealed record AppLinkResolution(bool IsValid, TextLinkDestination? Destination = null)
+{
+    internal string Kind => !IsValid ? "invalid" : Destination?.Kind.ToString().ToLowerInvariant() ?? "unsupported";
 }
 
 /// <summary>
@@ -61,6 +76,8 @@ internal sealed record TextLinkDestination(TextLinkDestinationKind Kind, string?
 /// </summary>
 internal static partial class TextLinkResolver
 {
+    internal const int MaximumAppLinkCharacters = 2048;
+
     /// <summary>
     /// Words the platform picks out of a comment on its own and offers to search for. They are not
     /// something the author linked, so they stay plain text. Set to true to make them open a search.
@@ -138,6 +155,25 @@ internal static partial class TextLinkResolver
         return uri.Scheme == "bilibili" ? ResolveNative(uri) : ResolveWeb(uri);
     }
 
+    /// <summary>Validates an untrusted activation without handing unknown native addresses back to the system.</summary>
+    internal static AppLinkResolution ResolveAppLink(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address) || address.Length > MaximumAppLinkCharacters
+            || address.Any(char.IsControl)) return new(false);
+        try
+        {
+            if (ParseUri(address.Trim()) is not { Scheme: "bilibili" } uri
+                || !string.IsNullOrEmpty(uri.UserInfo) || uri.Port != -1) return new(false);
+            var destination = ResolveNative(uri);
+            // An unsafe browser wrapper is invalid, not an external fallback.
+            return Is(uri.Host, "browser") && destination is null ? new(false) : new(true, destination);
+        }
+        catch (Exception)
+        {
+            return new(false); // Never retain or report private address/exception content.
+        }
+    }
+
     /// <summary>
     /// The browser destination of an address, or null when it is not a plain http(s) address.
     /// </summary>
@@ -197,12 +233,12 @@ internal static partial class TextLinkResolver
             case "www.bilibili.com" or "bilibili.com" or "m.bilibili.com":
                 if (Is(first, "video") && VideoId(second, allowNumber: false) is { } video)
                 {
-                    return new(TextLinkDestinationKind.Video, video);
+                    return VideoDestination(video, uri);
                 }
 
                 if (VideoId(first, allowNumber: false) is { } rootVideo)
                 {
-                    return new(TextLinkDestinationKind.Video, rootVideo);
+                    return VideoDestination(rootVideo, uri);
                 }
 
                 if (Is(first, "bangumi") && Is(second, "play"))
@@ -282,17 +318,49 @@ internal static partial class TextLinkResolver
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var first = segments.Length > 0 ? segments[0] : string.Empty;
         var second = segments.Length > 1 ? segments[1] : string.Empty;
+        var third = segments.Length > 2 ? segments[2] : string.Empty;
         return uri.Host.ToLowerInvariant() switch
         {
-            "video" when VideoId(first, allowNumber: true) is { } video => new(TextLinkDestinationKind.Video, video),
+            "video" when VideoId(first, allowNumber: true) is { } video => VideoDestination(video, uri),
             "article" when NumberId(first) is { } article => new(TextLinkDestinationKind.Article, article),
             "live" when NumberId(first) is { } room => new(TextLinkDestinationKind.Live, room),
             "space" when NumberId(first) is { } user => new(TextLinkDestinationKind.User, user),
             "bangumi" when Is(first, "season") && NumberId(second) is { } season => new(TextLinkDestinationKind.Season, season),
+            "pgc" when segments.Length == 3 && Is(first, "season") && Is(second, "ep")
+                && NumberId(third) is { } episode => new(TextLinkDestinationKind.Episode, episode),
+            "following" when segments.Length == 2 && Is(first, "detail") && Prefixed(second, "cv") is { } followingArticle
+                => new(TextLinkDestinationKind.Article, followingArticle),
+            "browser" when segments.Length == 0 && NativeBrowserUri(uri) is { } web => ResolveWeb(web),
             "search" when Words(Query(uri, "keyword")) is { } keyword => new(TextLinkDestinationKind.Search, keyword),
             _ => null,
         };
     }
+
+    private static Uri? NativeBrowserUri(Uri uri)
+    {
+        var address = Query(uri, "url");
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var web) || web.Scheme != Uri.UriSchemeHttps
+            || !string.IsNullOrEmpty(web.UserInfo)) return null;
+        var host = web.IdnHost.ToLowerInvariant();
+        return host == "bilibili.com" || host.EndsWith(".bilibili.com", StringComparison.Ordinal) ? web : null;
+    }
+
+    private static TextLinkDestination VideoDestination(string id, Uri uri)
+        => new(TextLinkDestinationKind.Video, id)
+        {
+            StartPosition = Position(Query(uri, "start_progress"), 1000d) ?? Position(Query(uri, "t"), 1d),
+            PartId = NumberId(Query(uri, "cid")),
+            PartNumber = PartNumber(Query(uri, "page")) ?? PartNumber(Query(uri, "p")),
+        };
+
+    private static double? Position(string? value, double unitsPerSecond)
+        => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var position) && double.IsFinite(position)
+            ? Math.Clamp(position / unitsPerSecond, 0d, 24d * 60d * 60d)
+            : null;
+
+    private static int? PartNumber(string? value)
+        => NumberId(value) is { } number && int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var part)
+            ? part : null;
 
     private static bool Is(string value, string expected) => string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
 
