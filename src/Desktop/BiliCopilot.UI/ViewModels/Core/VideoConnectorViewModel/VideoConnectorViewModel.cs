@@ -188,19 +188,17 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
 
     private VideoPart? FindInitialPart(string? initialPartId = default, int? initialPartNumber = default)
     {
-        var parts = _view.Parts;
-        if (parts is null || parts.Count == 0) return null;
-        if (parts.Count == 1)
+        if (_view.Parts?.Count == 1)
         {
-            return parts[0];
+            return _view.Parts[0];
         }
 
         VideoPart? part = default;
         if (!string.IsNullOrEmpty(initialPartId))
         {
-            part = parts.FirstOrDefault(p => p.Identifier.Id == initialPartId);
+            part = _view.Parts.FirstOrDefault(p => p.Identifier.Id == initialPartId);
         }
-        else if (initialPartNumber is > 0 && initialPartNumber <= parts.Count)
+        else if (initialPartNumber is > 0 && _view.Parts is { Count: > 0 } parts && initialPartNumber <= parts.Count)
         {
             part = parts[initialPartNumber.Value - 1];
         }
@@ -211,11 +209,11 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
             var autoLoadHistory = SettingsToolkit.ReadLocalSetting(SettingNames.AutoLoadHistory, true);
             if (!string.IsNullOrEmpty(historyPartId) && autoLoadHistory)
             {
-                part = parts.FirstOrDefault(p => p.Identifier.Id == historyPartId);
+                part = _view.Parts.FirstOrDefault(p => p.Identifier.Id == historyPartId);
             }
         }
 
-        return part ?? parts.FirstOrDefault();
+        return part ?? _view.Parts.FirstOrDefault();
     }
 
     private void UpdateProperties()
