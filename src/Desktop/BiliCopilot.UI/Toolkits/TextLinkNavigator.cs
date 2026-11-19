@@ -29,8 +29,10 @@ internal static class TextLinkNavigator
     /// moment: <paramref name="origin"/> tells the link that was pressed from any other, and
     /// <paramref name="isStillShown"/> says whether the text it sits in is still on screen when the
     /// answer arrives. The answer is dropped when it is not, or when another link was opened meanwhile.
+    /// <paramref name="waitForPlayback"/> leaves the existing command behavior unchanged when null;
+    /// false observes playback failures without holding up later protocol activations.
     /// </summary>
-    public static async Task OpenAsync(TextLinkDestination destination, string? name = null, object? origin = null, Func<bool>? isStillShown = null)
+    public static async Task OpenAsync(TextLinkDestination destination, string? name = null, object? origin = null, Func<bool>? isStillShown = null, bool? waitForPlayback = null)
     {
         var services = GlobalDependencies.Services;
         try
@@ -63,20 +65,20 @@ internal static class TextLinkNavigator
                     break;
                 case TextLinkDestinationKind.Video:
                     var video = new VideoInformation(new MediaIdentifier(id, default, default), default);
-                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(video)
+                    await OpenPlaybackAsync(new MediaSnapshot(video)
                     {
                         StartPosition = destination.StartPosition,
                         PreferPart = destination.PartId is { } cid ? new VideoPart(new MediaIdentifier(cid, default, default), 0, 0) : null,
                         PreferPartNumber = destination.PartNumber,
-                    });
+                    }, waitForPlayback);
                     break;
                 case TextLinkDestinationKind.Episode:
                     var episode = new EpisodeInformation(new MediaIdentifier(id, default, default));
-                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(default, episode));
+                    await OpenPlaybackAsync(new MediaSnapshot(default, episode), waitForPlayback);
                     break;
                 case TextLinkDestinationKind.Season:
                     var season = new SeasonInformation(new MediaIdentifier(id, default, default));
-                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(season, default));
+                    await OpenPlaybackAsync(new MediaSnapshot(season, default), waitForPlayback);
                     break;
                 case TextLinkDestinationKind.Live:
                     await services.GetRequiredService<AppViewModel>().OpenLiveAsync(new LiveInformation(new MediaIdentifier(id, default, default)));
@@ -100,6 +102,34 @@ internal static class TextLinkNavigator
             services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(TextLinkNavigator))
                 .LogError("Failed to open a text link ({Kind}, {ErrorType})", destination.Kind, ex.GetType().Name);
             ShowFailure();
+        }
+    }
+
+    private static Task OpenPlaybackAsync(MediaSnapshot snapshot, bool? waitForPlayback)
+    {
+        var command = GlobalDependencies.Services.GetRequiredService<AppViewModel>().OpenPlayerCommand;
+        if (waitForPlayback is null)
+        {
+            command.Execute(snapshot); // Preserve the comment link's existing command/error surface.
+            return Task.CompletedTask;
+        }
+        var observation = ObservePlaybackAsync(command.ExecuteAsync(snapshot));
+        if (waitForPlayback.Value) return observation;
+        _ = observation;
+        return Task.CompletedTask;
+    }
+
+    private static async Task ObservePlaybackAsync(Task playback)
+    {
+        // This non-owning observer is never a prerequisite of the application's playback task.
+#pragma warning disable VSTHRD003
+        try { await playback; }
+#pragma warning restore VSTHRD003
+        catch (Exception ex)
+        {
+            // The application/navigation owner already reports playback failure. Do not add a second tip.
+            GlobalDependencies.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(TextLinkNavigator))
+                .LogError("Failed to complete text link playback ({ErrorType})", ex.GetType().Name);
         }
     }
 

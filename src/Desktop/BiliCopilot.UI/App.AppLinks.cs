@@ -106,7 +106,7 @@ public partial class App
                 }
                 else
                 {
-                    await TextLinkNavigator.OpenAsync(destination, isStillShown: () => _appLinks.IsCurrent(request));
+                    await TextLinkNavigator.OpenAsync(destination, isStillShown: () => _appLinks.IsCurrent(request), waitForPlayback: false);
                     LogAppLink(request.Resolution.Kind, _appLinks.IsCurrent(request) ? "dispatched" : "dropped-superseded");
                 }
             }
