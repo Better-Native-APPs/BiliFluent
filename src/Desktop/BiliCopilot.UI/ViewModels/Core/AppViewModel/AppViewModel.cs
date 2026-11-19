@@ -71,6 +71,7 @@ public sealed partial class AppViewModel : ViewModelBase
         {
             beforeRestart();
             restartCallEntered = true; // Invocation boundary, NOT a success/acceptance flag.
+            App.DiscardPendingAppLinkForRestart();
             App.TraceExitReason("playback-drained-restart");
             var reason = restart(string.Empty);
             if (reason is AppRestartFailureReason.NotInForeground

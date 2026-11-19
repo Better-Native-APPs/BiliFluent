@@ -156,7 +156,7 @@ public partial class App
         _appLinkRootIsCurrent = null;
     }
 
-    static partial void DiscardAppLinkForRestart()
+    internal static void DiscardPendingAppLinkForRestart()
     {
         if (!Current._appLinks.DropPending()) return;
         try { Serilog.Log.Information("AppLink | result=dropped-restart"); }
