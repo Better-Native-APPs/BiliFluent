@@ -17,6 +17,7 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 - `Themes/Generic.xaml` 删除未移植的 DraggableCardControl、SettingsCard、SettingsExpander 的合并字典，其他字典的 `ms-appx:///` 路径改为新程序集名；控件模板保持原样。
 - `WinUIKernelShareExtensions.InitializeShareKernel` 改为只接收可选 `ILogger`，删除 `Kernel` 与内部资源工具箱的保存/初始化。保留的代码不通过 Kernel 查询服务；查询服务的 `AppDialog` 和使用内部本地化资源的 `TipHeader`/`LocaleExtension` 没有移植，因此无需服务定位器、内部字符串资源或 `RichasyKernel.Abstractions`。
 - 工程目标框架与平台跟随 `Danmaku.Legacy`，使用中央包版本，不升级依赖。关闭本工程的分析器及文档生成，保留上游源码风格；应用工程的分析器设置不变。
+- .NET 11 已由框架提供 Logging.Abstractions，删除上游的冗余显式包引用以消除 NU1510；日志初始化和控件日志调用保持原样，不使用 NoWarn 或 pragma。
 
 ## 构建集成
 

@@ -32,7 +32,6 @@
     <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
     <PackageReference Include="CommunityToolkit.WinUI.Media" />
     <PackageReference Include="FluentIcons.WinUI" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Graphics.Win2D" />
     <PackageReference Include="Microsoft.Windows.CsWinRT" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
