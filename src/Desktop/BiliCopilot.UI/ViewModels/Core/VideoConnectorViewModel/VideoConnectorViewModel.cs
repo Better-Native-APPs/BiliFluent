@@ -166,7 +166,7 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
             ThrowIfRequestInvalid(generation, cancellationToken);
 
             _view = view;
-            _part = FindInitialPart(snapshot.PreferPart?.Identifier.Id);
+            _part = FindInitialPart(snapshot.PreferPart?.Identifier.Id, snapshot.PreferPart is null ? snapshot.PreferPartNumber : null);
             UpdateProperties();
             ThrowIfRequestInvalid(generation, cancellationToken);
             InitializeView(_view);
@@ -186,17 +186,23 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
         }
     }
 
-    private VideoPart? FindInitialPart(string? initialPartId = default)
+    private VideoPart? FindInitialPart(string? initialPartId = default, int? initialPartNumber = default)
     {
-        if (_view.Parts?.Count == 1)
+        var parts = _view.Parts;
+        if (parts is null || parts.Count == 0) return null;
+        if (parts.Count == 1)
         {
-            return _view.Parts[0];
+            return parts[0];
         }
 
         VideoPart? part = default;
         if (!string.IsNullOrEmpty(initialPartId))
         {
-            part = _view.Parts.FirstOrDefault(p => p.Identifier.Id == initialPartId);
+            part = parts.FirstOrDefault(p => p.Identifier.Id == initialPartId);
+        }
+        else if (initialPartNumber is > 0 && initialPartNumber <= parts.Count)
+        {
+            part = parts[initialPartNumber.Value - 1];
         }
 
         if (part == null)
@@ -205,11 +211,11 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
             var autoLoadHistory = SettingsToolkit.ReadLocalSetting(SettingNames.AutoLoadHistory, true);
             if (!string.IsNullOrEmpty(historyPartId) && autoLoadHistory)
             {
-                part = _view.Parts.FirstOrDefault(p => p.Identifier.Id == historyPartId);
+                part = parts.FirstOrDefault(p => p.Identifier.Id == historyPartId);
             }
         }
 
-        return part ?? _view.Parts.FirstOrDefault();
+        return part ?? parts.FirstOrDefault();
     }
 
     private void UpdateProperties()

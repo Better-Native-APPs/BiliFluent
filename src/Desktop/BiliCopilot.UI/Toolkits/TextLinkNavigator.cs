@@ -61,15 +61,20 @@ internal static class TextLinkNavigator
                     break;
                 case TextLinkDestinationKind.Video:
                     var video = new VideoInformation(new MediaIdentifier(id, default, default), default);
-                    services.GetRequiredService<AppViewModel>().OpenPlayerCommand.Execute(new MediaSnapshot(video));
+                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(video)
+                    {
+                        StartPosition = destination.StartPosition,
+                        PreferPart = destination.PartId is { } cid ? new VideoPart(new MediaIdentifier(cid, default, default), 0, 0) : null,
+                        PreferPartNumber = destination.PartNumber,
+                    });
                     break;
                 case TextLinkDestinationKind.Episode:
                     var episode = new EpisodeInformation(new MediaIdentifier(id, default, default));
-                    services.GetRequiredService<AppViewModel>().OpenPlayerCommand.Execute(new MediaSnapshot(default, episode));
+                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(default, episode));
                     break;
                 case TextLinkDestinationKind.Season:
                     var season = new SeasonInformation(new MediaIdentifier(id, default, default));
-                    services.GetRequiredService<AppViewModel>().OpenPlayerCommand.Execute(new MediaSnapshot(season, default));
+                    await services.GetRequiredService<AppViewModel>().OpenPlayerCommand.ExecuteAsync(new MediaSnapshot(season, default));
                     break;
                 case TextLinkDestinationKind.Live:
                     await services.GetRequiredService<AppViewModel>().OpenLiveAsync(new LiveInformation(new MediaIdentifier(id, default, default)));

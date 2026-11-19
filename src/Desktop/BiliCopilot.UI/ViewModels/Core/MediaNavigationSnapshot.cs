@@ -40,6 +40,7 @@ internal static class MediaNavigationSnapshot
         target.PreferAudioQualityId = source.PreferAudioQualityId;
         target.IsAutomaticAudioStandardOnly = source.IsAutomaticAudioStandardOnly;
         target.PreferPart = source.PreferPart;
+        target.PreferPartNumber = source.PreferPartNumber;
         target.Playlist = source.Playlist is { } playlist ? [.. playlist] : null;
         target.StartPosition = source.Type == BiliMediaType.Live ? null : source.StartPosition;
     }
