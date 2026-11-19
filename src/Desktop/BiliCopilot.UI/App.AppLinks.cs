@@ -10,7 +10,6 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.WinUIKernel.Share.Base;
 using System.ComponentModel;
 using System.Globalization;
-using Windows.ApplicationModel.Activation;
 
 namespace BiliCopilot.UI;
 
