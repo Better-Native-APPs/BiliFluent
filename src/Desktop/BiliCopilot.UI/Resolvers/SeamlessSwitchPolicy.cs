@@ -1,6 +1,7 @@
 // Copyright (c) BiliFluent. All rights reserved.
 
 using Richasy.MpvKernel.Player.Models;
+using Richasy.MpvKernel.Relay;
 
 namespace BiliCopilot.UI.Resolvers;
 
@@ -37,11 +38,40 @@ internal static class SeamlessSwitchPolicy
         => external && (minimumSeekTime is null || position < minimumSeekTime.Value);
 
     public static bool RequiresReloadForSeek(double position, double currentPosition, bool externalVideo,
-        double? minimumSeekTime, bool separateAudio)
-        // Initial DASH files have independent caches. A backward seek after resume can join
-        // early audio packets to the old cached interval; replace both complete files instead.
+        double? minimumSeekTime, bool separateAudio, double? runStart = null)
+        // Only seeks before the current uninterrupted read interval can join early audio
+        // packets to a later cached interval. Unknown starts retain the old conservative rule.
         => RequiresReloadForSeek(position, externalVideo, minimumSeekTime)
-            || (!externalVideo && separateAudio && position < currentPosition);
+            || (separateAudio && position < (runStart is double start && start >= 0 && double.IsFinite(start) ? start : currentPosition));
+
+    public static bool IsVideoBufferedForSeekRun(double target, double sampledPosition, double rawForwardSeconds)
+        => double.IsFinite(target) && double.IsFinite(sampledPosition) && sampledPosition >= 0
+            && double.IsFinite(rawForwardSeconds) && rawForwardSeconds >= 0
+            && target + 1 <= sampledPosition + rawForwardSeconds;
+
+    public static bool IsAudioCompleteForSeekRun(RelayStreamStatistics? statistics)
+    {
+        if (statistics is not { Length: > 0, DeliveryCoverage: { IsIndeterminate: false } coverage } stream
+            || coverage.Ranges.IsDefaultOrEmpty) return false;
+        var ranges = coverage.Ranges;
+        if (ranges[^1].End != stream.Length.Value || ranges[0].Start != 0) return false;
+        return ranges.Length == 1 || (ranges.Length == 2 && ranges[0].End <= 1024 * 1024);
+    }
+
+    public static double? GetPreparedAudioRunStart(MpvSeamlessTarget? target, MpvSeamlessSwitchResult result,
+        MpvSeamlessStreamState? selectedAudio)
+    {
+        if (target?.IndexRange is not { } range || selectedAudio?.FragmentIndex is not { } index
+            || result.PreloadedBytes <= 0 || result.AudioOpeningGapBytes < 0) return null;
+        // The existing preparation result gives first.Offset - head.Length. A zero gap
+        // identifies the first fragment only when the head ends at the index's first offset.
+        var headLength = range.Last + 1;
+        if (result.AudioOpeningGapBytes == 0 && index.Fragments[0].Offset != headLength) return null;
+        var firstOffset = headLength + result.AudioOpeningGapBytes;
+        foreach (var fragment in index.Fragments)
+            if (fragment.Offset == firstOffset) return fragment.Time;
+        return null;
+    }
 }
 
 /// <summary>Both audio and video share one latest-intent sequence.</summary>
