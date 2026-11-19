@@ -26,7 +26,7 @@ CLSID 按 `channel.json` 中新仓库 URL 的 UUIDv5 规则生成；可执行文
 
 ## 工具边界与输入
 
-- 使用 Windows x64 与 Windows PowerShell 5.1，构建 SDK 仍按仓库 `global.json` 的 `10.0.403`。
+- 使用 Windows x64 与 Windows PowerShell 5.1，构建 SDK 仍按仓库 `global.json` 的 `11.0.100`。
 - `Prepare-Package.ps1` 要求已经生成的、文件清单及摘要获确认的原生布局；拒绝包含 CLR 头的托管 PE。正式 ReadyToRun Release 不是该工具要求的 NativeAOT / 原生测试布局。
 - 源清单可来自新 `BiliFluent` / `CN=BiliFluent` 身份；仍兼容工具原有的上游开发布局输入。转换后强制使用上表的测试身份。
 - 工具不自动寻找或导入私钥、不签名、不自动下载依赖、不修改全局策略。
