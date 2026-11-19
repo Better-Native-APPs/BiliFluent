@@ -27,8 +27,8 @@ internal sealed class RelayDeliveryTracker
 
     public void Record(long start, long end)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(start);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(end, start);
+        // Called from the transfer loop: a malformed interval is not recorded, never thrown.
+        if (start < 0 || end <= start) return;
         lock (_sync)
         {
             if (_indeterminate) return;
