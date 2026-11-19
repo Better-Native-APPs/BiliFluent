@@ -11,6 +11,7 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 ## 与上游的差异
 
 - 只保留应用使用的类型、它们的包内依赖和对应资源；不引入未使用控件。
+- `Themes/Generic.xaml` 删除未移植的 DraggableCardControl、SettingsCard、SettingsExpander 的合并字典，其他字典的 `ms-appx:///` 路径改为新程序集名；控件模板保持原样。
 - 工程目标框架与平台跟随 `Danmaku.Legacy`，使用中央包版本，不升级依赖。关闭本工程的分析器及文档生成，保留上游源码风格；应用工程的分析器设置不变。
 
 ## 构建集成
