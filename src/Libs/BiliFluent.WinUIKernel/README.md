@@ -2,6 +2,8 @@
 
 BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源码副本。程序集名为 `BiliFluent.WinUIKernel`，保留上游 `Richasy.WinUIKernel.Share` 命名空间与应用使用的公开成员。
 
+移植范围为 61 个 C# 类型（包含泛型版本和辅助类型），共 52 个 C# 文件、6,097 行，以及 17 个 XAML 文件、2,112 行；不计工程、说明和编译器生成代码。
+
 ## 来源与许可
 
 - 上游：[Richasy/winui-kernel](https://github.com/Richasy/winui-kernel/tree/3f1086f6cfa8c1e0c3a64b930a8577dc5496c616) 的 `src/WinUIKernel.Share/`。
@@ -19,3 +21,10 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 ## 构建集成
 
 工程使用 WinUI，目标框架为 `net10.0-windows10.0.22621.0`，支持 x86、x64 与 ARM64，不单独生成 NuGet 包。
+
+## 移植核对
+
+- .NET 10 候选 `e641778c` 的整体 Debug 编译和 Release 发布/打包均为 0 警告、0 错误；未签名的本地 MSIX 含新程序集及资源。
+- 旧 PRI 的 21 个 XBF 中，保留的 17 个在新程序集路径下全部存在；6 条指向库的资源 URI 均有索引匹配。未保留资源只属于未使用的 DraggableCardControl、SettingsCard、SettingsExpander 和 TipHeader。
+- 比较旧包与新 DLL 的 54 个公开/受保护类型及 729 条 API 元数据记录，除上述初始化适配外全部一致；全部指定仓库外自检的通过数与基点一致。
+- 51 个 C# 文件与 16 个 XAML 文件和固定提交的上游源码完全相同，只有上述初始化入口与 Generic 字典存在差异。
