@@ -159,11 +159,11 @@ internal static partial class TextLinkResolver
     internal static AppLinkResolution ResolveAppLink(string? address)
     {
         if (string.IsNullOrWhiteSpace(address) || address.Length > MaximumAppLinkCharacters
-            || address.Any(char.IsControl)) return new(false);
+            || address.Any(char.IsControl) || !HasValidEscapes(address)) return new(false);
         try
         {
             if (ParseUri(address.Trim()) is not { Scheme: "bilibili" } uri
-                || !uri.IsWellFormedOriginalString() || !string.IsNullOrEmpty(uri.UserInfo) || uri.Port != -1) return new(false);
+                || !string.IsNullOrEmpty(uri.UserInfo) || uri.Port != -1) return new(false);
             var destination = ResolveNative(uri);
             // An unsafe browser wrapper is invalid, not an external fallback.
             return Is(uri.Host, "browser") && destination is null ? new(false) : new(true, destination);
@@ -172,6 +172,27 @@ internal static partial class TextLinkResolver
         {
             return new(false); // Never retain or report private address/exception content.
         }
+    }
+
+    private static bool HasValidEscapes(string address)
+    {
+        var utf8 = new System.Text.UTF8Encoding(false, true);
+        for (var i = 0; i < address.Length; i++)
+        {
+            if (address[i] != '%') continue;
+            var bytes = new List<byte>();
+            do
+            {
+                if (i + 2 >= address.Length || !Uri.IsHexDigit(address[i + 1]) || !Uri.IsHexDigit(address[i + 2])) return false;
+                bytes.Add((byte)((Uri.FromHex(address[i + 1]) << 4) | Uri.FromHex(address[i + 2])));
+                i += 3;
+            }
+            while (i < address.Length && address[i] == '%');
+            try { utf8.GetCharCount(bytes.ToArray()); }
+            catch (System.Text.DecoderFallbackException) { return false; }
+            i--;
+        }
+        return true;
     }
 
     /// <summary>
