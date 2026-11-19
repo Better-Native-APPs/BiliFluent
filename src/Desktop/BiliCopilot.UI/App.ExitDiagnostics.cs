@@ -6,10 +6,16 @@ namespace BiliCopilot.UI;
 
 public partial class App
 {
+    static partial void DiscardAppLinkForRestart();
+
     internal static void TraceExitReason(string reason)
     {
         // Callers pass fixed reason codes only, never account, activation or exception data.
-        try { Log.Information("App | exit reason={Reason:l}", reason); }
+        try
+        {
+            if (reason == "playback-drained-restart") DiscardAppLinkForRestart();
+            Log.Information("App | exit reason={Reason:l}", reason);
+        }
         catch { /* Diagnostics cannot change the owned shutdown result. */ }
     }
 

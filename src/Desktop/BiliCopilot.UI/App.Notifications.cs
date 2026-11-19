@@ -23,8 +23,15 @@ public partial class App
     private object? _notificationRoot;
     private Func<bool>? _notificationRootIsCurrent;
 
+    partial void InitializeAppLinkRouting();
+    partial void CaptureAppLinkActivation(AppActivationArguments arguments, bool initial, ref bool handled);
+    partial void BeginAppLinkRoot(object owner, Func<bool> isCurrent);
+    partial void CompleteAppLinkNavigation(object owner);
+    partial void RetireAppLinkRoot(object owner);
+
     private void InitializeNotificationRouting()
     {
+        InitializeAppLinkRouting();
         _notificationTokens = this.Get<IBiliTokenResolver>();
         var tokenAccountId = NotificationAccountId();
         if (tokenAccountId is null)
@@ -48,6 +55,9 @@ public partial class App
     private void CaptureActivation(AppActivationArguments arguments, bool initial = false)
     {
         if (!_isPrimaryInstance) return;
+        var handled = false;
+        CaptureAppLinkActivation(arguments, initial, ref handled);
+        if (handled) return;
         // Keep normal redirected Launch activation. Startup payloads themselves are captured
         // immediately into the mailbox, not retained in an unbounded dispatcher backlog.
         if (!initial) _dispatcherQueue.TryEnqueue(() =>
@@ -125,17 +135,20 @@ public partial class App
         _notificationRoot = owner;
         _notificationRootIsCurrent = isCurrent;
         _notifications.BeginRoot(owner);
+        BeginAppLinkRoot(owner, isCurrent);
     }
 
     internal void CompleteNotificationNavigation(object owner)
     {
         _notifications.CompleteNavigation(owner);
         DispatchPendingNotification();
+        CompleteAppLinkNavigation(owner);
     }
 
     internal void RetireNotificationRoot(object owner)
     {
         _notifications.RetireRoot(owner);
+        RetireAppLinkRoot(owner);
         if (!ReferenceEquals(_notificationRoot, owner)) return;
         _notificationRoot = null;
         _notificationRootIsCurrent = null;

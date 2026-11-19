@@ -648,4 +648,7 @@
   <data name="TextLinkOpenFailed" xml:space="preserve">
     <value>Couldn't open this link. Try again.</value>
   </data>
+  <data name="AppLinkUnsupported" xml:space="preserve">
+    <value>Opening this link in the app isn't supported yet.</value>
+  </data>
 </root>

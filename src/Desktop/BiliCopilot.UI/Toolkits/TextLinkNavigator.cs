@@ -50,6 +50,8 @@ internal static class TextLinkNavigator
                 ShortLinks.Value.Void();
             }
 
+            // Protocol activations use this same lease check to discard a superseded UI handoff.
+            if (isStillShown?.Invoke() == false) return;
             var id = destination.Value ?? string.Empty;
             switch (destination.Kind)
             {
