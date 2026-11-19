@@ -51,6 +51,24 @@ public sealed partial class MpvPlayer
     public LoopbackMediaRelayOptions? RelayOptions { get; set; }
 
     /// <summary>
+    /// Whether relay setup is available for the next on-demand load. May start the same relay
+    /// that <c>PrepareLoad</c> will use; known proxy, startup and reachability failures are retained.
+    /// </summary>
+    /// <returns>Whether the next on-demand source can be registered with this player's relay.</returns>
+    public bool WillRelayNextOnDemandLoad()
+    {
+        lock (_relaySync)
+        {
+            if (EnsureRelay() is null) return false;
+            if (!Array.Exists(ProxyVariables, name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)))) return true;
+            // A proxy can be set after the cached relay started. PrepareLoad must also skip it.
+            _relayUnusable = true;
+            _logger.LogInformation("Playback | relay off reason=env-proxy");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Whether the stream of the loaded source is read through the relay.
     /// </summary>
     public bool IsRelaying(MpvRelayStreamKind kind)

@@ -10,8 +10,12 @@ public sealed partial class PlayerViewModel
 {
     private AdaptiveQualityPolicy _adaptiveQuality = new(AdaptiveBandwidthHistory.Session);
     private bool? _adaptiveAutomaticIntent;
-    private AdaptiveCacheMark? _adaptiveCacheMark;
+    private AdaptiveNodeMark? _adaptiveNodeMark;
     private TimeSpan _adaptiveNodeSettleUntil;
+    private bool _adaptiveHasLoadedOnce;
+    private TimeSpan? _adaptiveEvidenceLogAt;
+    private double _adaptiveLoggedEvidence;
+    private bool _adaptiveEvidenceNodeChanged;
     private readonly HashSet<long> _adaptiveCommittedIntents = [];
     private AdaptiveReload? _adaptiveReload;
     private Task _adaptiveSwitchWork = Task.CompletedTask;
@@ -20,8 +24,12 @@ public sealed partial class PlayerViewModel
     {
         _adaptiveQuality = new(AdaptiveBandwidthHistory.Session);
         _adaptiveAutomaticIntent = null;
-        _adaptiveCacheMark = null;
+        _adaptiveNodeMark = null;
         _adaptiveNodeSettleUntil = default;
+        _adaptiveHasLoadedOnce = false;
+        _adaptiveEvidenceLogAt = null;
+        _adaptiveLoggedEvidence = 0;
+        _adaptiveEvidenceNodeChanged = false;
         _adaptiveCommittedIntents.Clear();
         _adaptiveReload = null;
         _adaptiveSwitchWork = Task.CompletedTask;
@@ -29,7 +37,6 @@ public sealed partial class PlayerViewModel
 
     partial void OnAdaptiveSeek(TimeSpan now)
     {
-        _adaptiveCacheMark = null;
         _adaptiveQuality.OnDiscontinuity(now);
     }
 
@@ -38,8 +45,9 @@ public sealed partial class PlayerViewModel
         if (!CanSelectOnDemandQuality || OnDemandResolver is not IAdaptiveQualityResolver adaptive || Player is not { } player) return;
         var preference = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
         _adaptiveAutomaticIntent = preference == PreferQualityType.Auto && request.Preferences.VideoQuality is not > 0;
-        _adaptiveQuality.SetAutomatic(_adaptiveAutomaticIntent.Value);
-        if (silent || !AdaptiveQualitySelection.IsEnabled(request, preference)) return;
+        var relayed = _adaptiveAutomaticIntent.Value && player.WillRelayNextOnDemandLoad();
+        _adaptiveQuality.SetAutomatic(_adaptiveAutomaticIntent.Value && relayed);
+        if (!relayed || silent || !AdaptiveQualitySelection.IsEnabled(request, preference)) return;
 
         var audio = AudioSelections.PickQuality(GetResolverAudioSelections(OnDemandResolver).Qualities,
             request.ResolvedAudioQualityId ?? request.Preferences.AudioQualityId, request.Preferences.StandardAudioOnly);
@@ -58,36 +66,31 @@ public sealed partial class PlayerViewModel
 
         var preference = SettingsToolkit.ReadLocalSetting(SettingNames.PreferQuality, PreferQualityType.Auto);
         var automatic = preference == PreferQualityType.Auto && (_adaptiveAutomaticIntent ?? current.Preferences.VideoQuality is not > 0);
-        _adaptiveQuality.SetAutomatic(automatic);
-        var nodeChanging = _failover.IsAwaitingLoad || nodeDecision.Action is CdnFailoverAction.SwitchNode or CdnFailoverAction.RefreshPlayUrl;
+        _adaptiveQuality.SetAutomatic(automatic && raw.VideoRelay is not null);
+        var nodeChanging = (_adaptiveHasLoadedOnce && _failover.IsAwaitingLoad)
+            || nodeDecision.Action is CdnFailoverAction.SwitchNode or CdnFailoverAction.RefreshPlayUrl;
         var reloading = IsConnecting || _onDemandReplayNeedsLoad || !_hasLoadedFile || !player.IsPlaybackInitialized;
         var switching = IsSeamlessSwitching || _selectionIntent is not null || !_adaptiveSwitchWork.IsCompleted;
         DeferSponsorCacheAutomaticSelection(raw.Position, speed, ref switching);
         var videoNode = raw.VideoRelay?.Current.Url ?? streams.Video.Url;
         var audioNode = raw.AudioRelay?.Current.Url ?? streams.Audio?.Url;
-        var nodeChanged = _adaptiveCacheMark is { } mark && mark.StreamEpoch == raw.StreamEpoch
+        var nodeChanged = _adaptiveNodeMark is { } mark && mark.Quality == current.Format.Quality
             && (mark.VideoNode != videoNode || mark.AudioNode != audioNode);
+        var videoNodeChanged = _adaptiveNodeMark is { } videoMark && videoMark.Quality == current.Format.Quality && videoMark.VideoNode != videoNode;
         if (nodeChanging || nodeChanged)
-            _adaptiveNodeSettleUntil = now + (reloading ? AdaptiveQualityThresholds.ReloadObservationSettle : AdaptiveQualityThresholds.NodeObservationSettle);
+            _adaptiveNodeSettleUntil = now + (_adaptiveHasLoadedOnce && reloading ? AdaptiveQualityThresholds.ReloadObservationSettle : AdaptiveQualityThresholds.NodeObservationSettle);
+        _adaptiveNodeMark = new(current.Format.Quality, videoNode, audioNode);
+        _adaptiveEvidenceNodeChanged |= videoNodeChanged;
 
-        var externalVideo = raw.SelectedState?.Video.IsExternal ?? _selectedPlaybackState?.Video.IsExternal ?? _seamlessVideoSelected;
-        var growing = _adaptiveCacheMark is { } previous && previous.StreamEpoch == raw.StreamEpoch
-            && previous.VideoNode == videoNode && previous.AudioNode == audioNode
-            && now > previous.Time && now - previous.Time <= AdaptiveQualityThresholds.SampleGapReset
-            && !sample.CacheIdle && (sample.CacheSeconds > previous.CacheSeconds
-                || (!externalVideo && sample.ForwardBytes > previous.ForwardBytes));
-        _adaptiveCacheMark = new(now, raw.StreamEpoch, videoNode, audioNode, sample.CacheSeconds, sample.ForwardBytes);
-
-        // Upstream throughput excludes memory deliveries. A growing, non-idle video cache supplies demand;
-        // concurrent audio downloads contribute to the same connection's measured throughput.
+        // Rolling rates remain available only for the existing special-audio downgrade exception.
         var audioRate = raw.AudioRelay?.BytesPerSecond ?? 0;
         var throughput = ((raw.VideoRelay?.BytesPerSecond ?? raw.DownloadRate) + audioRate) * AdaptiveQualityThresholds.BitsPerByte;
         var standardAudio = AudioSelections.PickStandard(current.AudioSelections.Qualities)?.Segment?.Bandwidth ?? streams.AudioBandwidth;
         var observation = new AdaptiveQualitySample(current.Format.Quality, streams.AudioBandwidth, standardAudio, speed,
-            sample.CacheSeconds, throughput, growing, raw.PausedForCache, raw.UserPaused, raw.Seeking,
+            sample.CacheSeconds, throughput, raw.VideoRelay?.ThroughputObservation, raw.PausedForCache, raw.UserPaused, raw.Seeking,
             switching, reloading, nodeChanging || now < _adaptiveNodeSettleUntil,
             nodeDecision.Action == CdnFailoverAction.ReportBandwidthLimited,
-            _failover.DownloadRate is { } mainRate ? (mainRate + audioRate) * AdaptiveQualityThresholds.BitsPerByte : null);
+            _failover.DownloadRate is { } mainRate ? (mainRate + audioRate) * AdaptiveQualityThresholds.BitsPerByte : null, videoNodeChanged);
         var decision = _adaptiveQuality.OnSample(now, observation, adaptive.GetAdaptiveCandidates());
         DescribeAdaptiveSample(now, automatic);
         if (decision.ReportCap) LogAdaptiveDecision(decision);
@@ -143,7 +146,8 @@ public sealed partial class PlayerViewModel
 
     partial void OnAdaptiveFileLoading(OnDemandSelectionLoad? load)
     {
-        _adaptiveCacheMark = null;
+        if (_adaptiveHasLoadedOnce) _adaptiveNodeSettleUntil = NetworkNow + AdaptiveQualityThresholds.ReloadObservationSettle;
+        else if (OnDemandResolver is IAdaptiveQualityResolver { AdaptiveStartDecision: { } start }) _adaptiveQuality.OnStartSelected(start);
         if (_adaptiveReload is { } reload && IsCurrentPlayback(reload.Version) && ReferenceEquals(reload.Resolver, OnDemandResolver)
             && load is { } loading && loading.Selection.Format.Quality == reload.TargetQuality)
             _adaptiveReload = reload with { LoadGeneration = loading.Generation };
@@ -151,6 +155,7 @@ public sealed partial class PlayerViewModel
 
     partial void OnAdaptiveFileLoaded(OnDemandSelectionLoad? load)
     {
+        _adaptiveHasLoadedOnce = true;
         if (_adaptiveReload is not { } reload || load is not { } loaded || loaded.Generation != reload.LoadGeneration
             || !IsCurrentPlayback(reload.Version) || !ReferenceEquals(reload.Resolver, OnDemandResolver)) return;
         _adaptiveReload = null;
@@ -162,6 +167,6 @@ public sealed partial class PlayerViewModel
     partial void DescribeAdaptiveSample(TimeSpan now, bool automatic);
     partial void DeferSponsorCacheAutomaticSelection(double position, double speed, ref bool switching);
 
-    private readonly record struct AdaptiveCacheMark(TimeSpan Time, long StreamEpoch, string? VideoNode, string? AudioNode, double CacheSeconds, long ForwardBytes);
+    private readonly record struct AdaptiveNodeMark(int Quality, string? VideoNode, string? AudioNode);
     private sealed record AdaptiveReload(long IntentId, long Version, MediaSourceResolverBase Resolver, int FromQuality, int TargetQuality, long? LoadGeneration);
 }

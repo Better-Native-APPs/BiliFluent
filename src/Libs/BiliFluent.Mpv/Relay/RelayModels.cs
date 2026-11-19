@@ -196,4 +196,7 @@ public readonly record struct RelayStreamStatistics(
 
     /// <summary>The delivery rate including memory, over the same window as BytesPerSecond.</summary>
     public double DeliveredBytesPerSecond { get; init; }
+
+    /// <summary>The latest achieved throughput observation from the current upstream node.</summary>
+    public RelayThroughputObservation? ThroughputObservation { get; init; }
 }

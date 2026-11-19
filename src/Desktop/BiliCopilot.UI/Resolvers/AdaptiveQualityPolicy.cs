@@ -1,5 +1,7 @@
 // Copyright (c) BiliFluent. All rights reserved.
 
+using Richasy.MpvKernel.Relay;
+
 namespace BiliCopilot.UI.Resolvers;
 
 internal sealed record AdaptiveQualityCandidate(int Quality, int VideoBandwidth, bool IsHdr = false, bool IsDolbyVision = false, bool IsEightK = false)
@@ -36,6 +38,8 @@ internal enum AdaptiveQualityReason
     Lowest,
     UpgradePending,
     SwitchLimit,
+    Initial,
+    Direct,
 }
 
 internal readonly record struct AdaptiveQualityDecision(
@@ -55,7 +59,7 @@ internal readonly record struct AdaptiveQualitySample(
     double PlaybackSpeed,
     double ForwardCacheSeconds,
     double DownloadBitsPerSecond,
-    bool NetworkLimited,
+    RelayThroughputObservation? ThroughputObservation = null,
     bool PausedForCache = false,
     bool UserPaused = false,
     bool Seeking = false,
@@ -63,17 +67,21 @@ internal readonly record struct AdaptiveQualitySample(
     bool Reloading = false,
     bool NodeSettling = false,
     bool BandwidthLimited = false,
-    double? LimitedBitsPerSecond = null);
+    double? LimitedBitsPerSecond = null,
+    bool NodeChanged = false);
 
 /// <summary>Timestamped evidence and playback observations in; tier decisions out. No clock or player access.</summary>
 internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
 {
-    private readonly List<(TimeSpan Time, double Rate)> _rates = [];
     private readonly List<TimeSpan> _cachePauses = [];
     private readonly List<(TimeSpan Start, TimeSpan End)> _bufferIntervals = [];
     private AdaptiveBandwidthEstimate _currentEvidence;
+    private AdaptiveBandwidthEstimate? _nodeUpgradeEvidence;
+    private long _lastObservationSequence;
+    private bool _startSelected;
+    private bool _initialCorrectionPending;
+    private (int Quality, double Rate)? _downgradeEvidenceCap;
     private TimeSpan? _lastSample;
-    private TimeSpan? _stableSince;
     private TimeSpan? _bufferStarted;
     private TimeSpan? _upgradeSince;
     private int _upgradeTarget;
@@ -90,6 +98,10 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
 
     public bool IsAutomatic => _automatic;
 
+    public RelayThroughputObservation? LatestObservation { get; private set; }
+
+    public bool IsInitialCorrectionPending => _initialCorrectionPending;
+
     public AdaptiveBandwidthEstimate GetEstimate(TimeSpan now)
         => _currentEvidence.IsFresh(now) ? _currentEvidence : history.Read(now);
 
@@ -101,9 +113,18 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
         var selected = estimate.Source == AdaptiveBandwidthSource.None
             ? levels.Find(level => level.Quality <= AdaptiveQualityThresholds.InitialQuality) ?? levels[^1]
             : Affordable(levels, estimate.BitsPerSecond, audioBandwidth, NormalizeSpeed(speed), AdaptiveQualityThresholds.InitialBandwidthRatio) ?? levels[^1];
-        return new(AdaptiveQualityAction.Start, 0, selected.Quality,
+        var decision = new AdaptiveQualityDecision(AdaptiveQualityAction.Start, 0, selected.Quality,
             estimate.Source == AdaptiveBandwidthSource.None ? AdaptiveQualityReason.NoEvidence : AdaptiveQualityReason.Affordable,
             estimate, selected.RequiredBandwidth(audioBandwidth, NormalizeSpeed(speed), AdaptiveQualityThresholds.InitialBandwidthRatio), 0);
+        OnStartSelected(decision);
+        return decision;
+    }
+
+    public void OnStartSelected(AdaptiveQualityDecision decision)
+    {
+        if (_startSelected || decision.Action != AdaptiveQualityAction.Start) return;
+        _startSelected = true;
+        _initialCorrectionPending = decision.Reason == AdaptiveQualityReason.NoEvidence && _switches == 0;
     }
 
     public void SetAutomatic(bool automatic)
@@ -118,7 +139,6 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
     public void OnDiscontinuity(TimeSpan now)
     {
         _noDecisionBefore = now + AdaptiveQualityThresholds.DiscontinuitySettle;
-        _rates.Clear();
         ResetContinuity();
     }
 
@@ -128,9 +148,22 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
         if (fromQuality != toQuality)
         {
             _switches++;
-            if (toQuality < fromQuality) _lastDowngrade = now;
+            _initialCorrectionPending = false;
+            if (toQuality < fromQuality)
+            {
+                _lastDowngrade = now;
+                if (_downgradeEvidenceCap is { } cap && cap.Quality == toQuality)
+                {
+                    var prior = GetEstimate(now);
+                    _currentEvidence = new(prior.Source == AdaptiveBandwidthSource.None ? cap.Rate : Math.Min(prior.BitsPerSecond, cap.Rate),
+                        now, AdaptiveBandwidthSource.Session);
+                    history.Record(_currentEvidence);
+                    if (_nodeUpgradeEvidence is { } node) _nodeUpgradeEvidence = node with { BitsPerSecond = Math.Min(node.BitsPerSecond, cap.Rate) };
+                }
+            }
         }
 
+        _downgradeEvidenceCap = null;
         ResetContinuity();
         _bandwidthLimited = false;
         _limitedRate = null;
@@ -145,15 +178,15 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
         if (_lastSample is { } last && now <= last) return Hold(AdaptiveQualityReason.Settling);
         if (_lastSample is { } previous && now - previous > AdaptiveQualityThresholds.SampleGapReset)
         {
-            _rates.Clear();
             ResetContinuity();
         }
 
         _lastSample = now;
-        _rates.RemoveAll(rate => now - rate.Time > AdaptiveQualityThresholds.BandwidthWindow);
         var speed = NormalizeSpeed(sample.PlaybackSpeed);
         if (_lastSpeed is { } before && Math.Abs(speed - before) > AdaptiveQualityThresholds.SpeedChangeTolerance) OnDiscontinuity(now);
         _lastSpeed = speed;
+        ObserveThroughput(now, sample.ThroughputObservation, sample.NodeChanged);
+        estimate = GetEstimate(now);
         if (_automatic && sample.BandwidthLimited)
         {
             _bandwidthLimited = true;
@@ -166,9 +199,6 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
             return Hold(AdaptiveQualityReason.Settling);
         }
 
-        ObserveBandwidth(now, sample);
-        estimate = GetEstimate(now);
-        ObserveStablePlayback(now, sample);
         if (!_automatic) return Hold(AdaptiveQualityReason.Manual);
         if (_switches >= AdaptiveQualityThresholds.MaxSwitchesPerMedia)
         {
@@ -196,6 +226,8 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
             if (sample.SelectedAudioBandwidth > sample.StandardAudioBandwidth && measuredRate is { } measured
                 && double.IsFinite(measured) && measured >= standardNeed)
                 return Hold(AdaptiveQualityReason.AudioBandwidthOnly);
+            _downgradeEvidenceCap = (lower.Quality,
+                lower.RequiredBandwidth(sample.SelectedAudioBandwidth, speed, AdaptiveQualityThresholds.InitialBandwidthRatio));
             return new(AdaptiveQualityAction.Down, sample.CurrentQuality, lower.Quality, downReason, estimate,
                 lower.RequiredBandwidth(sample.SelectedAudioBandwidth, speed, 1), sample.ForwardCacheSeconds);
         }
@@ -210,12 +242,19 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
         var ratio = recovering ? AdaptiveQualityThresholds.RecoveryBandwidthRatio : AdaptiveQualityThresholds.InitialBandwidthRatio;
         var cacheSeconds = recovering ? AdaptiveQualityThresholds.RecoveryUpgradeCacheSeconds : AdaptiveQualityThresholds.InitialUpgradeCacheSeconds;
         var duration = recovering ? AdaptiveQualityThresholds.RecoveryUpgradeDuration : AdaptiveQualityThresholds.InitialUpgradeDuration;
-        var target = estimate.Source == AdaptiveBandwidthSource.None ? null : Affordable(levels, estimate.BitsPerSecond, sample.SelectedAudioBandwidth, speed, ratio);
+        var upgradeRate = _nodeUpgradeEvidence is { } nodeEvidence
+            ? nodeEvidence.IsFresh(now) ? Math.Min(estimate.BitsPerSecond, nodeEvidence.BitsPerSecond) : 0
+            : estimate.BitsPerSecond;
+        var target = estimate.Source == AdaptiveBandwidthSource.None ? null : Affordable(levels, upgradeRate, sample.SelectedAudioBandwidth, speed, ratio);
         if (sample.PausedForCache || sample.ForwardCacheSeconds < cacheSeconds || target is not { } upgrade || upgrade.Quality <= sample.CurrentQuality)
         {
             ClearUpgrade();
             return Hold(AdaptiveQualityReason.None);
         }
+
+        if (_initialCorrectionPending && _switches == 0)
+            return new(AdaptiveQualityAction.Up, sample.CurrentQuality, upgrade.Quality, AdaptiveQualityReason.Initial, estimate,
+                upgrade.RequiredBandwidth(sample.SelectedAudioBandwidth, speed, ratio), sample.ForwardCacheSeconds);
 
         if (_upgradeTarget != upgrade.Quality)
         {
@@ -229,28 +268,38 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
             upgrade.RequiredBandwidth(sample.SelectedAudioBandwidth, speed, ratio), sample.ForwardCacheSeconds);
     }
 
-    private void ObserveBandwidth(TimeSpan now, AdaptiveQualitySample sample)
+    /// <summary>Record video throughput even while playback decisions are settling or paused.</summary>
+    public bool ObserveThroughput(TimeSpan now, RelayThroughputObservation? observation, bool nodeChanged = false)
     {
-        if (!sample.NetworkLimited || !double.IsFinite(sample.DownloadBitsPerSecond) || sample.DownloadBitsPerSecond <= 0) return;
-        _rates.Add((now, sample.DownloadBitsPerSecond));
-        var sorted = _rates.Select(rate => rate.Rate).Order().ToArray();
-        // Nearest-rank p25 keeps one burst from becoming evidence of sustained capacity.
-        var index = Math.Max(0, (int)Math.Ceiling(sorted.Length * AdaptiveQualityThresholds.BandwidthPercentile) - 1);
-        _currentEvidence = new(sorted[index], now, AdaptiveBandwidthSource.Session);
-    }
-
-    private void ObserveStablePlayback(TimeSpan now, AdaptiveQualitySample sample)
-    {
-        if (sample.PausedForCache)
+        if (nodeChanged)
         {
-            _stableSince = null;
-            return;
+            _nodeUpgradeEvidence = new AdaptiveBandwidthEstimate();
+            LatestObservation = null;
         }
 
-        _stableSince ??= now;
-        if (now - _stableSince.Value >= AdaptiveQualityThresholds.PreviousMediaStableTime
-            && _currentEvidence.IsFresh(now) && _currentEvidence.ObservedAt >= _stableSince.Value)
-            history.RecordStable(_currentEvidence);
+        if (observation is null || observation.Sequence <= _lastObservationSequence
+            || !double.IsFinite(observation.BytesPerSecond) || observation.BytesPerSecond <= 0) return false;
+        _lastObservationSequence = observation.Sequence;
+        LatestObservation = observation;
+        var prior = GetEstimate(now);
+        var next = UpdateEvidence(now, prior, observation);
+        if (next != prior)
+        {
+            _currentEvidence = next;
+            history.Record(next);
+        }
+
+        if (_nodeUpgradeEvidence is { } node)
+            _nodeUpgradeEvidence = UpdateEvidence(now, node.IsFresh(now) ? node : default, observation);
+        return next.BitsPerSecond != prior.BitsPerSecond;
+    }
+
+    private static AdaptiveBandwidthEstimate UpdateEvidence(TimeSpan now, AdaptiveBandwidthEstimate prior, RelayThroughputObservation observation)
+    {
+        var rate = observation.BytesPerSecond * AdaptiveQualityThresholds.BitsPerByte;
+        var updated = observation.IsNetworkLimited && observation.Duration >= AdaptiveQualityThresholds.NetworkEvidenceDuration
+            ? rate : Math.Max(prior.BitsPerSecond, rate);
+        return new(updated, now, AdaptiveBandwidthSource.Session);
     }
 
     private void ObserveBuffering(TimeSpan now, bool buffering)
@@ -279,7 +328,6 @@ internal sealed class AdaptiveQualityPolicy(AdaptiveBandwidthHistory history)
     private void ResetContinuity()
     {
         ClearUpgrade();
-        _stableSince = null;
         _bufferStarted = null;
         _cachePauses.Clear();
         _bufferIntervals.Clear();

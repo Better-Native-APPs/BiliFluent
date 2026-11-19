@@ -11,6 +11,8 @@ internal interface IAdaptiveQualityResolver
     IReadOnlyList<AdaptiveQualityCandidate> GetAdaptiveCandidates();
 
     AdaptiveQualityDecision? AdaptiveStartDecision { get; }
+
+    Func<bool>? WillRelayNextLoad { get; set; }
 }
 
 /// <summary>Reuses account/stream filtering and the existing automatic ranking, with actual codec bitrates.</summary>

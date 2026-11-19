@@ -32,6 +32,15 @@ internal static class Program
                 await RelayChecks.RunAsync(report);
                 await MemoryRelayChecks.RunAsync(report);
                 await DisposeChecks.RunAsync(report);
+                await ThroughputChecks.RunAsync(report);
+                await RelayQueryChecks.RunAsync(report);
+                break;
+            case "throughput":
+                await ThroughputChecks.RunAsync(report);
+                await RelayQueryChecks.RunAsync(report);
+                break;
+            case "throughput-smoke":
+                await ThroughputSmoke.RunAsync(report, options);
                 break;
             case "drain":
                 await DisposeChecks.RunAsync(report);
@@ -47,11 +56,12 @@ internal static class Program
                 break;
             case "audio-resume": await AudioResumeSmoke.RunAsync(report, options); break;
             default:
-                Console.WriteLine("usage: unit | relay | all | drain | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..]");
+                Console.WriteLine("usage: unit | relay | all | drain | throughput | throughput-smoke [dll=..] [tls=on] | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..]");
                 return 2;
         }
 
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"RESULT mode={mode} passed={report.Passed} failed={report.Failed}"));
+        if (report.NotApplicableCount > 0) Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"NOT_APPLICABLE_COUNT={report.NotApplicableCount}"));
         return report.Failed == 0 ? 0 : 1;
     }
 }
@@ -64,6 +74,8 @@ internal sealed class Report
     public int Passed { get; private set; }
 
     public int Failed { get; private set; }
+
+    public int NotApplicableCount { get; private set; }
 
     public void Check(string name, bool condition, string? detail = null)
     {
@@ -83,6 +95,12 @@ internal sealed class Report
         => Check(name, EqualityComparer<T>.Default.Equals(expected, actual), string.Create(CultureInfo.InvariantCulture, $"expected={expected} actual={actual}"));
 
     public void Note(string text) => Console.WriteLine("     " + text);
+
+    public void NotApplicable(string name, string detail)
+    {
+        NotApplicableCount++;
+        Console.WriteLine("n/a  " + name + "  [" + detail + "]");
+    }
 
     public async Task RunAsync(string name, Func<Task> check)
     {

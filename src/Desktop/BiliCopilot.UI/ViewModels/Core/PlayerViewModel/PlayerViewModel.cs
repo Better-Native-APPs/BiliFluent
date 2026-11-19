@@ -339,6 +339,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         CheckMediaAdmission();
         CheckHostReady();
         WatchAutomaticAudio();
+        if (CanSelectOnDemandQuality && OnDemandResolver is IAdaptiveQualityResolver adaptive)
+            adaptive.WillRelayNextLoad = Player.WillRelayNextOnDemandLoad;
         await Player.InitializeAsync();
 
         CheckMediaAdmission();
