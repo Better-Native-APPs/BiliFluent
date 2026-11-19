@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Globalization;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Richasy.MpvKernel;
@@ -60,7 +61,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         lock (_sync)
         {
             _items = items;
-            ScheduleBuild(0);
+            ScheduleBuild(0, "items");
         }
     }
 
@@ -70,7 +71,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         {
             if (_disposed || _awaitingFile || _suspended || (_ready && !refreshGeometry)) return;
             _ready = true;
-            ScheduleBuild(refreshGeometry ? 500 : 0);
+            ScheduleBuild(refreshGeometry ? 500 : 0, "ready");
         }
     }
 
@@ -80,7 +81,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         {
             if (_style == style) return;
             _style = style;
-            ScheduleBuild(delay);
+            ScheduleBuild(delay, "style");
         }
     }
 
@@ -90,7 +91,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         {
             if (_realtime.Count == 100) _realtime.RemoveAt(0);
             _realtime.Add(item);
-            ScheduleBuild(200);
+            ScheduleBuild(200, "realtime");
         }
     }
 
@@ -111,7 +112,7 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
             _visible = visible;
             if (!visible) _buildCancellation?.Cancel();
             StartWork(UpdateVisibilityAsync);
-            if (visible && _dirty) ScheduleBuild(0);
+            if (visible && _dirty) ScheduleBuild(0, "ready");
         }
     }
 
@@ -210,12 +211,12 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
             _awaitingFile = false;
             StartWork(UpdateVisibilityAsync);
             _epoch++;
-            ScheduleBuild(0);
+            ScheduleBuild(0, "ready");
         }
     }
 
     // Caller owns _sync. Each delayed build owns/disposes its CTS, including cancellation paths.
-    private void ScheduleBuild(int delay)
+    private void ScheduleBuild(int delay, string reason)
     {
         _dirty = true;
         _buildCancellation?.Cancel();
@@ -245,22 +246,32 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
                 }
                 finally { _native.Gate.Release(); }
 
+                var buildStartedAt = Stopwatch.GetTimestamp();
                 var document = MpvAssDanmakuDocument.Build(items.Concat(realtime), style, aspect, token, out var count);
+                var buildMilliseconds = Stopwatch.GetElapsedTime(buildStartedAt).TotalMilliseconds;
                 token.ThrowIfCancellationRequested();
                 if (count == 0)
                 {
-                    await CommitEmptyAsync(epoch, token).ConfigureAwait(false);
+                    var removed = await CommitEmptyAsync(epoch, token).ConfigureAwait(false);
+                    if (removed is { } removeMilliseconds)
+                        LogTrackBuilt(0, 0, buildMilliseconds, 0, 0, removeMilliseconds, reason);
                     return;
                 }
 
                 file = Path.Combine(_directory, Interlocked.Increment(ref _counter).ToString(CultureInfo.InvariantCulture) + ".ass");
                 await File.WriteAllTextAsync(file, document, new UTF8Encoding(true), token).ConfigureAwait(false);
+                var bytes = new FileInfo(file).Length;
+                double addMilliseconds;
+                double selectMilliseconds;
+                var removeOldMilliseconds = 0d;
                 await _native.Gate.WaitAsync(token).ConfigureAwait(false);
                 try
                 {
                     if (!CanBuild(epoch, token)) return;
                     InitializeClient();
+                    var addStartedAt = Stopwatch.GetTimestamp();
                     Command("sub-add", file, "auto", "Bili Danmaku", "");
+                    addMilliseconds = Stopwatch.GetElapsedTime(addStartedAt).TotalMilliseconds;
                     var id = FindTrack(file) ?? throw new InvalidOperationException("The added danmaku subtitle track was not found.");
                     string? previous;
                     lock (_sync)
@@ -268,17 +279,25 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
                         // Serialize the small selection commit with Clear/hide/dispose. A clear
                         // must either cancel this commit or capture its newly selected file.
                         if (!CanBuild(epoch, token)) return;
+                        var selectStartedAt = Stopwatch.GetTimestamp();
                         SetProperty("secondary-sub-visibility", "yes");
                         SetProperty("secondary-sid", id);
+                        selectMilliseconds = Stopwatch.GetElapsedTime(selectStartedAt).TotalMilliseconds;
                         previous = _currentFile;
                         _currentFile = file;
                         file = null;
                         _dirty = false;
                     }
 
-                    if (previous is not null) RemoveTrack(previous);
+                    if (previous is not null)
+                    {
+                        var removeStartedAt = Stopwatch.GetTimestamp();
+                        RemoveTrack(previous);
+                        removeOldMilliseconds = Stopwatch.GetElapsedTime(removeStartedAt).TotalMilliseconds;
+                    }
                 }
                 finally { _native.Gate.Release(); }
+                LogTrackBuilt(count, bytes, buildMilliseconds, addMilliseconds, selectMilliseconds, removeOldMilliseconds, reason);
             }
             finally
             {
@@ -348,20 +367,38 @@ internal sealed class MpvAssDanmakuRenderer : IAsyncDisposable
         finally { _native.Gate.Release(); }
     }
 
-    private async Task CommitEmptyAsync(long epoch, CancellationToken token)
+    private async Task<double?> CommitEmptyAsync(long epoch, CancellationToken token)
     {
         await _native.Gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
             lock (_sync)
             {
-                if (!CanBuild(epoch, token)) return;
-                if (_currentFile is { } file) RemoveTrack(file);
+                if (!CanBuild(epoch, token)) return null;
+                var removeMilliseconds = 0d;
+                if (_currentFile is { } file)
+                {
+                    var startedAt = Stopwatch.GetTimestamp();
+                    RemoveTrack(file);
+                    removeMilliseconds = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+                }
                 _currentFile = null;
                 _dirty = false;
+                return removeMilliseconds;
             }
         }
         finally { _native.Gate.Release(); }
+    }
+
+    private void LogTrackBuilt(int eventCount, long bytes, double buildMilliseconds, double addMilliseconds,
+        double selectMilliseconds, double removeMilliseconds, string reason)
+    {
+        if (!_logger.IsEnabled(LogLevel.Information)) return;
+        _logger.LogInformation(
+            "Danmaku | track built events={Events} bytes={Bytes} build-ms={BuildMs} add-ms={AddMs} select-ms={SelectMs} remove-ms={RemoveMs} reason={Reason}",
+            eventCount, bytes, buildMilliseconds.ToString("0.0", CultureInfo.InvariantCulture),
+            addMilliseconds.ToString("0.0", CultureInfo.InvariantCulture), selectMilliseconds.ToString("0.0", CultureInfo.InvariantCulture),
+            removeMilliseconds.ToString("0.0", CultureInfo.InvariantCulture), reason);
     }
 
     private async Task RemoveFileAsync(string file)

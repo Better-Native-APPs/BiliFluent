@@ -12,6 +12,10 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
 using System.Runtime.InteropServices;
+#if DEBUG
+using Richasy.MpvKernel.Player;
+using Richasy.MpvKernel.Player.Models;
+#endif
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -79,7 +83,11 @@ public sealed partial class PlayerViewModel
         {
             var displayWindow = Window is { IsDisposed: false } host ? host.RenderHwnd : IntPtr.Zero;
             _playbackDiagnostics = new PlaybackDiagnosticsSession(client, queue, logger, _curlDisableRequested,
-                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics, DescribeNetworkForDiagnostics);
+                _displaySyncRequested, displayWindow, DescribeDanmakuForDiagnostics, DescribeNetworkForDiagnostics
+#if DEBUG
+                , Player
+#endif
+                );
         }
         catch (Exception ex)
         {
@@ -165,11 +173,24 @@ public sealed partial class PlayerViewModel
         private Task _snapshots = Task.CompletedTask;
         private long _pausedAt;
         private long _resumedAt;
+#if DEBUG
+        private readonly PlaybackStallWatch _stallWatch;
+        private readonly MpvPlayer? _stallPlayer;
+#endif
 
         public PlaybackDiagnosticsSession(MpvClient client, DispatcherQueue dispatcherQueue, ILogger diagnosticsLogger,
             bool curlDisableRequested, bool displaySyncRequested, nint displayWindow,
-            Func<(string Renderer, string Danmaku)> describeDanmaku, Func<NetworkDiagnostics> describeNetwork)
+            Func<(string Renderer, string Danmaku)> describeDanmaku, Func<NetworkDiagnostics> describeNetwork
+#if DEBUG
+            , MpvPlayer? player
+#endif
+            )
         {
+#if DEBUG
+            _stallWatch = new PlaybackStallWatch(Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path, "Logger", "stall-dumps"), diagnosticsLogger);
+            _stallPlayer = player;
+#endif
             _describeNetwork = describeNetwork;
             _displaySyncRequested = displaySyncRequested;
             _displayWindow = displayWindow;
@@ -181,6 +202,12 @@ public sealed partial class PlayerViewModel
             (_renderer, _danmaku) = describeDanmaku();
             _client.IsTimePositionNotificationCountingEnabled = true;
             _client.PauseChanged += OnPauseChanged;
+#if DEBUG
+            _client.ReachFileLoading += OnStallSettling;
+            _client.ReachFileLoaded += OnStallSettling;
+            _client.SeekStarted += OnStallSettling;
+            if (_stallPlayer is not null) _stallPlayer.SeamlessSwitchProgress += OnStallSeamlessProgress;
+#endif
             _heartbeat = dispatcherQueue.CreateTimer();
             _heartbeat.Interval = TimeSpan.FromMilliseconds(100);
             _heartbeat.Tick += OnHeartbeat;
@@ -189,6 +216,9 @@ public sealed partial class PlayerViewModel
             _worker = Task.Run(SampleAsync);
             // A dedicated thread: a busy thread pool must not look like a frame gap.
             _frameProbe = Task.Factory.StartNew(ProbeFrames, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+#if DEBUG
+            _stallWatch.Start();
+#endif
         }
 
         public async ValueTask DisposeAsync()
@@ -198,7 +228,11 @@ public sealed partial class PlayerViewModel
 #pragma warning disable VSTHRD003
             Task snapshots;
             lock (_snapshotLock) snapshots = _snapshots;
-            await Task.WhenAll(_worker, _frameProbe, snapshots).ConfigureAwait(false);
+            await Task.WhenAll(_worker, _frameProbe, snapshots
+#if DEBUG
+                , _stallWatch.Completion
+#endif
+                ).ConfigureAwait(false);
 #pragma warning restore VSTHRD003
         }
 
@@ -209,6 +243,13 @@ public sealed partial class PlayerViewModel
             PlaybackStutterDiagnostics.Release();
             _client.IsTimePositionNotificationCountingEnabled = false;
             _client.PauseChanged -= OnPauseChanged;
+#if DEBUG
+            _stallWatch.Stop();
+            _client.ReachFileLoading -= OnStallSettling;
+            _client.ReachFileLoaded -= OnStallSettling;
+            _client.SeekStarted -= OnStallSettling;
+            if (_stallPlayer is not null) _stallPlayer.SeamlessSwitchProgress -= OnStallSeamlessProgress;
+#endif
             _samples.Dispose();
             _heartbeat.Tick -= OnHeartbeat;
             try
@@ -264,6 +305,9 @@ public sealed partial class PlayerViewModel
             {
                 var pausedAt = Interlocked.Exchange(ref _pausedAt, 0);
                 Volatile.Write(ref _resumedAt, timestamp);
+#if DEBUG
+                _stallWatch.NotifySettling(timestamp);
+#endif
                 if (pausedAt != 0)
                     pausedSeconds = Stopwatch.GetElapsedTime(pausedAt, timestamp).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture);
             }
@@ -290,6 +334,14 @@ public sealed partial class PlayerViewModel
                 });
             }
         }
+
+#if DEBUG
+        private void OnStallSettling(object? sender, EventArgs args) => _stallWatch.NotifySettling();
+
+        // Covers both video and audio tier changes, including their final selection phase.
+        // Observe the existing library event directly; a busy UI must not delay suppression.
+        private void OnStallSeamlessProgress(object? sender, MpvSeamlessSwitchEventArgs args) => _stallWatch.NotifySettling();
+#endif
 
         private void WriteSnapshot(string name, string pausedSeconds)
         {
@@ -533,9 +585,17 @@ public sealed partial class PlayerViewModel
                     if (_stopped) return;
                     var readStarted = Stopwatch.GetTimestamp();
                     var position = 0d;
+#if DEBUG
+                    var playing = ReadProbeIdle(out bool idle) == MpvError.Success && !idle
+                        && ReadProbePosition(out position) == MpvError.Success && double.IsFinite(position);
+#else
                     var playing = _client.GetProperty("core-idle", out bool idle) == MpvError.Success && !idle
                         && _client.GetProperty("time-pos", out position) == MpvError.Success && double.IsFinite(position);
+#endif
                     var timestamp = Stopwatch.GetTimestamp();
+#if DEBUG
+                    _stallWatch.Observe(playing, position, timestamp);
+#endif
                     lock (_frameGapLock)
                     {
                         _frameProbePolls++;
@@ -598,6 +658,22 @@ public sealed partial class PlayerViewModel
                 if (timer != 0) _ = CloseHandle(timer);
             }
         }
+
+#if DEBUG
+        private MpvError ReadProbeIdle(out bool idle)
+        {
+            _stallWatch.BeginRead();
+            try { return _client.GetProperty("core-idle", out idle); }
+            finally { _stallWatch.EndRead(); }
+        }
+
+        private MpvError ReadProbePosition(out double position)
+        {
+            _stallWatch.BeginRead();
+            try { return _client.GetProperty("time-pos", out position); }
+            finally { _stallWatch.EndRead(); }
+        }
+#endif
 
         private static void WaitForNextProbe(nint timer)
         {
