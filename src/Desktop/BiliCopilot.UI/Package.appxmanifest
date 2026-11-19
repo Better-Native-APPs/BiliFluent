@@ -51,6 +51,12 @@
         <uap:SplashScreen Image="Assets\Logo\SplashScreen.png"  BackgroundColor="#FFFFFF"/>
       </uap:VisualElements>
       <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="bilibili">
+            <uap:DisplayName>ms-resource:AppName</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
         <!--Specify which CLSID to activate when notification is clicked-->
         <desktop:Extension Category="windows.toastNotificationActivation">
           <desktop:ToastNotificationActivation ToastActivatorCLSID="64DB9FDB-EF36-44D3-8DA6-04658D814915" />

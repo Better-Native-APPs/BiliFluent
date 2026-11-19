@@ -132,6 +132,9 @@ public sealed class MediaSnapshot
     /// </summary>
     public VideoPart? PreferPart { get; set; }
 
+    /// <summary>The requested one-based video part number, used only without a preferred cid.</summary>
+    public int? PreferPartNumber { get; set; }
+
     /// <summary>
     /// 播放列表.
     /// </summary>
