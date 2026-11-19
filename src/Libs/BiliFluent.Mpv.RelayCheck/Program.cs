@@ -20,6 +20,7 @@ internal static class Program
         switch (mode)
         {
             case "seek-run-smoke": await SeamlessSmoke.RunSeekRunAsync(report, options); break;
+            case "seek-run-ranges": await SeamlessSmoke.RunSeekRunRangesAsync(report, options); break;
             case "sponsor-cache-smoke": await SeamlessSmoke.RunSponsorCacheAsync(report, options); break;
             case "unit":
                 UnitChecks.Run(report);
