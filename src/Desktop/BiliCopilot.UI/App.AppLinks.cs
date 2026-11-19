@@ -7,8 +7,10 @@ using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.Windows.AppLifecycle;
 using Richasy.BiliKernel.Bili.Authorization;
+using Richasy.WinUIKernel.Share.Base;
 using System.ComponentModel;
 using System.Globalization;
+using System.Threading;
 using Windows.ApplicationModel.Activation;
 
 namespace BiliCopilot.UI;
@@ -87,7 +89,7 @@ public partial class App
         try
         {
             // Use the tray's existing show/activate path, including a not-yet-ready main window.
-            if (_appLinks.HasPending) GetMainWindow()?.Activate();
+            if (_appLinks.HasPending) ForegroundAppLinkWindow();
             while (true)
             {
                 RefreshAppLinkReadiness();
@@ -97,7 +99,7 @@ public partial class App
                     LogAppLink(request.Resolution.Kind, "dropped-superseded");
                     continue;
                 }
-                GetMainWindow()?.Activate();
+                ForegroundAppLinkWindow();
                 if (request.Resolution.Destination is not { } destination)
                 {
                     await _appLinkApp!.ShowTipCommand.ExecuteAsync((ResourceToolkit.GetLocalizedString(StringNames.AppLinkUnsupported), InfoType.Warning));
@@ -106,7 +108,7 @@ public partial class App
                 else
                 {
                     await TextLinkNavigator.OpenAsync(destination, isStillShown: () => _appLinks.IsCurrent(request));
-                    LogAppLink(request.Resolution.Kind, _appLinks.IsCurrent(request) ? "opened" : "dropped-superseded");
+                    LogAppLink(request.Resolution.Kind, _appLinks.IsCurrent(request) ? "dispatched" : "dropped-superseded");
                 }
             }
         }
@@ -122,6 +124,12 @@ public partial class App
     }
 
     private void OnAppLinkAccountChanged(object? sender, EventArgs args) => QueueAppLinkDispatch();
+
+    private static void ForegroundAppLinkWindow()
+    {
+        try { GetMainWindow()?.Activate(); }
+        catch (Exception) { LogAppLink("invalid", "failed-foreground"); }
+    }
 
     private void OnAppLinkAppChanged(object? sender, PropertyChangedEventArgs args)
     {

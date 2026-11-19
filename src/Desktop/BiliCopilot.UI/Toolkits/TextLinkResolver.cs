@@ -163,7 +163,7 @@ internal static partial class TextLinkResolver
         try
         {
             if (ParseUri(address.Trim()) is not { Scheme: "bilibili" } uri
-                || !string.IsNullOrEmpty(uri.UserInfo) || uri.Port != -1) return new(false);
+                || !uri.IsWellFormedOriginalString() || !string.IsNullOrEmpty(uri.UserInfo) || uri.Port != -1) return new(false);
             var destination = ResolveNative(uri);
             // An unsafe browser wrapper is invalid, not an external fallback.
             return Is(uri.Host, "browser") && destination is null ? new(false) : new(true, destination);
