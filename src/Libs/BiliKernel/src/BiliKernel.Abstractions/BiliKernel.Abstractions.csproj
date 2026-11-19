@@ -3,7 +3,7 @@
   <PropertyGroup>
     <AssemblyName>Richasy.BiliKernel.Abstractions</AssemblyName>
     <RootNamespace>Richasy.BiliKernel</RootNamespace>
-    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net11.0</TargetFrameworks>
     <DebugType>none</DebugType>
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
   </PropertyGroup>
@@ -22,8 +22,8 @@
   </ItemGroup>
   
   <ItemGroup>
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
-    <PackageReference Include="Microsoft.Bcl.HashCode" />
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <PackageReference Include="Microsoft.Bcl.HashCode" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
   </ItemGroup>
 </Project>

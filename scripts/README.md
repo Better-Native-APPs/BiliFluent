@@ -9,9 +9,9 @@ BiliFluent 是采用 Fluent UI 与 WinUI 3 原生控件、专为 Windows 优化�
 
 - **操作系统**：Windows 10（Build 19041 及以上）或 Windows 11，x64 架构。
 - **PowerShell**：Windows PowerShell 5.1 或 PowerShell 7+（构建、签名与本地包部署必须在原生 Windows 宿主环境下运行，请勿在 WSL Linux 环境中执行）。
-- **.NET SDK**：必须使用 `global.json` 固定的 **.NET SDK 10.0.403**，严禁自动滚动到未经测试的更高版本。
+- **.NET SDK**：必须使用 `global.json` 固定的 **.NET SDK 11.0.100**，严禁自动滚动到未经测试的更高版本。
 - **构建工具链**：
-  - Visual Studio 2022 / Build Tools（包含 .NET 桌面开发、通用 Windows 平台开发与 Windows App SDK C# / C++ 组件）。
+  - Visual Studio 2026（18.12 及以上）/ Build Tools（包含 .NET 桌面开发、通用 Windows 平台开发与 Windows App SDK C# / C++ 组件）。
   - Windows 10/11 SDK（包含 x64 版本的 `makeappx.exe` 与 `signtool.exe`，默认检测 `10.0.26100.0` 路径）。
   - NativeAOT C++ 编译环境（用于 Visor 原生二进制组件编译）。
 - **网络访问**：可畅通访问 NuGet 源以及固定的原生外部资产下载源。
