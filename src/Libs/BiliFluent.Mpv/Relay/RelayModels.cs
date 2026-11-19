@@ -199,4 +199,7 @@ public readonly record struct RelayStreamStatistics(
 
     /// <summary>The latest achieved throughput observation from the current upstream node.</summary>
     public RelayThroughputObservation? ThroughputObservation { get; init; }
+
+    /// <summary>Immutable delivery intervals for this registration; null when no coverage is available.</summary>
+    public RelayDeliveryCoverage? DeliveryCoverage { get; init; }
 }

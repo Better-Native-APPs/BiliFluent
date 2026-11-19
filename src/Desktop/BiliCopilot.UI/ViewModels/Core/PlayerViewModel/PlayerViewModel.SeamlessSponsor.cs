@@ -34,6 +34,9 @@ public sealed partial class PlayerViewModel
     private bool RequestSponsorActionWithSeamlessBoundary(PlaybackRequest request)
     {
         if (!CanUseSponsorContent || _sponsor is not { } controller) return false;
+        if (request.Kind == SponsorRequestKind.Undo && request.Applied is { Kind: SponsorEffectKind.SeekInterval } effect
+            && effect.Owner == request.Stamp.Owner && request.Stamp.HasSameContext(controller.Snapshot.Stamp))
+            LogSponsorSeekBeforeRunStart("undo", effect.From);
         if (request.Kind == SponsorRequestKind.Undo && request.Applied is { Kind: SponsorEffectKind.SeekInterval, WasPreview: false } applied
             && applied.Owner == request.Stamp.Owner && request.Stamp.HasSameContext(controller.Snapshot.Stamp)
             && ShouldPreloadSponsorSeek(applied.From))
@@ -56,6 +59,8 @@ public sealed partial class PlayerViewModel
 
     private Task<SponsorEditorReply> RequestSponsorPreviewWithSeamlessBoundaryAsync(PlaybackStamp expected, PreviewInterval preview)
     {
+        if (CanUseSponsorContent && _sponsor is { } active && expected.HasSameContext(active.Snapshot.Stamp))
+            LogSponsorSeekBeforeRunStart("preview", preview.Start);
         if (CanUseSponsorContent && _sponsor is { } controller && expected.HasSameContext(controller.Snapshot.Stamp)
             && ShouldPreloadSponsorSeek(preview.Start))
         {
@@ -81,6 +86,7 @@ public sealed partial class PlayerViewModel
             && preview.Token.Owner == controller.Snapshot.Owner
             && preview.Phase is not (SponsorPreviewPhase.Ended or SponsorPreviewPhase.Interrupted))
         {
+            if (preview.SavedPosition is { } destination) LogSponsorSeekBeforeRunStart("preview-return", destination);
             if (preview.SavedPosition is { } target && ShouldPreloadSponsorSeek(target))
             {
                 var version = _mediaVersion;
@@ -106,5 +112,15 @@ public sealed partial class PlayerViewModel
     {
         if (logger.IsEnabled(LogLevel.Debug) && (_seamlessVideoSelected || _selectedPlaybackState?.Video.IsExternal == true))
             logger.LogDebug("Playback | seamless-sponsor-seek action={Action} target=controller external-video=true", action);
+    }
+
+    private void LogSponsorSeekBeforeRunStart(string action, double target)
+    {
+        if (_seekRunStart is not { } start || !double.IsFinite(target) || target < 0 || target >= start
+            || Player is not { } player || !logger.IsEnabled(LogLevel.Information)) return;
+        var from = player.Position;
+        if (!double.IsFinite(from) || target >= from) return;
+        logger.LogInformation("Playback | seek-run sponsor-seek-before-start action={Action} target={Target} run-start={RunStart}",
+            action, target, start);
     }
 }

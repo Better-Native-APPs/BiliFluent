@@ -604,6 +604,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
         private readonly RelayVirtualOffsetMap? _virtualMap;
         private readonly RelayRateMeter _rate = new(RelayDefaults.RateWindow);
         private readonly RelayRateMeter _deliveryRate = new(RelayDefaults.RateWindow);
+        private readonly RelayDeliveryTracker _deliveryCoverage = new();
 #pragma warning disable CA2213 // Both are cancelled and disposed on the pool, see Dispose and Signal.
         private readonly CancellationTokenSource _removed = new();
         private CancellationTokenSource _changed = new();
@@ -760,6 +761,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
 
         public void NoteDelivery(long endOffset, int count)
         {
+            _deliveryCoverage.Record(endOffset - count, endOffset);
             var previous = Interlocked.Read(ref _forwardBytes);
             while (endOffset > previous)
             {
@@ -833,6 +835,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
                 LastDeliveredAt = delivered == 0 ? null : new DateTimeOffset(delivered, TimeSpan.Zero),
                 DeliveredBytesPerSecond = _deliveryRate.GetRate(Environment.TickCount64),
                 ThroughputObservation = observation,
+                DeliveryCoverage = _deliveryCoverage.Snapshot(),
             };
         }
 

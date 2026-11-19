@@ -556,6 +556,7 @@ public sealed partial class PlayerViewModel
         // Notifications are reread prompts only; never feed this event's old payload into Sponsor.
         if (e.PropertyName == nameof(Player.Position))
         {
+            ObserveSeekRunPosition(Player.Position);
             var timestamp = Stopwatch.GetTimestamp();
             if (Interlocked.Exchange(ref _forceSponsorPositionObservation, 0) != 0
                 || _lastSponsorPositionObservation == 0

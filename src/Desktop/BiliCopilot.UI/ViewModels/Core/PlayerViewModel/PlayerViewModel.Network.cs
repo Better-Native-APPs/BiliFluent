@@ -93,6 +93,7 @@ public sealed partial class PlayerViewModel
         _deferredLoadError = null;
         _reloadState = null;
         _playbackPosition.Reset();
+        ClearSeekRun();
         _hasLoadedFile = false;
         _subtitleToRestore = null;
         _userPausedSample = false;
@@ -110,6 +111,7 @@ public sealed partial class PlayerViewModel
 
     private Task SuspendNetworkMonitorAsync()
     {
+        ClearSeekRun();
         RetireSponsorCache();
         DetachSeamlessPlayback();
         DetachNetworkMonitor();
@@ -167,6 +169,7 @@ public sealed partial class PlayerViewModel
         Volatile.Write(ref _cacheState, null);
         PostNetworkEvent(() =>
         {
+            BeginSeekRunLoad();
             _selectedPlaybackState = null;
             _seamlessVideoSelected = false;
             ResetSelectedRelayObservation();
@@ -183,6 +186,7 @@ public sealed partial class PlayerViewModel
         var loadedSelection = OnDemandResolver?.CaptureSelectionLoad();
         PostNetworkEvent(() =>
         {
+            CompleteSeekRunLoad(_reloadState?.Position);
             _deferredLoadError = null;
             _reloadState = null;
             _hasLoadedFile = true;
@@ -230,6 +234,7 @@ public sealed partial class PlayerViewModel
     private void OnNetworkSeekStarted(object? sender, EventArgs e)
         => PostNetworkEvent(() =>
         {
+            _seekRunNativeSeekPending = true;
             var now = NetworkNow;
             // A user request already reset the clocks. Internal resets during that seek must
             // not keep postponing recovery while the requested position still has no frame.
@@ -243,6 +248,7 @@ public sealed partial class PlayerViewModel
         {
             PostNetworkEvent(() =>
             {
+                _seekRunNativeSeekPending = false;
                 if (_playbackPosition.PendingPosition is null) _failover.OnPlaybackRestart(NetworkNow);
                 else if (Player is { } player)
                     _ = OwnWork(ObserveUserPositionCompletionAsync(player, _mediaVersion, _playbackPosition.Version));
@@ -253,6 +259,7 @@ public sealed partial class PlayerViewModel
     private void OnNetworkSample(NetworkSample raw)
     {
         if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver || raw.StreamEpoch != Interlocked.Read(ref _selectedStreamEpoch)) return;
+        if (raw.PositionKnown) ObserveSeekRunPosition(raw.Position, raw.Seeking);
         _userPausedSample = raw.UserPaused;
         var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
         if (!_onDemandReplayNeedsLoad && raw.PositionKnown
@@ -334,6 +341,7 @@ public sealed partial class PlayerViewModel
                 : audioRelay is { Stalled: true } ? PlaybackStreamKind.Audio : null,
         };
         var rawForwardSeconds = sample.CacheSeconds;
+        RecordSeekRunNetworkSample(raw, rawForwardSeconds);
         var rawAudioSeconds = sample.AudioCacheSeconds;
         double skippedSeconds = 0, extraMegabytes = 0;
         AccountSponsorCache(raw, ref sample, ref skippedSeconds, ref extraMegabytes);
