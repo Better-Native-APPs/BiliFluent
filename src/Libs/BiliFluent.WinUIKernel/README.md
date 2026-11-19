@@ -20,9 +20,9 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 
 ## 构建集成
 
-工程使用 WinUI，目标框架为 `net10.0-windows10.0.22621.0`，支持 x86、x64 与 ARM64，不单独生成 NuGet 包。
+工程使用 WinUI，目标框架为 `net11.0-windows10.0.22621.0`，语言版本 C# 15，跟随主线的 `Danmaku.Legacy` 与中央配置；支持 x86、x64 与 ARM64，不单独生成 NuGet 包。
 
-## 移植核对
+## 移植核对（.NET 10 历史结果）
 
 - .NET 10 候选 `e641778c` 的整体 Debug 编译和 Release 发布/打包均为 0 警告、0 错误；未签名的本地 MSIX 含新程序集及资源。
 - 旧 PRI 的 21 个 XBF 中，保留的 17 个在新程序集路径下全部存在；6 条指向库的资源 URI 均有索引匹配。未保留资源只属于未使用的 DraggableCardControl、SettingsCard、SettingsExpander 和 TipHeader。
