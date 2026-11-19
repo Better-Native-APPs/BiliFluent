@@ -7,11 +7,13 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 - 上游：[Richasy/winui-kernel](https://github.com/Richasy/winui-kernel/tree/3f1086f6cfa8c1e0c3a64b930a8577dc5496c616) 的 `src/WinUIKernel.Share/`。
 - 提交：`3f1086f6cfa8c1e0c3a64b930a8577dc5496c616`，即 `Richasy.WinUIKernel.Share` `0.0.12-preview4` NuGet 包对应的源码。
 - 许可：包的 nuspec 声明 MIT，源文件保留上游 `Copyright (c) Richasy` 与 MIT 许可声明。
+- 此提交的上游仓库根目录没有独立许可文件，许可依据为该包 nuspec 的 MIT 表达式及上游源文件头。
 
 ## 与上游的差异
 
 - 只保留应用使用的类型、它们的包内依赖和对应资源；不引入未使用控件。
 - `Themes/Generic.xaml` 删除未移植的 DraggableCardControl、SettingsCard、SettingsExpander 的合并字典，其他字典的 `ms-appx:///` 路径改为新程序集名；控件模板保持原样。
+- `WinUIKernelShareExtensions.InitializeShareKernel` 改为只接收可选 `ILogger`，删除 `Kernel` 与内部资源工具箱的保存/初始化。保留的代码不通过 Kernel 查询服务；查询服务的 `AppDialog` 和使用内部本地化资源的 `TipHeader`/`LocaleExtension` 没有移植，因此无需服务定位器、内部字符串资源或 `RichasyKernel.Abstractions`。
 - 工程目标框架与平台跟随 `Danmaku.Legacy`，使用中央包版本，不升级依赖。关闭本工程的分析器及文档生成，保留上游源码风格；应用工程的分析器设置不变。
 
 ## 构建集成
