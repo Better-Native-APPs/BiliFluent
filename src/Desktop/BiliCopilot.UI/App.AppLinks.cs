@@ -10,7 +10,6 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.WinUIKernel.Share.Base;
 using System.ComponentModel;
 using System.Globalization;
-using System.Threading;
 using Windows.ApplicationModel.Activation;
 
 namespace BiliCopilot.UI;
@@ -78,10 +77,10 @@ public partial class App
         try
         {
             if (_dispatcherQueue.TryEnqueue(DispatchPendingAppLink)) return;
+            LogAppLink("invalid", "failed-dispatch");
         }
-        catch (Exception) { }
+        catch (Exception) { LogAppLink("invalid", "failed-dispatch"); }
         Volatile.Write(ref _appLinkDispatchQueued, 0);
-        LogAppLink("invalid", "failed-dispatch");
     }
 
     private async void DispatchPendingAppLink()
