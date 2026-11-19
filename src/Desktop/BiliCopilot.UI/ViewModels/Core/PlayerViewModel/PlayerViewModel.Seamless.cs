@@ -32,6 +32,14 @@ public sealed partial class PlayerViewModel
     private bool _lastOnDemandReplayIssued;
     private MpvPlayer? _seamlessPlayer;
     private MpvSeamlessPlaybackState? _selectedPlaybackState;
+    private double? _seekRunStart;
+    private SeekRunCacheObservation? _seekRunCache;
+    private double? _seekRunObservedPosition;
+    private long _seekRunObservedAt;
+    private long _seekRunRevision;
+    private bool _seekRunLoadPending;
+    private bool _seekRunNativeSeekPending;
+    private string _seekRunLoadReason = "load";
 
     /// <summary>Whether the latest on-demand choice is being prepared, selected or reloaded.</summary>
     [ObservableProperty]
@@ -174,6 +182,15 @@ public sealed partial class PlayerViewModel
 
                             var statistics = state.IsSuccess ? (kind == PlaybackStreamKind.Video ? state.Value.Video : state.Value.Audio).Statistics : null;
                             intent.Resolver.CommitSelectedStream(kind, target, statistics);
+                            var switched = await ReadPlaybackObservationAsync(intent.Player);
+                            if (file == Interlocked.Read(ref _automaticAudioLoads) && IsCurrentPlayback(intent.Version)
+                                && ReferenceEquals(intent.Player, Player))
+                            {
+                                var selected = state.IsSuccess ? (kind == PlaybackStreamKind.Video ? state.Value.Video : state.Value.Audio) : null;
+                                var preparedStart = kind == PlaybackStreamKind.Video ? selected?.MinimumSeekTimeSeconds
+                                    : SeamlessSwitchPolicy.GetPreparedAudioRunStart(description?.Target, result, selected);
+                                AdvanceSeekRunAfterSwitch(preparedStart ?? switched?.Position);
+                            }
                             if (kind == PlaybackStreamKind.Video) OnAdaptiveSelectionCommitted(intent, current.Format.Quality, target.Format.Quality);
                             Interlocked.Increment(ref _selectedStreamEpoch);
                             ResetSelectedRelayObservation();
@@ -347,17 +364,26 @@ public sealed partial class PlayerViewModel
                 _selectedPlaybackState = state.Value;
                 reload = _onDemandReplayNeedsLoad || SeamlessSwitchPolicy.RequiresReloadForSeek(position,
                     observation?.Position ?? player.Position, state.Value.Video.IsExternal, state.Value.Video.MinimumSeekTimeSeconds,
-                    OnDemandResolver?.CurrentStreams is { Video: not null, Audio: not null });
+                    OnDemandResolver?.CurrentStreams is { Video: not null, Audio: not null }, _seekRunStart);
             }
             else reload = _onDemandReplayNeedsLoad || _seamlessVideoSelected
                 || (OnDemandResolver?.CurrentStreams is { Video: not null, Audio: not null }
                     && position < (observation?.Position ?? player.Position));
             if (logger.IsEnabled(LogLevel.Information))
-                logger.LogInformation("Playback | user-seek from={From} target={Target} mode={Mode}",
-                    observation?.Position ?? player.Position, position, reload ? "reload" : "seek");
+                logger.LogInformation("Playback | user-seek from={From} target={Target} mode={Mode} run-start={RunStart}",
+                    observation?.Position ?? player.Position, position, reload ? "reload" : "seek", FormatSeekRunStart());
             if (!reload)
             {
+                var seekRunCache = _seekRunCache;
+                var from = observation?.Position ?? player.Position;
                 await seek();
+                if (IsCurrentPlayback(version) && _playbackPosition.IsLatest(request))
+                {
+                    NoteSeekRunForward(position, from, seekRunCache);
+                    _seekRunObservedPosition = position;
+                    _seekRunObservedAt = Environment.TickCount64;
+                    _seekRunNativeSeekPending = false;
+                }
                 _playbackPosition.MarkSubmitted(request);
                 var after = await ReadPlaybackObservationAsync(player);
                 if (IsCurrentPlayback(version) && _playbackPosition.IsLatest(request) && after is { } settled)
@@ -380,6 +406,116 @@ public sealed partial class PlayerViewModel
         if (_playbackPosition.Observe(settled.Position, settled.Seeking, settled.Buffering, !settled.Playing, settled.Paused, settled.Speed))
             _failover.OnPlaybackRestart(NetworkNow);
     }
+
+    private void ClearSeekRun()
+    {
+        _seekRunStart = null;
+        _seekRunCache = null;
+        _seekRunObservedPosition = null;
+        _seekRunObservedAt = 0;
+        _seekRunLoadPending = false;
+        _seekRunNativeSeekPending = false;
+        _seekRunRevision++;
+    }
+
+    private void BeginSeekRunLoad()
+    {
+        ClearSeekRun();
+        _seekRunLoadPending = true;
+        _seekRunLoadReason = _hasLoadedFile ? "reload" : "load";
+    }
+
+    private void CompleteSeekRunLoad(double? position)
+    {
+        if (!_seekRunLoadPending) return;
+        if (position is double start && start >= 0 && double.IsFinite(start))
+            SetSeekRunStart(start, _seekRunLoadReason);
+        else if (Player is { } player)
+            _ = OwnWork(ReadSeekRunLoadStartAsync(player, _mediaVersion, _networkLoads, _seekRunRevision));
+    }
+
+    private async Task ReadSeekRunLoadStartAsync(MpvPlayer player, long version, long load, long revision)
+    {
+        // The file-local start is the load's exact intent, not an already-advancing time-pos.
+        var start = await Task.Run<double?>(() =>
+        {
+            var text = player.Client.GetPropertyString("file-local-options/start");
+            if (text == "none") return 0;
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var position)
+                && double.IsFinite(position) && position >= 0 ? position : null;
+        });
+        if (!IsCurrentPlayback(version) || !ReferenceEquals(player, Player) || load != _networkLoads
+            || revision != _seekRunRevision || !_seekRunLoadPending) return;
+        if (start is { } position) SetSeekRunStart(position, _seekRunLoadReason);
+    }
+
+    private void SetSeekRunStart(double position, string reason)
+    {
+        if (!double.IsFinite(position) || position < 0) return;
+        var changed = _seekRunStart != position;
+        _seekRunStart = position;
+        _seekRunLoadPending = false;
+        _seekRunRevision++;
+        if (changed && logger.IsEnabled(LogLevel.Information))
+            logger.LogInformation("Playback | seek-run start={Start} reason={Reason}", position, reason);
+    }
+
+    private void AdvanceSeekRunAfterSwitch(double? firstReadablePosition)
+    {
+        if (firstReadablePosition is not double position || !double.IsFinite(position) || position < 0)
+        {
+            ClearSeekRun();
+            return;
+        }
+        // The unchanged track still constrains the common continuous interval.
+        SetSeekRunStart(Math.Max(_seekRunStart ?? position, position), "switch");
+        _seekRunCache = null;
+        _seekRunObservedPosition = position;
+        _seekRunObservedAt = Environment.TickCount64;
+        _seekRunNativeSeekPending = false;
+    }
+
+    private void NoteSeekRunForward(double target, double from)
+        => NoteSeekRunForward(target, from, _seekRunCache);
+
+    private void NoteSeekRunForward(double target, double from, SeekRunCacheObservation? sample)
+    {
+        if (_seekRunStart is null || _seekRunLoadPending || !double.IsFinite(target) || target <= from) return;
+        var audioComplete = sample is { AudioComplete: true };
+        if (audioComplete && sample is { } cached && cached.StreamEpoch == Interlocked.Read(ref _selectedStreamEpoch)
+            && SeamlessSwitchPolicy.IsVideoBufferedForSeekRun(target, cached.Position, cached.VideoForwardSeconds)) return;
+        SetSeekRunStart(target, audioComplete ? "forward-uncached" : "forward-audio-pending");
+    }
+
+    private void ObserveSeekRunPosition(double position, bool seeking = false)
+    {
+        if (!CanUseOnDemandNetwork || !_hasLoadedFile || !double.IsFinite(position) || position < 0) return;
+        var now = Environment.TickCount64;
+        if (_seekRunObservedPosition is { } previous && position != previous)
+        {
+            var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
+            var naturalAdvance = Math.Max(1, (now - _seekRunObservedAt) / 1000d * speed + 1);
+            if (position > previous && (seeking || _seekRunNativeSeekPending || position - previous > naturalAdvance))
+                NoteSeekRunForward(position, previous);
+            _seekRunNativeSeekPending = false;
+        }
+
+        _seekRunObservedPosition = position;
+        _seekRunObservedAt = now;
+    }
+
+    private void RecordSeekRunNetworkSample(NetworkSample raw, double rawForwardSeconds)
+    {
+        if (!_seekRunLoadPending && raw.PositionKnown && !raw.Seeking && !raw.CoreIdle
+            && _playbackPosition.PendingPosition is null)
+            _seekRunCache = new(raw.Position, rawForwardSeconds,
+                SeamlessSwitchPolicy.IsAudioCompleteForSeekRun(raw.AudioRelay), raw.StreamEpoch);
+    }
+
+    private string FormatSeekRunStart()
+        => _seekRunStart?.ToString("0.###", CultureInfo.InvariantCulture) ?? "n/a";
+
+    private readonly record struct SeekRunCacheObservation(double Position, double VideoForwardSeconds, bool AudioComplete, long StreamEpoch);
 
     private void ApplyCurrentOnDemandSelection(MediaSourceResolverBase resolver)
     {

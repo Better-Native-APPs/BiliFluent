@@ -16,6 +16,15 @@ internal static class PlaybackNetworkPolicy
     public const double CachePauseWaitSeconds = 3;
 
     /// <summary>
+    /// Mebibytes of already played data kept behind the playback position unless the user chose
+    /// another value (demuxer-max-back-bytes). With none kept, the key frame the current picture
+    /// decodes from has left the cache, so the seek that realigns picture and sound after the audio
+    /// output was rebuilt during a pause reads from the network again and drops everything buffered
+    /// ahead. 32 MiB holds a five second group of pictures up to about 50 Mbit/s.
+    /// </summary>
+    public const double DefaultBackCacheMebibytes = 32;
+
+    /// <summary>
     /// How long a host that failed in this app session is ordered behind the other candidates.
     /// </summary>
     public static readonly TimeSpan HostFailureCooldown = TimeSpan.FromMinutes(5);

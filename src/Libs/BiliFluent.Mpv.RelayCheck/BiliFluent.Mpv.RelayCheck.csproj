@@ -19,5 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\BiliFluent.Mpv\BiliFluent.Mpv.csproj" />
     <Compile Include="..\..\Desktop\BiliCopilot.UI\Resolvers\SponsorCachePolicy.cs" Link="SponsorCachePolicy.cs" />
+    <Compile Include="..\..\Desktop\BiliCopilot.UI\Resolvers\AdaptiveQualityThresholds.cs" Link="AdaptiveQualityThresholds.cs" />
+    <Compile Include="..\..\Desktop\BiliCopilot.UI\Resolvers\AdaptiveBandwidthHistory.cs" Link="AdaptiveBandwidthHistory.cs" />
+    <Compile Include="..\..\Desktop\BiliCopilot.UI\Resolvers\AdaptiveQualityPolicy.cs" Link="AdaptiveQualityPolicy.cs" />
   </ItemGroup>
 </Project>

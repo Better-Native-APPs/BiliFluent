@@ -70,6 +70,7 @@ public sealed partial class PlayerViewModel
 
         DetachNetworkMonitor();
         _networkClient = client;
+        client.EnablePausedAudioOutputRecovery = true;
         client.ReachFileLoading += OnNetworkFileLoading;
         client.ReachFileLoaded += OnNetworkFileLoaded;
         client.FileFailed += OnNetworkFileFailed;
@@ -92,6 +93,7 @@ public sealed partial class PlayerViewModel
         _deferredLoadError = null;
         _reloadState = null;
         _playbackPosition.Reset();
+        ClearSeekRun();
         _hasLoadedFile = false;
         _subtitleToRestore = null;
         _userPausedSample = false;
@@ -109,6 +111,7 @@ public sealed partial class PlayerViewModel
 
     private Task SuspendNetworkMonitorAsync()
     {
+        ClearSeekRun();
         RetireSponsorCache();
         DetachSeamlessPlayback();
         DetachNetworkMonitor();
@@ -125,6 +128,7 @@ public sealed partial class PlayerViewModel
 
     private void DetachNetworkMonitor()
     {
+        CancelAudioResumeUserIntent();
         Interlocked.Increment(ref _networkEpoch);
         if (_networkClient is not { } client)
         {
@@ -137,6 +141,7 @@ public sealed partial class PlayerViewModel
         client.ReachFileEnd -= OnNetworkFileEnded;
         client.SeekStarted -= OnNetworkSeekStarted;
         client.DataNotify -= OnNetworkDataNotify;
+        client.EnablePausedAudioOutputRecovery = false;
         _networkClient = null;
     }
 
@@ -164,6 +169,7 @@ public sealed partial class PlayerViewModel
         Volatile.Write(ref _cacheState, null);
         PostNetworkEvent(() =>
         {
+            BeginSeekRunLoad();
             _selectedPlaybackState = null;
             _seamlessVideoSelected = false;
             ResetSelectedRelayObservation();
@@ -180,6 +186,7 @@ public sealed partial class PlayerViewModel
         var loadedSelection = OnDemandResolver?.CaptureSelectionLoad();
         PostNetworkEvent(() =>
         {
+            CompleteSeekRunLoad(_reloadState?.Position);
             _deferredLoadError = null;
             _reloadState = null;
             _hasLoadedFile = true;
@@ -227,6 +234,7 @@ public sealed partial class PlayerViewModel
     private void OnNetworkSeekStarted(object? sender, EventArgs e)
         => PostNetworkEvent(() =>
         {
+            _seekRunNativeSeekPending = true;
             var now = NetworkNow;
             // A user request already reset the clocks. Internal resets during that seek must
             // not keep postponing recovery while the requested position still has no frame.
@@ -240,6 +248,7 @@ public sealed partial class PlayerViewModel
         {
             PostNetworkEvent(() =>
             {
+                _seekRunNativeSeekPending = false;
                 if (_playbackPosition.PendingPosition is null) _failover.OnPlaybackRestart(NetworkNow);
                 else if (Player is { } player)
                     _ = OwnWork(ObserveUserPositionCompletionAsync(player, _mediaVersion, _playbackPosition.Version));
@@ -250,6 +259,7 @@ public sealed partial class PlayerViewModel
     private void OnNetworkSample(NetworkSample raw)
     {
         if (!CanUseOnDemandNetwork || OnDemandResolver is not { } resolver || raw.StreamEpoch != Interlocked.Read(ref _selectedStreamEpoch)) return;
+        if (raw.PositionKnown) ObserveSeekRunPosition(raw.Position, raw.Seeking);
         _userPausedSample = raw.UserPaused;
         var speed = Player?.PlaybackRate is > 0 and var rate ? rate : 1d;
         if (!_onDemandReplayNeedsLoad && raw.PositionKnown
@@ -331,6 +341,7 @@ public sealed partial class PlayerViewModel
                 : audioRelay is { Stalled: true } ? PlaybackStreamKind.Audio : null,
         };
         var rawForwardSeconds = sample.CacheSeconds;
+        RecordSeekRunNetworkSample(raw, rawForwardSeconds);
         var rawAudioSeconds = sample.AudioCacheSeconds;
         double skippedSeconds = 0, extraMegabytes = 0;
         AccountSponsorCache(raw, ref sample, ref skippedSeconds, ref extraMegabytes);
@@ -884,19 +895,29 @@ public sealed partial class PlayerViewModel
         var player = Player;
         var resolver = OnDemandResolver;
         var now = Environment.TickCount64;
+        // The resume entry point has checked native pause/audio PTS before this snapshot.
+        // Only a recovery that rereads streams bypasses ordinary background refresh policy.
+        var audioRecovery = Client?.NeedsPausedAudioOutputRecovery == true;
         if (!CanUseOnDemandNetwork || player is null || !_hasLoadedFile || resolver?.CurrentStreams is not { Deadline: { } deadline } from
             || deadline - DateTimeOffset.UtcNow >= PlaybackNetworkPolicy.MinimumUrlLifetime
             || IsPlaybackClosing || IsConnecting
-            || (_lastResumeRefresh != 0 && now - _lastResumeRefresh < PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
+            || (!audioRecovery && _lastResumeRefresh != 0 && now - _lastResumeRefresh < PlaybackNetworkPolicy.ResumeRefreshInterval.TotalMilliseconds))
         {
             return false;
         }
 
         _lastResumeRefresh = now;
+        if (Client?.EnablePausedAudioOutputRecovery == true) Client.AllowPausedAudioOutputRecovery = false;
         var version = _mediaVersion;
+        if (audioRecovery)
+        {
+            Client!.PreparePausedAudioOutputRecoveryResume();
+            reload = ObserveNetworkReloadAsync(OwnWork(StartAudioResumeSourceRefresh(player, resolver, from, version, _activeMediaToken)));
+            return true;
+        }
         if (IsRelayingEvery(player, from))
         {
-            _ = ObserveNetworkReloadAsync(OwnWork(RefreshRelayAsync(player, resolver, from, version, _activeMediaToken, "resume-expired", reloadOnFailure: true)));
+            _ = ObserveNetworkReloadAsync(OwnWork(StartAudioResumeBackgroundSourceRefresh(player, resolver, from, version, _activeMediaToken)));
             return false;
         }
 
@@ -1077,6 +1098,8 @@ public sealed partial class PlayerViewModel
         public double WatchableCacheSeconds { get; init; }
         public double SkippedAheadSeconds { get; init; }
         public double CacheExtraMegabytes { get; init; }
+        public double? AdaptiveObservation { get; init; }
+        public string AdaptiveObservationKind { get; init; } = "n/a";
     }
 
     // What the sampler reads from mpv on its own thread.

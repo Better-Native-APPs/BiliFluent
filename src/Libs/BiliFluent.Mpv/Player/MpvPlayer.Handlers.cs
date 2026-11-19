@@ -7,6 +7,7 @@ namespace Richasy.MpvKernel.Player;
 
 public sealed partial class MpvPlayer
 {
+    private bool _isAudioRecoveryResuming;
     private void OnStatusTimerElapsedAsync(object? sender, ElapsedEventArgs e)
     {
         RunPlayerCallbackAsync(() =>
@@ -60,7 +61,13 @@ public sealed partial class MpvPlayer
         switch (e.Id)
         {
             case MpvClientEventId.StateChanged:
-                PostCounted(_ => PlaybackState = (MpvPlayerState)e.Data!);
+                var recoveringAudio = Client.IsPausedAudioOutputRecoveryResuming;
+                PostCounted(_ =>
+                {
+                    if (e.AudioResumePresentationVersion is { } version && version != Client.AudioResumePresentationVersion) return;
+                    _isAudioRecoveryResuming = recoveringAudio;
+                    PlaybackState = (MpvPlayerState)e.Data!;
+                });
                 break;
             case MpvClientEventId.VolumeChanged:
                 PostCounted(_ => Volume = (double)e.Data!);

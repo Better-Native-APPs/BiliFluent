@@ -51,7 +51,10 @@ internal readonly record struct SystemMediaSnapshot(
     SystemMediaPlaybackStatus Status,
     double PositionSeconds,
     double DurationSeconds,
-    double PlaybackRate);
+    double PlaybackRate)
+{
+    public bool AllowRecoveryPauseOrSeek { get; init; }
+}
 
 internal readonly record struct SystemMediaButtons(
     bool Play,
@@ -90,14 +93,15 @@ internal static class SystemMediaTransportPolicy
         var position = double.IsFinite(snapshot.PositionSeconds)
             ? Math.Clamp(snapshot.PositionSeconds, 0, snapshot.DurationSeconds) : 0;
         return new(TimeSpan.Zero, duration, TimeSpan.Zero,
-            snapshot.CanAcceptInput ? duration : TimeSpan.Zero, TimeSpan.FromSeconds(position));
+            snapshot.CanAcceptInput || snapshot.AllowRecoveryPauseOrSeek ? duration : TimeSpan.Zero, TimeSpan.FromSeconds(position));
     }
 
     public static SystemMediaButtons GetButtons(SystemMediaSnapshot snapshot)
     {
         var transport = snapshot.IsActive && snapshot.CanAcceptInput;
-        var seek = transport && CreateTimeline(snapshot).IsAvailable;
-        return new(transport, transport, transport,
+        var pauseOrSeek = snapshot.IsActive && (snapshot.CanAcceptInput || snapshot.AllowRecoveryPauseOrSeek);
+        var seek = pauseOrSeek && CreateTimeline(snapshot).IsAvailable;
+        return new(pauseOrSeek, pauseOrSeek, pauseOrSeek,
             transport && snapshot.CanNavigatePlaylist && snapshot.NextAvailable,
             transport && snapshot.CanNavigatePlaylist && snapshot.PreviousAvailable,
             seek, seek, seek,

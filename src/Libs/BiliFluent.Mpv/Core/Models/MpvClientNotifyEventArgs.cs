@@ -17,4 +17,6 @@ public sealed class MpvClientNotifyEventArgs(MpvClientEventId id, object? data) 
     /// 数据.
     /// </summary>
     public object? Data { get; set; } = data;
+
+    internal long? AudioResumePresentationVersion { get; init; }
 }

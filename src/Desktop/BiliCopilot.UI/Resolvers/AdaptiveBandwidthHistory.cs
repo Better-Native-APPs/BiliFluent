@@ -15,7 +15,7 @@ internal readonly record struct AdaptiveBandwidthEstimate(double BitsPerSecond, 
         => Source != AdaptiveBandwidthSource.None && now >= ObservedAt && now - ObservedAt < AdaptiveQualityThresholds.EvidenceLifetime;
 }
 
-/// <summary>Only stable media may leave evidence for the next one. Nothing is persisted.</summary>
+/// <summary>Fresh throughput evidence shared with the next media. Nothing is persisted.</summary>
 internal sealed class AdaptiveBandwidthHistory
 {
     private readonly object _sync = new();
@@ -38,7 +38,7 @@ internal sealed class AdaptiveBandwidthHistory
         }
     }
 
-    public void RecordStable(AdaptiveBandwidthEstimate estimate)
+    public void Record(AdaptiveBandwidthEstimate estimate)
     {
         if (estimate.Source == AdaptiveBandwidthSource.None || !double.IsFinite(estimate.BitsPerSecond) || estimate.BitsPerSecond <= 0) return;
         lock (_sync)

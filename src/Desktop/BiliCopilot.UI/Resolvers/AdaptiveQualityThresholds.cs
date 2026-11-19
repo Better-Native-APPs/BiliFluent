@@ -11,7 +11,6 @@ internal static class AdaptiveQualityThresholds
     public const int EightKQuality = 127;
     public const int EightKWidth = 7680;
     public const int EightKHeight = 4320;
-    public const double BandwidthPercentile = 0.25;
     public const double InitialBandwidthRatio = 1.5;
     public const double InitialUpgradeCacheSeconds = 12;
     public const double RecoveryBandwidthRatio = 1.8;
@@ -24,8 +23,8 @@ internal static class AdaptiveQualityThresholds
     public const double BitsPerKilobit = 1000;
 
     public static readonly TimeSpan EvidenceLifetime = TimeSpan.FromMinutes(15);
-    public static readonly TimeSpan BandwidthWindow = TimeSpan.FromSeconds(5);
-    public static readonly TimeSpan PreviousMediaStableTime = TimeSpan.FromSeconds(60);
+    public static readonly TimeSpan NetworkEvidenceDuration = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan EvidenceLogInterval = TimeSpan.FromSeconds(1);
     public static readonly TimeSpan InitialUpgradeDuration = TimeSpan.FromSeconds(6);
     public static readonly TimeSpan RecoveryCooldown = TimeSpan.FromSeconds(90);
     public static readonly TimeSpan RecoveryUpgradeDuration = TimeSpan.FromSeconds(15);

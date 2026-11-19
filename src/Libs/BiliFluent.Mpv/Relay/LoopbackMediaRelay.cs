@@ -604,6 +604,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
         private readonly RelayVirtualOffsetMap? _virtualMap;
         private readonly RelayRateMeter _rate = new(RelayDefaults.RateWindow);
         private readonly RelayRateMeter _deliveryRate = new(RelayDefaults.RateWindow);
+        private readonly RelayDeliveryTracker _deliveryCoverage = new();
 #pragma warning disable CA2213 // Both are cancelled and disposed on the pool, see Dispose and Signal.
         private readonly CancellationTokenSource _removed = new();
         private CancellationTokenSource _changed = new();
@@ -616,6 +617,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
         private long _forwardBytes;
         private long _lastReceivedTicks;
         private long _lastDeliveredTicks;
+        private RelayThroughputObservation? _throughputObservation;
         private int _disposed;
 
         public StreamEntry(string key, RelayStreamRegistration registration)
@@ -744,8 +746,22 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
 
         public void NoteUpstreamRead() => Interlocked.Exchange(ref _lastReceivedTicks, DateTimeOffset.UtcNow.Ticks);
 
+        public void NoteThroughput(int version, RelayThroughputObservation? observation)
+        {
+            if (observation is null) return;
+            lock (_sync)
+            {
+                if (_table.Version == version
+                    && (_throughputObservation is null || observation.Sequence > _throughputObservation.Sequence))
+                {
+                    _throughputObservation = observation;
+                }
+            }
+        }
+
         public void NoteDelivery(long endOffset, int count)
         {
+            _deliveryCoverage.Record(endOffset - count, endOffset);
             var previous = Interlocked.Read(ref _forwardBytes);
             while (endOffset > previous)
             {
@@ -789,9 +805,11 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
         public RelayStreamStatistics GetStatistics()
         {
             RelayUpstream current;
+            RelayThroughputObservation? observation;
             lock (_sync)
             {
                 current = _table.Current.Upstream;
+                observation = _throughputObservation;
             }
 
             var firstByte = Interlocked.Read(ref _firstByteTicks);
@@ -816,6 +834,8 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
                 LastByteReceivedAt = received == 0 ? null : new DateTimeOffset(received, TimeSpan.Zero),
                 LastDeliveredAt = delivered == 0 ? null : new DateTimeOffset(delivered, TimeSpan.Zero),
                 DeliveredBytesPerSecond = _deliveryRate.GetRate(Environment.TickCount64),
+                ThroughputObservation = observation,
+                DeliveryCoverage = _deliveryCoverage.Snapshot(),
             };
         }
 
@@ -854,6 +874,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
             }
 
             var retired = _changed;
+            _throughputObservation = null;
             _changed = new();
             _changedToken = _changed.Token;
             return retired;
@@ -875,6 +896,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
     private sealed class Transfer(LoopbackMediaRelay relay, StreamEntry entry, NetworkStream client, byte[] buffer, CancellationToken token, long requestId) : IDisposable
     {
         private UpstreamConnection? _upstream;
+        private RelayThroughputMeter? _throughput;
         private readonly bool _trace = relay._logger.IsEnabled(LogLevel.Trace);
 
         // Upstream requests that failed since the last byte arrived.
@@ -892,6 +914,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
             {
                 if (entry.FindPreload(offset) is { } preload)
                 {
+                    EndThroughput();
                     var skip = (int)(offset - preload.Offset);
                     var count = (int)Math.Min(preload.Data.Length - skip, to - offset + 1);
                     var memoryStarted = _trace ? Stopwatch.GetTimestamp() : 0;
@@ -971,10 +994,13 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
                 }
 
                 entry.NoteUpstreamRead();
-                var readWait = _trace ? Stopwatch.GetElapsedTime(started).TotalMilliseconds : 0;
-                var deliveredAt = _trace ? Stopwatch.GetTimestamp() : 0;
+                var readCompleted = Stopwatch.GetTimestamp();
+                _throughput!.ReadCompleted(read, started, readCompleted);
+                var deliveredAt = Stopwatch.GetTimestamp();
                 await client.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
-                if (_trace) TraceRead("upstream", offset, read, readWait, Stopwatch.GetElapsedTime(deliveredAt).TotalMilliseconds, upstream.Selection.Upstream.Label, null);
+                var writeCompleted = Stopwatch.GetTimestamp();
+                entry.NoteThroughput(upstream.Selection.Version, _throughput.WriteCompleted(deliveredAt, writeCompleted));
+                if (_trace) TraceRead("upstream", offset, read, Stopwatch.GetElapsedTime(started, readCompleted).TotalMilliseconds, Stopwatch.GetElapsedTime(deliveredAt, writeCompleted).TotalMilliseconds, upstream.Selection.Upstream.Label, null);
                 offset += read;
                 upstream.Position = offset;
                 upstream.Delivered += read;
@@ -1003,6 +1029,7 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
                 if (connection is not null)
                 {
                     _upstream = connection;
+                    _throughput = new();
                     if (handover)
                     {
                         Interlocked.Increment(ref entry.Handovers);
@@ -1089,8 +1116,19 @@ public sealed partial class LoopbackMediaRelay : IAsyncDisposable
 
         private void CloseUpstream()
         {
+            EndThroughput();
             _upstream?.Dispose();
             _upstream = null;
+        }
+
+        private void EndThroughput()
+        {
+            if (_upstream is { } upstream && _throughput is { } throughput)
+            {
+                entry.NoteThroughput(upstream.Selection.Version, throughput.End(Stopwatch.GetTimestamp()));
+            }
+
+            _throughput = null;
         }
 
         private void TraceRead(string source, long offset, int count, double wait, double delivery, string? node, RelayFailureReason? reason)

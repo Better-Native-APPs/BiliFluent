@@ -269,7 +269,7 @@ public sealed partial class PlayerViewModel
 
                 var cacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 64d);
                 var cacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 60d);
-                var backCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d);
+                var backCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, PlaybackNetworkPolicy.DefaultBackCacheMebibytes);
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBytesAsync($"{Convert.ToInt32(cacheSize)}MiB"));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerReadheadSecondsAsync(Convert.ToInt32(cacheSeconds)));
                 await AwaitInitializationStepAsync(() => Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB"));
@@ -546,6 +546,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        ObserveAudioResumeSourcePresentation(e.PropertyName);
         var diagnostics = PlaybackStutterDiagnostics.IsEnabled;
         var handlerStarted = diagnostics ? Stopwatch.GetTimestamp() : 0;
         long synchronousTicks = -1;
@@ -555,6 +556,7 @@ public sealed partial class PlayerViewModel
         // Notifications are reread prompts only; never feed this event's old payload into Sponsor.
         if (e.PropertyName == nameof(Player.Position))
         {
+            ObserveSeekRunPosition(Player.Position);
             var timestamp = Stopwatch.GetTimestamp();
             if (Interlocked.Exchange(ref _forceSponsorPositionObservation, 0) != 0
                 || _lastSponsorPositionObservation == 0

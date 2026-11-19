@@ -2316,4 +2316,7 @@
   <data name="TextLinkOpenFailed" xml:space="preserve">
     <value>链接没有打开，请再试一次</value>
   </data>
+  <data name="AppLinkUnsupported" xml:space="preserve">
+    <value>暂不支持在应用内打开这个链接</value>
+  </data>
 </root>

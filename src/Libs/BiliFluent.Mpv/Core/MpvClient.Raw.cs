@@ -24,6 +24,7 @@ public sealed partial class MpvClient
     /// </summary>
     public MpvError SetPropertyString(string name, string value)
     {
+        if (name == "time-pos" || (name == "pause" && value == "yes")) _audioResumeRecovery.Cancel();
         var trace = name is "sid" or "secondary-sid" or "sub-visibility" or "secondary-sub-visibility";
         var operation = trace ? "set " + name + "=" + SubtitleDiagnosticText(value) : string.Empty;
         if (trace) TraceSubtitleState(operation, "before");
@@ -36,7 +37,10 @@ public sealed partial class MpvClient
     /// Sets a yes/no property.
     /// </summary>
     public MpvError SetProperty(string name, bool value)
-        => IsDisposed ? MpvError.Uninitialized : _handle.SetProperty(name, value);
+    {
+        if (name == "pause" && value) _audioResumeRecovery.Cancel();
+        return IsDisposed ? MpvError.Uninitialized : _handle.SetProperty(name, value);
+    }
 
     /// <summary>
     /// Sets an integer property.
@@ -48,7 +52,10 @@ public sealed partial class MpvClient
     /// Sets a floating point property.
     /// </summary>
     public MpvError SetProperty(string name, double value)
-        => IsDisposed ? MpvError.Uninitialized : _handle.SetProperty(name, value);
+    {
+        if (name == "time-pos") _audioResumeRecovery.Cancel();
+        return IsDisposed ? MpvError.Uninitialized : _handle.SetProperty(name, value);
+    }
 
     /// <summary>
     /// Reads a property as text. Returns <c>null</c> when the property is unavailable.
@@ -104,6 +111,7 @@ public sealed partial class MpvClient
     public MpvError Command(params string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        if (args.Length > 0 && args[0] is "seek" or "loadfile" or "stop") _audioResumeRecovery.Cancel();
         var trace = args.Length > 0 && args[0] is "sub-add" or "sub-remove" or "sub-reload";
         var operation = trace ? args[0] + " " + (args.Length > 1 ? SubtitleDiagnosticText(args[1]) : "current")
             + (args.Length > 2 ? " flag=" + SubtitleDiagnosticText(args[2]) : string.Empty) : string.Empty;

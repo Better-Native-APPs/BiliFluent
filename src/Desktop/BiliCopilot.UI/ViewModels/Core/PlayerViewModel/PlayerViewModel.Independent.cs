@@ -43,6 +43,7 @@ public sealed partial class PlayerViewModel
             var captured = new MediaSnapshot(video, snapshot.IsPrivate || connector.IsPrivatePlay)
             {
                 PreferPart = part,
+                PreferPartNumber = snapshot.PreferPartNumber,
                 PreferQuality = SelectedSource?.Data.Quality,
                 PreferAudioLanguageId = snapshot.PreferAudioLanguageId,
                 PreferAudioQualityId = snapshot.PreferAudioQualityId,

@@ -150,12 +150,19 @@ public sealed partial class MpvPlayer : ObservableObject, IAsyncDisposable
             return;
         }
 
+        var audioPresentation = Client.AudioResumePresentationVersion;
         if (!TryStartPlayerOperation(Client.GetPlayerStateAsync, out var stateWork)) return;
         var state = await stateWork.ConfigureAwait(false);
         if (_isDisposed) return;
         if (state.IsSuccess)
         {
-            PostCounted(_ => PlaybackState = state.Value);
+            var recoveringAudio = Client.IsPausedAudioOutputRecoveryResuming;
+            PostCounted(_ =>
+            {
+                if (audioPresentation != Client.AudioResumePresentationVersion) return;
+                _isAudioRecoveryResuming = recoveringAudio;
+                PlaybackState = state.Value;
+            });
         }
 
         if (!refreshObservedProperties) return;
