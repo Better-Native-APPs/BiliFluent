@@ -90,7 +90,9 @@ internal static partial class PlaybackSmokeSupport
 
                 previousPoll = sample.Ended;
                 var position = sample.Position;
-                if (!position.Available || sample.Paused.Value)
+                // A load can publish the start position long before its first displayed frame.
+                // Do not carry that pre-window idle interval into a playback-only window.
+                if (!position.Available || sample.Paused.Value || (!inWindow && sample.Idle.Value))
                 {
                     previousPosition = null;
                 }
@@ -110,6 +112,14 @@ internal static partial class PlaybackSmokeSupport
                     previousPosition = position;
                 }
                 else if (previousPosition is null) previousPosition = position;
+
+                if (!inWindow && sample.Idle.Value)
+                {
+                    previousAudio = null;
+                    audioChanged = 0;
+                    audioMissingStart = null;
+                    continue;
+                }
 
                 var audio = sample.Audio;
                 if (!audio.Available)
