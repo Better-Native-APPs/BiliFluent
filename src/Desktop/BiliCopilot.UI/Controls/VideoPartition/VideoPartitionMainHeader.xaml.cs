@@ -61,7 +61,7 @@ public sealed partial class VideoPartitionMainHeader : VideoPartitionDetailContr
 
     private void OnSortTypeSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.AddedItems.Any()
+        if (e.AddedItems.Count > 0
             && e.AddedItems[0] is PartitionVideoSortType sortType
             && sortType != ViewModel.SelectedSortType)
         {

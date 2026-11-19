@@ -61,7 +61,7 @@ public sealed partial class ArticlePartitionMainHeader : ArticlePartitionDetailC
 
     private void OnSortTypeSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.AddedItems.Any()
+        if (e.AddedItems.Count > 0
             && e.AddedItems[0] is ArticleSortType sortType
             && sortType != ViewModel.SelectedSortType)
         {
