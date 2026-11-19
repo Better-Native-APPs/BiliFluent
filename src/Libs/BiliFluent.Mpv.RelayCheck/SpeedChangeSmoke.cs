@@ -128,6 +128,13 @@ internal static partial class SpeedChangeSmoke
             var log = await File.ReadAllTextAsync(Path.Combine(directory, "mpv.log")).ConfigureAwait(false);
             row.InvalidAudioPts = log.Split('\n').Count(line => line.Contains("Invalid audio PTS", StringComparison.Ordinal));
             row.AudioTimestampResets = log.Split('\n').Count(line => line.Contains("Reset playback due to audio timestamp reset", StringComparison.Ordinal));
+            row.AudioUnderruns = log.Split('\n').Count(line => line.Contains("Audio device underrun detected", StringComparison.Ordinal));
+            var lines = log.Split('\n');
+            row.MpvErrors = lines.Count(IsNativeError);
+            var costStart = Array.FindIndex(lines, line => line.Contains("SPEEDCHANGE cost steady-30", StringComparison.Ordinal));
+            row.RecoveryMpvErrors = costStart >= 0 ? lines.Skip(costStart).Count(IsNativeError) : null;
+            if (settings.Case == "cost") report.Check("speed-change: " + settings.Key + " recovery log has no audio PTS errors, underruns, or native errors",
+                row.InvalidAudioPts == 0 && row.AudioTimestampResets == 0 && row.AudioUnderruns == 0 && row.RecoveryMpvErrors == 0);
             report.Check("speed-change: " + settings.Key + " allocation-free probe loop", row.ProbeLoopAllocatedBytes == 0,
                 "allocated-bytes=" + row.ProbeLoopAllocatedBytes.ToString(CultureInfo.InvariantCulture));
             Persist(row, directory);
@@ -151,6 +158,8 @@ internal static partial class SpeedChangeSmoke
         }) mpv.SetOption(name, value);
         if (settings.Variant == "fixed") mpv.SetOption("af", "scaletempo2");
         if (settings.Variant == "pitch-off") mpv.SetOption("audio-pitch-correction", "no");
+        if (settings.Variant == "buffer-50") mpv.SetOption("audio-buffer", "0.05");
+        if (settings.Variant == "buffer-10") mpv.SetOption("audio-buffer", "0.01");
     }
 
     private static CallResult Load(NativeMpv mpv, string videoUrl, string audioUrl, double speed)
@@ -323,7 +332,7 @@ internal static partial class SpeedChangeSmoke
         var variant = options.GetValueOrDefault("variant", "default");
         var count = int.Parse(options.GetValueOrDefault("count", "10"), CultureInfo.InvariantCulture);
         var pass = int.Parse(options.GetValueOrDefault("pass", "1"), CultureInfo.InvariantCulture);
-        if (name is not ("baseline" or "switch" or "startup" or "cost") || variant is not ("default" or "fixed" or "pitch-off")
+        if (name is not ("baseline" or "switch" or "startup" or "cost") || variant is not ("default" or "fixed" or "pitch-off" or "buffer-50" or "buffer-10")
             || from is not (1 or 1.5 or 2 or 3) || to is not (1 or 1.5 or 2 or 3) || speed is not (1 or 1.5 or 2 or 3)
             || (name == "switch" && from == to) || count is < 1 or > 10 || pass is < 1 or > 99)
             throw new ArgumentException("Unsupported measurement settings.");
@@ -343,6 +352,8 @@ internal static partial class SpeedChangeSmoke
             $"SPEEDCHANGE key={key} iteration={observation.Iteration} read-ms={observation.Metrics.MaximumReadMs:0.000} lag-ms={observation.Metrics.MaximumLagMs:0.000} frame-gap-ms={observation.Metrics.MaximumFrameGapMs:0.000} audio-gap-ms={observation.Metrics.MaximumAudioGapMs:0.000} missing-audio-ms={observation.Metrics.MaximumMissingAudioPtsMs:0.000} reconfigs={observation.AudioReconfigs} gc-pause-ms={observation.GcPauseMs:0.000}"));
 
     private static string? Number(double? value) => value?.ToString("0.000000", CultureInfo.InvariantCulture);
+
+    private static bool IsNativeError(string line) => line.Contains("][e][", StringComparison.Ordinal) || line.Contains("][f][", StringComparison.Ordinal);
 
     private sealed record Settings(string Case, double From, double To, double Speed, string Variant, int Count, int Pass)
     {
@@ -393,6 +404,9 @@ internal static partial class SpeedChangeSmoke
         public long ProbeLoopAllocatedBytes { get; set; }
         public int InvalidAudioPts { get; set; }
         public int AudioTimestampResets { get; set; }
+        public int AudioUnderruns { get; set; }
+        public int MpvErrors { get; set; }
+        public int? RecoveryMpvErrors { get; set; }
         public List<SpeedTransition> Transitions { get; set; } = [];
         public List<SpeedWrite> Writes { get; set; } = [];
         public List<Startup> Startups { get; set; } = [];

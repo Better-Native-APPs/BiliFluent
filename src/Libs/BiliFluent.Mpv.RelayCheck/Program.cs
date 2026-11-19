@@ -59,7 +59,7 @@ internal static class Program
                 break;
             case "audio-resume": await AudioResumeSmoke.RunAsync(report, options); break;
             default:
-                Console.WriteLine("usage: unit | relay | all | drain | throughput | throughput-smoke [dll=..] [tls=on] | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..] | seek-run-smoke [dll=..] [passes=3] [out=..] [report=..] [analyze=1] | speed-change-smoke dll=.. out=.. lock=.. [case=baseline|switch|startup|cost] [from=1] [to=2] [speed=1] [variant=default|fixed|pitch-off] [count=10] [pass=1]");
+                Console.WriteLine("usage: unit | relay | all | drain | throughput | throughput-smoke [dll=..] [tls=on] | smoke [dll=..] | seamless-smoke [dll=..] [passes=3] [tls=on] [out=..] | drain-smoke [dll=..] [passes=3] [rounds=50] [baseline=1] [out=..] | seek-run-smoke [dll=..] [passes=3] [out=..] [report=..] [analyze=1] | speed-change-smoke dll=.. out=.. lock=.. [case=baseline|switch|startup|cost] [from=1] [to=2] [speed=1] [variant=default|fixed|pitch-off|buffer-50|buffer-10] [count=10] [pass=1]");
                 return 2;
         }
 
