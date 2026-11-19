@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [2.2611.8.2] - 2026-11-19 （预发布）
+
+> 这是一个测试版，接在 2.2611.8.1 之后。下面这些改动只通过了编译与自检，在真实使用中验证得还不够：暂停较久后继续播放的音画对齐、清晰度“自动”的测速与升降档、往回拖动的新规则、空降助手片段的缓冲处理、评论投票的提交。日常使用建议留在正式版 2.2611.7.0，遇到问题请到 Issues 反馈。
+
 ### 新增
 - 评论里的投票可以在应用内查看与参与：带投票的评论在正文下方显示投票入口，点开后显示选项、票数与占比，未投时可选择并提交。
 - 首页推荐流来源可选：设置中新增“首页推荐流来源”，可在网页版与手机 App 推荐流之间切换，默认使用网页版。
@@ -168,7 +172,8 @@
 - 优化动态流多图展示：改进动态图片画廊与大图查看窗口的交互展示。
 - 优化界面过渡动画与交互响应。
 
-[Unreleased]: https://github.com/Better-Native-APPs/BiliFluent/compare/v2.2611.8.1-pre...HEAD
+[Unreleased]: https://github.com/Better-Native-APPs/BiliFluent/compare/v2.2611.8.2-pre...HEAD
+[2.2611.8.2]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.8.2-pre
 [2.2611.8.1]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.8.1-pre
 [2.2611.8.0]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.8.0-pre.19
 [2.2611.7.0]: https://github.com/Better-Native-APPs/BiliFluent/releases/tag/v2.2611.7.0
