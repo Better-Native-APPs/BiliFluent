@@ -108,8 +108,7 @@ internal static class GlobalDependencies
             .AddNotificationViewModel()
             .BuildServiceProvider();
 
-        // The shared controls still require this adapter; all registrations and resolution use Microsoft DI.
-        new RichasyKernel.Kernel(Services).InitializeShareKernel(Services.GetRequiredService<ILogger<App>>());
+        WinUIKernelShareExtensions.InitializeShareKernel(Services.GetRequiredService<ILogger<App>>());
     }
 
     public static IServiceCollection AddDispatcherQueue(this IServiceCollection services)
