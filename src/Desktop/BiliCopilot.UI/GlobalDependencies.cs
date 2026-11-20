@@ -127,8 +127,7 @@ internal static class GlobalDependencies
         => services.AddSingleton<IAppToolkit, AppToolkit>()
             .AddSingleton<ISettingsToolkit, SettingsToolkit>()
             .AddSingleton<IFileToolkit, FileToolkit>()
-            .AddSingleton<IResourceToolkit, ResourceToolkit>()
-            .AddSingleton<IFontToolkit, SharedFontToolkit>();
+            .AddSingleton<IResourceToolkit, ResourceToolkit>();
 
     public static IServiceCollection AddXamlRootProvider(this IServiceCollection services)
         => services.AddSingleton<IXamlRootProvider, XamlRootProvider>();
