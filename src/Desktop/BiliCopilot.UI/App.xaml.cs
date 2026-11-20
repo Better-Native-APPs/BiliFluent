@@ -85,6 +85,7 @@ public partial class App : Application
                     return;
                 }
             }
+            StopProcessCpuDiagnosticsForWindowClose();
             TrayIcon?.Dispose();
             TrayIcon = null;
             _notificationManager?.Unregister();
@@ -180,6 +181,7 @@ public partial class App : Application
             Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = false; // true 会为每张图新建 CanvasDevice 并做 GPU→CPU→GPU 拷贝，在弱核显上更费；false 时 LoadAsync 本身已是异步。
             GlobalDependencies.Initialize();
             InitializeNotificationRouting();
+            InitializeProcessCpuDiagnostics();
             if (activatedArgs is not null) CaptureActivation(activatedArgs, initial: true);
             _sponsorInitialization = GlobalDependencies.Services
                 .GetRequiredService<BiliCopilot.UI.SponsorBlock.Integration.SponsorRuntime>().InitializeAsync();

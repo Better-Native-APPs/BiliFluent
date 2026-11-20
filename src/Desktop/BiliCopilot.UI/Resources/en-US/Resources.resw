@@ -118,7 +118,7 @@
     <value>Playback stutter diagnostics</value>
   </data>
   <data name="PlaybackStutterDiagnosticsDescription" xml:space="preserve">
-    <value>Log frame drops, cache state, and UI heartbeats every second, without video or user information.</value>
+    <value>Log frame drops, cache state, and UI heartbeats every second, and app-wide CPU usage distribution every 5 seconds, without video or user information.</value>
   </data>
   <data name="DisableMpvCurlForDiagnostics" xml:space="preserve">
     <value>Disable mpv's libcurl network backend (comparison)</value>

@@ -595,7 +595,7 @@
     <value>播放卡顿诊断</value>
   </data>
   <data name="PlaybackStutterDiagnosticsDescription" xml:space="preserve">
-    <value>每秒记录掉帧、缓存和 UI 心跳，不记录视频或用户信息。</value>
+    <value>每秒记录掉帧、缓存和 UI 心跳，同时每 5 秒记录整个应用的 CPU 占用分布，不记录视频或用户信息。</value>
   </data>
   <data name="DisableMpvCurlForDiagnostics" xml:space="preserve">
     <value>禁用 mpv 的 libcurl 网络后端（对比用）</value>

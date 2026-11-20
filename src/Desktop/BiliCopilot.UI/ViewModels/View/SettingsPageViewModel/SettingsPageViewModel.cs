@@ -337,6 +337,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnPlaybackStutterDiagnosticsEnabledChanged(bool value)
     {
         SettingsToolkit.WriteLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, value);
+        App.Current.RefreshProcessCpuDiagnostics();
         foreach (var player in this.Get<AppViewModel>().Players)
         {
             player.RefreshPlaybackDiagnostics();
