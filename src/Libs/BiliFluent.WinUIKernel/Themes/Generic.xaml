@@ -3,7 +3,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:Richasy.WinUIKernel.Share.Converters">
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/AppTitleBar/AppTitleBar.xaml" />
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/ImageExBase/ImageExBase.xaml" />
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/CustomNavigationViewResources.xaml" />
     </ResourceDictionary.MergedDictionaries>
