@@ -1,5 +1,6 @@
 ﻿// Copyright (c) BiliFluent. All rights reserved.
 
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 
 namespace BiliCopilot.UI.Controls.Core;
@@ -23,6 +24,7 @@ public sealed partial class PlayerTitleBar : TitleBar
     private AppWindow? _appWindow;
     private XamlRoot? _observedRoot;
     private double _observedScale;
+    private bool _regionsLogged;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlayerTitleBar"/> class.
@@ -44,6 +46,43 @@ public sealed partial class PlayerTitleBar : TitleBar
         if (!IsLoaded || XamlRoot is null || ActualWidth <= 0) return;
         ApplyCaptionInsets();
         RecomputeDragRegions();
+    }
+
+    /// <summary>
+    /// Debug builds only. Logs once what the window really has registered as passthrough regions, and whether the
+    /// title lies inside one of them: it does not when the built-in control looks for the interactive elements inside
+    /// its content, and it does when the control still treats the whole content as interactive.
+    /// </summary>
+    /// <param name="titleProbe">The element that shows the title. Its text is never logged.</param>
+    [System.Diagnostics.Conditional("DEBUG")]
+    internal void LogPassthroughRegionsOnce(FrameworkElement? titleProbe)
+    {
+        if (_regionsLogged || titleProbe is null || !IsLoaded || XamlRoot is not { } root) return;
+        if (ActualWidth <= 0 || titleProbe.ActualWidth <= 0) return;
+        _regionsLogged = true;
+        try
+        {
+            var scale = root.RasterizationScale;
+            var source = InputNonClientPointerSource.GetForWindowId(root.ContentIslandEnvironment.AppWindowId);
+            var rects = source.GetRegionRects(NonClientRegionKind.Passthrough);
+
+            // The built-in control registers root-relative view pixels multiplied by the scale; probe the same way.
+            var center = titleProbe.TransformToVisual(null).TransformPoint(new Point(titleProbe.ActualWidth / 2, titleProbe.ActualHeight / 2));
+            var x = center.X * scale;
+            var y = center.Y * scale;
+            var inside = rects.Any(rect => x >= rect.X && x < rect.X + rect.Width && y >= rect.Y && y < rect.Y + rect.Height);
+            Serilog.Log.Information(
+                "PlayerWindow | titlebar regions passthrough={Count} title-passthrough={Inside:l} scale={Scale} right-inset={Inset} right-padding={Padding}",
+                rects.Length,
+                inside ? "true" : "false",
+                scale,
+                _appWindow?.TitleBar?.RightInset,
+                _rightPaddingColumn?.Width.Value);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Information("PlayerWindow | titlebar regions read failed error={Error:l}", ex.GetType().Name);
+        }
     }
 
     /// <inheritdoc/>

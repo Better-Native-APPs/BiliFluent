@@ -1087,6 +1087,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
                     // The right-hand group moved or changed width without resizing the title bar itself.
                     headerBar.RefreshRegions();
+                    headerBar.LogPassthroughRegionsOnce(HeaderTitleHost);
                 }
 
                 if (EmbeddedHeader is not null && _embeddedHeaderWidth > 0)
