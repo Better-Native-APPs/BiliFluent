@@ -142,7 +142,9 @@ public sealed partial class PlayerTitleBar : TitleBar
         }
         catch (Exception)
         {
-            // The window is going away. This runs inside layout, so the columns just keep their last value.
+            // The window is going away. This runs inside layout, so the columns keep their last value; the cached
+            // window is dropped and looked up again should the title bar be measured once more.
+            _appWindow = null;
         }
     }
 
