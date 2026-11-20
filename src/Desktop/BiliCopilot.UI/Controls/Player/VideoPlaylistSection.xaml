@@ -8,21 +8,23 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
         <ScrollView x:Name="View" Padding="12">
-            <repeater:AppRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                <repeater:AppRepeater.ItemTemplate>
+            <ItemsRepeater
+                ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                TabFocusNavigation="Once"
+                VerticalCacheLength="20">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="items:VideoItemViewModel">
                         <components:VideoCardControl Style="{StaticResource PlayerPlaylistVideoCardStyle}" ViewModel="{x:Bind}" />
                     </DataTemplate>
-                </repeater:AppRepeater.ItemTemplate>
-                <repeater:AppRepeater.Layout>
+                </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater.Layout>
                     <StackLayout Spacing="8" />
-                </repeater:AppRepeater.Layout>
-            </repeater:AppRepeater>
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
         </ScrollView>
     </Grid>
 </local:VideoPlaylistSectionBase>

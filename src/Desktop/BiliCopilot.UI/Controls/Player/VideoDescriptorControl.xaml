@@ -8,7 +8,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <StackPanel Spacing="8">
@@ -23,22 +22,28 @@
             ToggleFollowCommand="{x:Bind ViewModel.ToggleFollowCommand, Mode=OneWay}"
             UserName="{x:Bind ViewModel.UpName, Mode=OneWay}" />
         <local:VideoStatControl Margin="8,0,0,8" ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-        <repeater:AppRepeater x:Name="TagRepeater" ItemsSource="{x:Bind ViewModel.Tags, Mode=OneWay}">
-            <repeater:AppRepeater.ItemTemplate>
+        <ItemsRepeater
+            x:Name="TagRepeater"
+            ItemsSource="{x:Bind ViewModel.Tags, Mode=OneWay}"
+            TabFocusNavigation="Once"
+            VerticalCacheLength="20">
+            <ItemsRepeater.ItemTemplate>
                 <DataTemplate x:DataType="app:BiliTag">
+                    <!--  The click handler reads the tag from DataContext, which an x:Bind item template does not set by itself.  -->
                     <Button
                         Padding="6,4"
                         AutomationProperties.Name="{x:Bind Name}"
                         Background="Transparent"
                         Click="OnTagButtonClick"
                         Content="{x:Bind Name}"
+                        DataContext="{x:Bind}"
                         FontSize="11" />
                 </DataTemplate>
-            </repeater:AppRepeater.ItemTemplate>
-            <repeater:AppRepeater.Layout>
+            </ItemsRepeater.ItemTemplate>
+            <ItemsRepeater.Layout>
                 <community:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
-            </repeater:AppRepeater.Layout>
-        </repeater:AppRepeater>
+            </ItemsRepeater.Layout>
+        </ItemsRepeater>
         <Grid
             Padding="12,8,12,0"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"

@@ -10,7 +10,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
@@ -50,12 +49,20 @@
             ShouldConstrainToRootBounds="False"
             Subtitle="{ext:Locale Name=FavoriteTip}"
             Target="{x:Bind Btn}">
+            <TeachingTip.Resources>
+                <!--  The folder list used to ask for the whole width; keep the tip at that width whatever the folder names are.  -->
+                <x:Double x:Key="TeachingTipMinWidth">335</x:Double>
+            </TeachingTip.Resources>
             <ScrollViewer
                 MaxHeight="360"
                 Margin="0,8"
                 Style="{StaticResource PageScrollViewerStyle}">
-                <repeater:AppRepeater x:Name="FavoriteRepeater" ItemsSource="{x:Bind ItemsSource, Mode=OneWay}">
-                    <repeater:AppRepeater.ItemTemplate>
+                <ItemsRepeater
+                    x:Name="FavoriteRepeater"
+                    ItemsSource="{x:Bind ItemsSource, Mode=OneWay}"
+                    TabFocusNavigation="Once"
+                    VerticalCacheLength="20">
+                    <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="items:PlayerFavoriteFolderViewModel">
                             <ToggleButton
                                 Padding="16,12"
@@ -80,11 +87,11 @@
                                 </Grid>
                             </ToggleButton>
                         </DataTemplate>
-                    </repeater:AppRepeater.ItemTemplate>
-                    <repeater:AppRepeater.Layout>
+                    </ItemsRepeater.ItemTemplate>
+                    <ItemsRepeater.Layout>
                         <StackLayout Spacing="8" />
-                    </repeater:AppRepeater.Layout>
-                </repeater:AppRepeater>
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
             </ScrollViewer>
         </TeachingTip>
     </Grid>

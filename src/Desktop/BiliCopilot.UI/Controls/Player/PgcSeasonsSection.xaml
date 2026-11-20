@@ -8,13 +8,16 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <Grid>
         <ScrollView x:Name="View" Padding="12,0">
-            <repeater:AppRepeater Margin="0,8,0,12" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                <repeater:AppRepeater.ItemTemplate>
+            <ItemsRepeater
+                Margin="0,8,0,12"
+                ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                TabFocusNavigation="Once"
+                VerticalCacheLength="20">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="items:SeasonItemViewModel">
                         <ItemContainer Style="{StaticResource AppItemContainerStyle}">
                             <components:SeasonCardControl
@@ -23,16 +26,16 @@
                                 ViewModel="{x:Bind}" />
                         </ItemContainer>
                     </DataTemplate>
-                </repeater:AppRepeater.ItemTemplate>
-                <repeater:AppRepeater.Layout>
+                </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater.Layout>
                     <UniformGridLayout
                         ItemsStretch="Fill"
                         MinColumnSpacing="8"
                         MinItemHeight="252"
                         MinItemWidth="112"
                         MinRowSpacing="8" />
-                </repeater:AppRepeater.Layout>
-            </repeater:AppRepeater>
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
         </ScrollView>
     </Grid>
 </local:PgcSeasonsSectionBase>

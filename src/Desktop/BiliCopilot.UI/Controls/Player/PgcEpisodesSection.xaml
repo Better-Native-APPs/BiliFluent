@@ -9,7 +9,6 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -70,21 +69,25 @@
                 x:Name="DefaultView"
                 Padding="12,0"
                 x:Load="{x:Bind ViewModel.OnlyIndex, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}">
-                <repeater:AppRepeater
+                <ItemsRepeater
                     Margin="0,0,0,12"
                     ItemTemplate="{StaticResource DefaultTemplate}"
                     ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}"
-                    Layout="{StaticResource DefaultLayout}" />
+                    Layout="{StaticResource DefaultLayout}"
+                    TabFocusNavigation="Once"
+                    VerticalCacheLength="20" />
             </ScrollView>
             <ScrollView
                 x:Name="IndexView"
                 Padding="12,0"
                 x:Load="{x:Bind ViewModel.OnlyIndex, Mode=OneWay}">
-                <repeater:AppRepeater
+                <ItemsRepeater
                     Margin="0,0,0,12"
                     ItemTemplate="{StaticResource IndexTemplate}"
                     ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}"
-                    Layout="{StaticResource IndexLayout}" />
+                    Layout="{StaticResource IndexLayout}"
+                    TabFocusNavigation="Once"
+                    VerticalCacheLength="20" />
             </ScrollView>
         </Grid>
     </Grid>
