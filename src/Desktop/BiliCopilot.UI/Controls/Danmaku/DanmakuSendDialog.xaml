@@ -10,7 +10,6 @@
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:local="using:BiliCopilot.UI.Controls.Danmaku"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     Title="{ext:Locale Name=SendDanmaku}"
     CloseButtonText="{ext:Locale Name=Cancel}"
     DefaultButton="Primary"
