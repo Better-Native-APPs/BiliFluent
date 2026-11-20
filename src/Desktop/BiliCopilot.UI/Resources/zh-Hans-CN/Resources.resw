@@ -2319,4 +2319,31 @@
   <data name="AppLinkUnsupported" xml:space="preserve">
     <value>暂不支持在应用内打开这个链接</value>
   </data>
+  <data name="AppLinkDefaultSetting" xml:space="preserve">
+    <value>打开 bilibili:// 链接</value>
+  </data>
+  <data name="AppLinkDefaultSettingDescription" xml:space="preserve">
+    <value>网页或其他程序里的“在 App 打开”用的是这种链接。https:// 网址不在其中，仍由浏览器打开。</value>
+  </data>
+  <data name="AppLinkDefaultThisApp" xml:space="preserve">
+    <value>当前由本应用打开</value>
+  </data>
+  <data name="AppLinkDefaultOtherApp" xml:space="preserve">
+    <value>当前由“{0}”打开</value>
+  </data>
+  <data name="AppLinkDefaultOtherAppUnnamed" xml:space="preserve">
+    <value>当前由其他程序打开</value>
+  </data>
+  <data name="AppLinkDefaultRegisteredOnly" xml:space="preserve">
+    <value>本应用已注册，但未确认是默认程序</value>
+  </data>
+  <data name="AppLinkDefaultUnknown" xml:space="preserve">
+    <value>查不到当前由谁打开</value>
+  </data>
+  <data name="AppLinkDefaultOpenSettings" xml:space="preserve">
+    <value>默认应用设置</value>
+  </data>
+  <data name="AppLinkDefaultOpenSettingsFailed" xml:space="preserve">
+    <value>没能打开系统设置</value>
+  </data>
 </root>

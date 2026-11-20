@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:SettingsPageControlBase
+    x:Class="BiliCopilot.UI.Controls.Settings.AppLinkSettingControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:community="using:CommunityToolkit.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:local="using:BiliCopilot.UI.Controls.Settings"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--  Reads top to bottom: what these links are, who opens them now, where to change that.  -->
+    <community:SettingsCard Header="{ext:Locale Name=AppLinkDefaultSetting}">
+        <community:SettingsCard.HeaderIcon>
+            <ic:SymbolIcon Symbol="LinkMultiple" />
+        </community:SettingsCard.HeaderIcon>
+        <community:SettingsCard.Description>
+            <StackPanel Spacing="2">
+                <TextBlock Text="{ext:Locale Name=AppLinkDefaultSettingDescription}" TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="StatusText"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </community:SettingsCard.Description>
+        <Button
+            MinWidth="120"
+            Click="OnOpenDefaultAppsButtonClick"
+            Content="{ext:Locale Name=AppLinkDefaultOpenSettings}" />
+    </community:SettingsCard>
+</local:SettingsPageControlBase>

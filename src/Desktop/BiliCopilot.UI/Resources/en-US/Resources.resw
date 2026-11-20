@@ -651,4 +651,31 @@
   <data name="AppLinkUnsupported" xml:space="preserve">
     <value>Opening this link in the app isn't supported yet.</value>
   </data>
+  <data name="AppLinkDefaultSetting" xml:space="preserve">
+    <value>Open bilibili:// links</value>
+  </data>
+  <data name="AppLinkDefaultSettingDescription" xml:space="preserve">
+    <value>"Open in app" on web pages and in other programs uses these links. https:// addresses aren't included and still open in your browser.</value>
+  </data>
+  <data name="AppLinkDefaultThisApp" xml:space="preserve">
+    <value>Currently opened by this app</value>
+  </data>
+  <data name="AppLinkDefaultOtherApp" xml:space="preserve">
+    <value>Currently opened by {0}</value>
+  </data>
+  <data name="AppLinkDefaultOtherAppUnnamed" xml:space="preserve">
+    <value>Currently opened by another program</value>
+  </data>
+  <data name="AppLinkDefaultRegisteredOnly" xml:space="preserve">
+    <value>This app is registered, but isn't confirmed as the default</value>
+  </data>
+  <data name="AppLinkDefaultUnknown" xml:space="preserve">
+    <value>Couldn't check which app opens these links</value>
+  </data>
+  <data name="AppLinkDefaultOpenSettings" xml:space="preserve">
+    <value>Default apps settings</value>
+  </data>
+  <data name="AppLinkDefaultOpenSettingsFailed" xml:space="preserve">
+    <value>Couldn't open Windows Settings</value>
+  </data>
 </root>
