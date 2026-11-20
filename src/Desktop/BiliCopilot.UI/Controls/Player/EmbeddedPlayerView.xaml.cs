@@ -68,7 +68,7 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
         DependencyProperty.Register(nameof(NavColumnWidth), typeof(double), typeof(EmbeddedPlayerView), new PropertyMetadata(SidePanelDefaultWidth, OnNavColumnWidthChanged));
 
     /// <summary>
-    /// 侧栏是否被用户手动收起；仅由头部 SideSplitButton TwoWay 写入（承载源 ViewModel.IsNavColumnManualHide），
+    /// 侧栏是否被用户手动收起；仅由头部折叠按钮写入（承载源 ViewModel.IsNavColumnManualHide），
     /// 卸载/切换呈现不得改写该偏好.
     /// </summary>
     public static readonly DependencyProperty IsNavColumnManualHideProperty =
@@ -667,6 +667,13 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
     /// <remarks>Instance member because the XAML binding <c>{x:Bind GetSidePanelToggleTip(...)}</c> calls it on the page instance.</remarks>
     private string GetSidePanelToggleTip(bool isManualHide)
         => ResourceToolkit.GetLocalizedString(isManualHide ? StringNames.ShowSidePanel : StringNames.HideSidePanel);
+
+    /// <summary>侧栏折叠按钮图标：侧栏在右侧，收起后显示“展开”，展开时显示“收起”.</summary>
+    private FluentIcons.Common.Symbol GetSidePanelToggleSymbol(bool isManualHide)
+        => isManualHide ? FluentIcons.Common.Symbol.PanelRightExpand : FluentIcons.Common.Symbol.PanelRightContract;
+
+    private void OnSidePanelToggleClick(object sender, RoutedEventArgs e)
+        => IsNavColumnManualHide = !IsNavColumnManualHide;
 
     // View-private event/lease state. No UI tree, player flow or native owner is created here.
     internal sealed class HeaderPopupState(Func<Action, bool> schedule, Action<Exception> reportError,

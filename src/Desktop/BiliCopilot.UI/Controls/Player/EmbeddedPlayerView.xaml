@@ -4,7 +4,7 @@
       源 31-138  内容层（header / video / sidebar / splitter）
       源 55       player:VideoPlayerMainHeader（旧控件在当前仓库不存在，其布局由 MainHeaderSelector 模板复刻：
                   源 VideoPlayerMainHeader.xaml 15-77 的私密图标/标题/分享菜单原样排列；
-                  折叠开关 SideSplitButton 移至模板外，以绑定本视图 DP）
+                  折叠开关移至模板外，以绑定本视图 DP）
       源 71-87    PlayerContainer + core:BiliPlayer + ExternalTransportControl（旧引擎替换为原生 VideoSlot，transport 已在 persistent overlay 浮岛，不在此重建）
       源 105-110  SideHeader（row0/col2，源 VideoPlayerSideHeader）→ SideHeaderHost（当前 VideoPlayerSideHeader / PgcPlayerSideHeader）
       源 112-118  SideBody（row2/col2，源 VideoPlayerSideBody）→ SideBodyHost（当前 VideoPlayerSideBody / PgcPlayerSideBody）
@@ -281,14 +281,27 @@
                 Content="{x:Bind ViewModel.Connector, Mode=OneWay}"
                 ContentTemplateSelector="{StaticResource MainHeaderSelector}"
                 IsTabStop="False" />
-            <base:SideSplitButton
+            <!--  Side panel fold button: 36, transparent, filled 14px glyph; the same visuals as the room header's chat switch.  -->
+            <Button
                 Grid.Column="1"
+                Width="36"
+                Height="36"
                 Margin="4,0,0,0"
+                Padding="0"
                 VerticalAlignment="Center"
-                IsHide="{x:Bind IsNavColumnManualHide, Mode=TwoWay}"
-                IsInvertDirection="True"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                AutomationProperties.Name="{x:Bind GetSidePanelToggleTip(IsNavColumnManualHide), Mode=OneWay}"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnSidePanelToggleClick"
                 ToolTipService.ToolTip="{x:Bind GetSidePanelToggleTip(IsNavColumnManualHide), Mode=OneWay}"
-                Visibility="{x:Bind GetSideSplitVisibility(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=Visible}" />
+                Visibility="{x:Bind GetSideSplitVisibility(ViewModel.HasRoomChat), Mode=OneWay, FallbackValue=Visible}">
+                <ic:SymbolIcon
+                    FontSize="14"
+                    IconVariant="Filled"
+                    Symbol="{x:Bind GetSidePanelToggleSymbol(IsNavColumnManualHide), Mode=OneWay}" />
+            </Button>
         </Grid>
 
         <Border
