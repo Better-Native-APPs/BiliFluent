@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### 新增
+- 设置的“通用”里新增“打开 bilibili:// 链接”一项：显示这类链接当前由哪个程序打开，并可一键打开 Windows 的“默认应用”设置去更改（Windows 不允许应用自己把自己设为默认）。
+
 ### 变更
 - 运行时与构建工具链升级到 .NET 11（C# 15）：应用随包携带 .NET 11 运行时，从源码构建需要 .NET SDK 11.0.100 与 Visual Studio 2026（18.12 及以上）。
 - 不再依赖已停止更新的预览版 `Richasy.WinUIKernel.Share` 包：应用用到的基类、控件与转换器源码移入仓库（`src/Libs/BiliFluent.WinUIKernel`），界面与行为不变。
