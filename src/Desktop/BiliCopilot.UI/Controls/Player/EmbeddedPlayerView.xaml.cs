@@ -675,6 +675,10 @@ public sealed partial class EmbeddedPlayerView : PlayerControlBase
     private void OnSidePanelToggleClick(object sender, RoutedEventArgs e)
         => IsNavColumnManualHide = !IsNavColumnManualHide;
 
+    /// <summary>分栏控制器外边距：隐藏时向右收 4，使 6 宽的透明占位只留下 2 宽的列.</summary>
+    private Thickness GetSideSplitterMargin(bool isHidden)
+        => isHidden ? new Thickness(0, 0, -4, 0) : default;
+
     // View-private event/lease state. No UI tree, player flow or native owner is created here.
     internal sealed class HeaderPopupState(Func<Action, bool> schedule, Action<Exception> reportError,
         Func<HeaderPopupState.Registration, IDisposable?>? acquireInput = null)
