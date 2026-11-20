@@ -33,7 +33,7 @@ internal sealed class WindowsAppLinkAssociationSource : IAppLinkAssociationSourc
     public async Task<IReadOnlyList<AppLinkRegistration>> FindPackagedHandlersAsync(string scheme)
     {
         var apps = await Launcher.FindUriSchemeHandlersAsync(scheme);
-        return [.. apps.Select(static app => new AppLinkRegistration(app.AppUserModelId, TryGetDisplayName(app)))];
+        return apps.Select(static app => new AppLinkRegistration(app.AppUserModelId, TryGetDisplayName(app))).ToList();
     }
 
     private static string? TryGetDisplayName(AppInfo app)
