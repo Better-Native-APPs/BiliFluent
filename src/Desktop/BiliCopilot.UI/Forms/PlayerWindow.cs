@@ -307,30 +307,6 @@ public sealed partial class PlayerWindow : IPlayerHost
         return _rootWindow;
     }
 
-    public void DelayUpdateTitleBarPadding(bool delaySec = false)
-    {
-        if (_rootGrid?.Children.FirstOrDefault() is PlayerOverlay overlay)
-        {
-            this.Get<DispatcherQueue>().TryEnqueue(async () =>
-            {
-                if (delaySec)
-                {
-                    overlay.HeaderBar?.HorizontalAlignment = HorizontalAlignment.Left;
-                    await Task.Delay(800);
-                    if (IsClosed || IsDisposed || _isDisposing) return;
-                    overlay.HeaderBar?.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    await Task.Delay(800);
-                    if (IsClosed || IsDisposed || _isDisposing) return;
-                }
-
-                if (overlay?.HeaderBar?.ActualWidth > 0 && _rootWindow.IsVisible && !PInvoke.IsIconic(new(Handle)))
-                {
-                    overlay.HeaderBar?.UpdatePadding();
-                }
-            });
-        }
-    }
-
     private async void OnInputActivationChanged(InputActivationListener sender, InputActivationListenerActivationChangedEventArgs args)
     {
         // Input holds must end immediately; only focus/layout work is delayed.
@@ -379,7 +355,6 @@ public sealed partial class PlayerWindow : IPlayerHost
         {
             ResetWindowMinSize();
             UpdateXamlSourcePosition();
-            DelayUpdateTitleBarPadding(true);
         }
 
         if (args.DidPositionChange)

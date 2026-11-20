@@ -893,7 +893,6 @@ public sealed partial class MainPlayerHost : IPlayerHost
         if (!IsIslandUnavailable) _root.RequestedTheme = theme;
     }
     public void SetCaptionButtonVisibility(bool visible) { /* Main shell owns its caption. */ }
-    public void DelayUpdateTitleBarPadding(bool delaySec = false) { /* Never attach overlay titlebar to main HWND. */ }
     public void ResetFocus()
     {
         if (!IsIslandUnavailable && _root.Children.FirstOrDefault() is Control control) control.Focus(FocusState.Programmatic);

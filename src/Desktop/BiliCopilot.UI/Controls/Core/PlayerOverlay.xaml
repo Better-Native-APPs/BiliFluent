@@ -680,22 +680,34 @@
                     </LinearGradientBrush>
                 </Grid.Background>
                 <!--
-                    仅独立播放窗口加载 AppTitleBar（它会写入所在窗口的原生标题栏区域）；
+                    仅独立播放窗口加载内置 TitleBar（它会写入所在窗口的原生标题栏区域）；
                     内嵌主窗口时不实例化，改用下方纯视觉的 EmbeddedHeader.
+                    不设 Title / IconSource：前者会改写窗口标题，后者会注册系统图标区域；图标和标题都放在 Content 里.
                 -->
-                <base:AppTitleBar
+                <TitleBar
                     x:Name="HeaderBar"
-                    Title="{x:Bind ViewModel.Title, Mode=OneWay}"
                     Height="44"
                     VerticalAlignment="Top"
                     x:FieldModifier="public"
                     x:Load="{x:Bind local:PlayerOverlay.IsStandaloneHeaderLoaded(ViewModel.IsEmbedded), Mode=OneWay}"
-                    AutoUpdateTitleBarButtonColor="False"
-                    IsBackButtonVisible="False"
-                    SizeChanged="OnHeaderBarSizeChanged"
-                    TitleForeground="White"
-                    TitleMaxWidth="480">
-                    <base:AppTitleBar.LeftEdgeElement>
+                    SizeChanged="OnHeaderBarSizeChanged">
+                    <TitleBar.Resources>
+                        <!--  间距与原标题栏一致：左侧按钮紧贴图标，系统按钮前留 20 的可拖动区.  -->
+                        <x:Double x:Key="TitleBarLeftHeaderPaddingWidth">0</x:Double>
+                        <x:Double x:Key="TitleBarMinDragRegionWidth">20</x:Double>
+                        <!--  窗口失焦时左右两侧不变暗；标题的失焦颜色由下方两个文本块切换.  -->
+                        <x:Double x:Key="TitleBarDeactivatedOpacity">1</x:Double>
+                        <!--
+                            内容靠左且只占自身宽度：长标题被限制在剩余宽度内并显示省略号，
+                            内容放不下时切到的“紧凑”状态与常态外观相同.
+                        -->
+                        <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Left</HorizontalAlignment>
+                        <Thickness x:Key="TitleBarCompactContentMargin">0</Thickness>
+                        <VerticalAlignment x:Key="TitleBarLeftHeaderVerticalAlignment">Stretch</VerticalAlignment>
+                        <VerticalAlignment x:Key="TitleBarContentVerticalAlignment">Stretch</VerticalAlignment>
+                        <VerticalAlignment x:Key="TitleBarRightHeaderVerticalAlignment">Stretch</VerticalAlignment>
+                    </TitleBar.Resources>
+                    <TitleBar.LeftHeader>
                         <Grid>
                             <Grid Visibility="{x:Bind local:PlayerOverlay.GetVisibilityUnlessCompact(ViewModel.Presentation), Mode=OneWay}">
                                 <Button
@@ -714,11 +726,48 @@
                                 <ic:SymbolIcon FontSize="14" Symbol="ContractDownLeft" />
                             </Button>
                         </Grid>
-                    </base:AppTitleBar.LeftEdgeElement>
-                    <base:AppTitleBar.IconElement>
-                        <ImageIcon Source="ms-appx:///Assets/logo.png" />
-                    </base:AppTitleBar.IconElement>
-                    <base:AppTitleBar.Footer>
+                    </TitleBar.LeftHeader>
+                    <TitleBar.Content>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox
+                                MaxWidth="20"
+                                MaxHeight="20"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center">
+                                <ImageIcon Source="ms-appx:///Assets/logo.png" />
+                            </Viewbox>
+                            <!--  纯文本块（不是控件），标题区域因此仍可拖动窗口.  -->
+                            <Grid
+                                x:Name="HeaderTitleHost"
+                                Grid.Column="1"
+                                MinWidth="48"
+                                Margin="12,0,8,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="White"
+                                    MaxLines="1"
+                                    Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    Visibility="{x:Bind ViewModel.IsWindowDeactivated, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TitleBarDeactivatedForegroundBrush}"
+                                    MaxLines="1"
+                                    Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap"
+                                    Visibility="{x:Bind ViewModel.IsWindowDeactivated, Mode=OneWay}" />
+                            </Grid>
+                        </Grid>
+                    </TitleBar.Content>
+                    <TitleBar.RightHeader>
                         <StackPanel x:Name="FooterContainer" Orientation="Horizontal">
                             <TextBlock
                                 VerticalAlignment="Center"
@@ -838,10 +887,10 @@
                                 </Button.Flyout>
                             </Button>
                         </StackPanel>
-                    </base:AppTitleBar.Footer>
-                </base:AppTitleBar>
+                    </TitleBar.RightHeader>
+                </TitleBar>
                 <!--
-                    内嵌主窗口全屏/小窗的纯视觉标题区：不是 AppTitleBar，不写入原生标题栏区域.
+                    内嵌主窗口全屏/小窗的纯视觉标题区：不是 TitleBar，不写入原生标题栏区域.
                     只有透明背景 EmbeddedHeaderDragSurface 在小窗中把鼠标左键拖动交给宿主；按钮与标题不参与拖动.
                 -->
                 <Grid
