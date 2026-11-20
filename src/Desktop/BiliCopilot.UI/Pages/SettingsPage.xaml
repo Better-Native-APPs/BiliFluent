@@ -68,6 +68,7 @@
                 <settings:SearchRecommendSettingSection />
                 <!--<settings:CloseBehaviorSettingControl />-->
                 <settings:NotificationSettingControl />
+                <settings:AppLinkSettingControl />
                 <settings:LoggerSettingControl />
                 <TextBlock
                     Margin="0,16,0,8"
