@@ -5,7 +5,6 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/AppTitleBar/AppTitleBar.xaml" />
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/ImageExBase/ImageExBase.xaml" />
-        <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/CardControl/CardControl.xaml" />
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/AppToggleCard/AppToggleCard.xaml" />
         <ResourceDictionary Source="ms-appx:///BiliFluent.WinUIKernel/Base/CustomNavigationViewResources.xaml" />
     </ResourceDictionary.MergedDictionaries>
