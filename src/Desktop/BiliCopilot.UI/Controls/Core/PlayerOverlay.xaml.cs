@@ -981,6 +981,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (_headerWidthTicket is null) QueueHeaderWidthUpdate();
     }
 
+    private void OnHeaderFooterSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // The cache speed and the quality name resize the group while the title bar keeps its size.
+        if (_headerWidthTicket is null) QueueHeaderWidthUpdate();
+    }
+
     private void OnEmbeddedHeaderSizeChanged(object sender, SizeChangedEventArgs e)
     {
         RequestHostChromeRegionUpdate();
@@ -1075,9 +1081,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
                 // 只读取已生成的字段：未加载（x:Load=false）的标题区为 null，此处不会触发实例化.
                 // 标题在标题栏的剩余宽度列里自行截断，这里只决定窄窗口下是否收起右侧按钮组.
-                if (HeaderBar is not null && _headerWidth > 0 && FooterContainer is { } footer)
+                if (HeaderBar is { } headerBar && _headerWidth > 0)
                 {
-                    footer.Visibility = _headerWidth < 700 ? Visibility.Collapsed : Visibility.Visible;
+                    if (FooterContainer is { } footer) footer.Visibility = _headerWidth < 700 ? Visibility.Collapsed : Visibility.Visible;
+
+                    // The right-hand group moved or changed width without resizing the title bar itself.
+                    headerBar.RefreshRegions();
                 }
 
                 if (EmbeddedHeader is not null && _embeddedHeaderWidth > 0)

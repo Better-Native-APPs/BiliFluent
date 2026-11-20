@@ -307,6 +307,17 @@ public sealed partial class PlayerWindow : IPlayerHost
         return _rootWindow;
     }
 
+    private void RefreshTitleBarRegions()
+    {
+        // The caption insets follow the presenter. The title bar re-reads them whenever it is measured; this covers a
+        // presenter change that leaves its size untouched, once the change has settled.
+        DispatcherQueue.GetForCurrentThread().TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (IsClosed || IsDisposed || _isDisposing || !_isReady) return;
+            if (_rootGrid?.Children.FirstOrDefault() is PlayerOverlay overlay) overlay.HeaderBar?.RefreshRegions();
+        });
+    }
+
     private async void OnInputActivationChanged(InputActivationListener sender, InputActivationListenerActivationChangedEventArgs args)
     {
         // Input holds must end immediately; only focus/layout work is delayed.
@@ -349,6 +360,11 @@ public sealed partial class PlayerWindow : IPlayerHost
         if ((args.DidVisibilityChange || args.DidPresenterChange) && sender.IsVisible)
         {
             ResetFocus();
+        }
+
+        if (args.DidPresenterChange)
+        {
+            RefreshTitleBarRegions();
         }
 
         if (args.DidPresenterChange && sender.Presenter.Kind == AppWindowPresenterKind.Overlapped)

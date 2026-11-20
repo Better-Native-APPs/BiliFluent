@@ -680,18 +680,18 @@
                     </LinearGradientBrush>
                 </Grid.Background>
                 <!--
-                    仅独立播放窗口加载内置 TitleBar（它会写入所在窗口的原生标题栏区域）；
+                    仅独立播放窗口加载标题栏（内置 TitleBar 加系统按钮留白的换算，它会写入所在窗口的原生标题栏区域）；
                     内嵌主窗口时不实例化，改用下方纯视觉的 EmbeddedHeader.
                     不设 Title / IconSource：前者会改写窗口标题，后者会注册系统图标区域；图标和标题都放在 Content 里.
                 -->
-                <TitleBar
+                <local:PlayerTitleBar
                     x:Name="HeaderBar"
                     Height="44"
                     VerticalAlignment="Top"
                     x:FieldModifier="public"
                     x:Load="{x:Bind local:PlayerOverlay.IsStandaloneHeaderLoaded(ViewModel.IsEmbedded), Mode=OneWay}"
                     SizeChanged="OnHeaderBarSizeChanged">
-                    <TitleBar.Resources>
+                    <local:PlayerTitleBar.Resources>
                         <!--  间距与原标题栏一致：左侧按钮紧贴图标，系统按钮前留 20 的可拖动区.  -->
                         <x:Double x:Key="TitleBarLeftHeaderPaddingWidth">0</x:Double>
                         <x:Double x:Key="TitleBarMinDragRegionWidth">20</x:Double>
@@ -706,8 +706,8 @@
                         <VerticalAlignment x:Key="TitleBarLeftHeaderVerticalAlignment">Stretch</VerticalAlignment>
                         <VerticalAlignment x:Key="TitleBarContentVerticalAlignment">Stretch</VerticalAlignment>
                         <VerticalAlignment x:Key="TitleBarRightHeaderVerticalAlignment">Stretch</VerticalAlignment>
-                    </TitleBar.Resources>
-                    <TitleBar.LeftHeader>
+                    </local:PlayerTitleBar.Resources>
+                    <local:PlayerTitleBar.LeftHeader>
                         <Grid>
                             <Grid Visibility="{x:Bind local:PlayerOverlay.GetVisibilityUnlessCompact(ViewModel.Presentation), Mode=OneWay}">
                                 <Button
@@ -726,8 +726,8 @@
                                 <ic:SymbolIcon FontSize="14" Symbol="ContractDownLeft" />
                             </Button>
                         </Grid>
-                    </TitleBar.LeftHeader>
-                    <TitleBar.Content>
+                    </local:PlayerTitleBar.LeftHeader>
+                    <local:PlayerTitleBar.Content>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -766,9 +766,12 @@
                                     Visibility="{x:Bind ViewModel.IsWindowDeactivated, Mode=OneWay}" />
                             </Grid>
                         </Grid>
-                    </TitleBar.Content>
-                    <TitleBar.RightHeader>
-                        <StackPanel x:Name="FooterContainer" Orientation="Horizontal">
+                    </local:PlayerTitleBar.Content>
+                    <local:PlayerTitleBar.RightHeader>
+                        <StackPanel
+                            x:Name="FooterContainer"
+                            Orientation="Horizontal"
+                            SizeChanged="OnHeaderFooterSizeChanged">
                             <TextBlock
                                 VerticalAlignment="Center"
                                 FontSize="12"
@@ -887,8 +890,8 @@
                                 </Button.Flyout>
                             </Button>
                         </StackPanel>
-                    </TitleBar.RightHeader>
-                </TitleBar>
+                    </local:PlayerTitleBar.RightHeader>
+                </local:PlayerTitleBar>
                 <!--
                     内嵌主窗口全屏/小窗的纯视觉标题区：不是 TitleBar，不写入原生标题栏区域.
                     只有透明背景 EmbeddedHeaderDragSurface 在小窗中把鼠标左键拖动交给宿主；按钮与标题不参与拖动.
