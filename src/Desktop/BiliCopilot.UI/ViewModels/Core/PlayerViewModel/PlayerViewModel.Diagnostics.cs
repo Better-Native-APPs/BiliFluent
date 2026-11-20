@@ -572,6 +572,7 @@ public sealed partial class PlayerViewModel
         // are queued; how many refreshes the display then holds each frame is not visible here.
         private void ProbeFrames()
         {
+            Thread.CurrentThread.Name = "PlaybackFrameProbe";
             var timer = CreateWaitableTimerExW(0, 0, HighResolutionTimer, TimerAllAccess);
             try
             {

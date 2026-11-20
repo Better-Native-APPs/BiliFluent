@@ -213,6 +213,9 @@ public sealed partial class SettingsPageViewModel
     public partial MpvLogLevel LogLevel { get; set; }
 
     [ObservableProperty]
+    public partial bool PerformanceSamplingEnabled { get; set; }
+
+    [ObservableProperty]
     public partial bool PlaybackStutterDiagnosticsEnabled { get; set; }
 
     [ObservableProperty]

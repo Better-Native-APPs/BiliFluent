@@ -22,6 +22,7 @@ public partial class App
 
     private static void OnRuntimeProcessExit(object? sender, EventArgs args)
     {
+        StopProcessCpuDiagnostics(exiting: true);
         TraceExitReason("runtime-process-exit");
         // ProcessExit has no asynchronous completion contract; flush the final attribution line.
 #pragma warning disable VSTHRD103
@@ -33,6 +34,7 @@ public partial class App
     private static void OnRuntimeUnhandledException(object sender, System.UnhandledExceptionEventArgs args)
     {
         if (!args.IsTerminating) return;
+        StopProcessCpuDiagnostics(exiting: true);
         TraceExitReason("runtime-unhandled-exception");
         try
         {

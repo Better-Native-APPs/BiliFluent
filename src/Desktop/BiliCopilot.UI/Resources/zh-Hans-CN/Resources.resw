@@ -591,6 +591,12 @@
   <data name="LoggerModuleDescription" xml:space="preserve">
     <value>查看应用日志或清除日志记录</value>
   </data>
+  <data name="PerformanceSampling" xml:space="preserve">
+    <value>性能采样</value>
+  </data>
+  <data name="PerformanceSamplingDescription" xml:space="preserve">
+    <value>每 5 秒在日志中记录一行各线程的 CPU 占用，用于排查占用高的问题，不记录观看内容，平时不用开启。</value>
+  </data>
   <data name="PlaybackStutterDiagnostics" xml:space="preserve">
     <value>播放卡顿诊断</value>
   </data>

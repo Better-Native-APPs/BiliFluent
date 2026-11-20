@@ -151,4 +151,5 @@ public enum SettingNames
     DisableMpvCurlForDiagnostics = 145,
     UseDisplaySyncForDiagnostics = 146,
     HomeRecommendationFeedSource = 147,
+    PerformanceSamplingEnabled = 148,
 }

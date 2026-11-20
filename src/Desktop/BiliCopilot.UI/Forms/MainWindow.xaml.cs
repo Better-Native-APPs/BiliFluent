@@ -232,6 +232,7 @@ public sealed partial class MainWindow : WindowEx, ITipWindow
 
     private void OnClosed(object sender, WindowEventArgs e)
     {
+        App.Current.StopProcessCpuDiagnosticsForWindowClose();
         if (_isTerminalClosePermitted)
         {
             PerformFinalTeardown();
