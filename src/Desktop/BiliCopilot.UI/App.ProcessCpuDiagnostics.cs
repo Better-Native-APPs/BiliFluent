@@ -30,7 +30,8 @@ public partial class App
     internal void RefreshProcessCpuDiagnostics()
     {
         if (!_processCpuInitialized) return;
-        if (!SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false))
+        var enabled = SettingsToolkit.ReadLocalSetting(SettingNames.PerformanceSamplingEnabled, false);
+        if (!enabled)
         {
             DetachProcessCpuContext();
             StopProcessCpuDiagnostics();
@@ -42,13 +43,18 @@ public partial class App
             if (_processCpuExiting || _processCpuDiagnostics is not null) return;
             _processCpuApp = this.Get<AppViewModel>();
             _processCpuNavigation = this.Get<NavigationViewModel>();
-            _processCpuDiagnostics = new(_processCpuUiThreadId, this.Get<ILogger<App>>());
+            _processCpuDiagnostics = ProcessCpuDiagnosticsSession.Refresh(null, enabled,
+                SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false),
+                _processCpuUiThreadId, this.Get<ILogger<App>>());
             _processCpuApp.PlaybackActivityChanged += OnProcessCpuPlaybackChanged;
             _processCpuApp.PropertyChanged += OnProcessCpuWindowChanged;
             _processCpuNavigation.PropertyChanged += OnProcessCpuNavigationChanged;
             PublishProcessCpuContext();
         }
     }
+
+    internal void UpdateProcessCpuStutterDiagnostics(bool enabled)
+        => Volatile.Read(ref _processCpuDiagnostics)?.UpdateStutterDiagnostics(enabled);
 
     internal void StopProcessCpuDiagnosticsForWindowClose()
     {

@@ -15,6 +15,7 @@ internal enum ProcessCpuGroup
     MpvVideoOutput,
     MpvAudioOutput,
     MpvOther,
+    Diagnostics,
     ThreadPool,
     Other,
 }
@@ -23,7 +24,7 @@ internal readonly record struct ProcessCpuTopThread(uint Id, string? Name, long 
 
 internal readonly record struct ProcessCpuInterval(double WindowMilliseconds, long TotalTicks, long UiTicks,
     long CoreTicks, long DemuxTicks, long DecoderTicks, long AudioDecoderTicks, long VideoOutputTicks, long AudioOutputTicks,
-    long MpvOtherTicks, long PoolTicks, long OtherTicks, ProcessCpuTopThread First, ProcessCpuTopThread Second,
+    long MpvOtherTicks, long DiagnosticTicks, long PoolTicks, long OtherTicks, ProcessCpuTopThread First, ProcessCpuTopThread Second,
     ProcessCpuTopThread Third, int Gen0, int Gen1, int Gen2, long GcPauseTicks, long HeapBytes, long WorkingSetBytes)
 {
     internal bool ShouldLog => TotalTicks >= ProcessCpuDiagnostics.MinimumCpuTicks;
@@ -43,7 +44,7 @@ internal sealed class ProcessCpuDiagnostics
         var result = default(ProcessCpuInterval);
         if (_previousCounters is { } previous)
         {
-            Span<long> groups = stackalloc long[10];
+            Span<long> groups = stackalloc long[11];
             groups.Clear();
             var measuredTicks = 0L;
             var first = default(ProcessCpuTopThread);
@@ -61,7 +62,7 @@ internal sealed class ProcessCpuDiagnostics
                 var group = Classify(thread.Id, thread.Name, uiThreadId);
                 groups[(int)group] += ticks;
                 measuredTicks += ticks;
-                if (group is ProcessCpuGroup.ThreadPool or ProcessCpuGroup.Other)
+                if (group is ProcessCpuGroup.Diagnostics or ProcessCpuGroup.ThreadPool or ProcessCpuGroup.Other)
                 {
                     var candidate = new ProcessCpuTopThread(thread.Id, thread.Name, ticks);
                     if (ComesBefore(candidate, first)) { third = second; second = first; first = candidate; }
@@ -74,7 +75,7 @@ internal sealed class ProcessCpuDiagnostics
             // Threads born and gone between observations, or unreadable handles, remain visible in other.
             groups[(int)ProcessCpuGroup.Other] += Math.Max(0, total - measuredTicks);
             result = new(Stopwatch.GetElapsedTime(previous.Timestamp, counters.Timestamp).TotalMilliseconds,
-                total, groups[0], groups[1], groups[2], groups[3], groups[4], groups[5], groups[6], groups[7], groups[8], groups[9],
+                total, groups[0], groups[1], groups[2], groups[3], groups[4], groups[5], groups[6], groups[7], groups[8], groups[9], groups[10],
                 first, second, third, Math.Max(0, counters.Gen0 - previous.Gen0), Math.Max(0, counters.Gen1 - previous.Gen1),
                 Math.Max(0, counters.Gen2 - previous.Gen2), Math.Max(0, counters.GcPauseTicks - previous.GcPauseTicks),
                 counters.HeapBytes, counters.WorkingSetBytes);
@@ -88,6 +89,7 @@ internal sealed class ProcessCpuDiagnostics
     internal static ProcessCpuGroup Classify(uint threadId, string name, uint uiThreadId)
     {
         if (threadId == uiThreadId) return ProcessCpuGroup.Ui;
+        if (name is "PlaybackFrameProbe" or "PlaybackStallWatch") return ProcessCpuGroup.Diagnostics;
         var label = name.AsSpan();
         if (label.StartsWith("mpv/", StringComparison.OrdinalIgnoreCase)) label = label[4..];
         if (label.Equals("core", StringComparison.OrdinalIgnoreCase)) return ProcessCpuGroup.MpvCore;
@@ -121,9 +123,10 @@ internal sealed class ProcessCpuDiagnostics
         return ProcessCpuGroup.Other;
     }
 
-    internal static string Format(ProcessCpuInterval sample, int processors, bool playing, string pageTypeName, double samplingMilliseconds)
+    internal static string Format(ProcessCpuInterval sample, int processors, bool playing, string pageTypeName,
+        double samplingMilliseconds, bool stutterDiagnosticsEnabled = false)
         => string.Create(CultureInfo.InvariantCulture,
-            $"Perf | cpu window-ms={sample.WindowMilliseconds:0} cpus={processors} total-ms={Milliseconds(sample.TotalTicks):0.0} ui-ms={Milliseconds(sample.UiTicks):0.0} mpv-core-ms={Milliseconds(sample.CoreTicks):0.0} mpv-demux-ms={Milliseconds(sample.DemuxTicks):0.0} mpv-dec-ms={Milliseconds(sample.DecoderTicks):0.0} mpv-adec-ms={Milliseconds(sample.AudioDecoderTicks):0.0} mpv-vo-ms={Milliseconds(sample.VideoOutputTicks):0.0} mpv-ao-ms={Milliseconds(sample.AudioOutputTicks):0.0} mpv-other-ms={Milliseconds(sample.MpvOtherTicks):0.0} pool-ms={Milliseconds(sample.PoolTicks):0.0} other-ms={Milliseconds(sample.OtherTicks):0.0} top=\"{FormatTop(sample)}\" gc0={sample.Gen0} gc1={sample.Gen1} gc2={sample.Gen2} gc-pause-ms={Milliseconds(sample.GcPauseTicks):0.0} heap-mb={sample.HeapBytes / 1048576d:0.0} ws-mb={sample.WorkingSetBytes / 1048576d:0.0} playing={(playing ? "true" : "false")} page={pageTypeName} sample-ms={samplingMilliseconds:0.00}");
+            $"Perf | cpu window-ms={sample.WindowMilliseconds:0} cpus={processors} total-ms={Milliseconds(sample.TotalTicks):0.0} ui-ms={Milliseconds(sample.UiTicks):0.0} mpv-core-ms={Milliseconds(sample.CoreTicks):0.0} mpv-demux-ms={Milliseconds(sample.DemuxTicks):0.0} mpv-dec-ms={Milliseconds(sample.DecoderTicks):0.0} mpv-adec-ms={Milliseconds(sample.AudioDecoderTicks):0.0} mpv-vo-ms={Milliseconds(sample.VideoOutputTicks):0.0} mpv-ao-ms={Milliseconds(sample.AudioOutputTicks):0.0} mpv-other-ms={Milliseconds(sample.MpvOtherTicks):0.0} diag-ms={Milliseconds(sample.DiagnosticTicks):0.0} pool-ms={Milliseconds(sample.PoolTicks):0.0} other-ms={Milliseconds(sample.OtherTicks):0.0} top=\"{FormatTop(sample)}\" gc0={sample.Gen0} gc1={sample.Gen1} gc2={sample.Gen2} gc-pause-ms={Milliseconds(sample.GcPauseTicks):0.0} heap-mb={sample.HeapBytes / 1048576d:0.0} ws-mb={sample.WorkingSetBytes / 1048576d:0.0} playing={(playing ? "true" : "false")} page={pageTypeName} stutter-diag={(stutterDiagnosticsEnabled ? "on" : "off")} sample-ms={samplingMilliseconds:0.00}");
 
     internal static string FormatTop(ProcessCpuInterval sample)
     {

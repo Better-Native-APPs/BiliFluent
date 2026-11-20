@@ -40,6 +40,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         AppTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
         CheckTheme();
         LogLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+        PerformanceSamplingEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PerformanceSamplingEnabled, false);
         PlaybackStutterDiagnosticsEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, false);
         DisableMpvCurlForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.DisableMpvCurlForDiagnostics, false);
         UseDisplaySyncForDiagnostics = SettingsToolkit.ReadLocalSetting(SettingNames.UseDisplaySyncForDiagnostics, false);
@@ -334,10 +335,16 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnLogLevelChanged(MpvLogLevel value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MpvLogLevel, value);
 
+    partial void OnPerformanceSamplingEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.PerformanceSamplingEnabled, value);
+        App.Current.RefreshProcessCpuDiagnostics();
+    }
+
     partial void OnPlaybackStutterDiagnosticsEnabledChanged(bool value)
     {
         SettingsToolkit.WriteLocalSetting(SettingNames.PlaybackStutterDiagnosticsEnabled, value);
-        App.Current.RefreshProcessCpuDiagnostics();
+        App.Current.UpdateProcessCpuStutterDiagnostics(value);
         foreach (var player in this.Get<AppViewModel>().Players)
         {
             player.RefreshPlaybackDiagnostics();

@@ -35,6 +35,9 @@
                     <ComboBoxItem Content="{ext:Locale Name=Verb}" />
                 </ComboBox>
             </community:SettingsCard>
+            <community:SettingsCard Description="{ext:Locale Name=PerformanceSamplingDescription}" Header="{ext:Locale Name=PerformanceSampling}">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.PerformanceSamplingEnabled, Mode=TwoWay}" />
+            </community:SettingsCard>
             <community:SettingsCard Description="{ext:Locale Name=PlaybackStutterDiagnosticsDescription}" Header="{ext:Locale Name=PlaybackStutterDiagnostics}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.PlaybackStutterDiagnosticsEnabled, Mode=TwoWay}" />
             </community:SettingsCard>
