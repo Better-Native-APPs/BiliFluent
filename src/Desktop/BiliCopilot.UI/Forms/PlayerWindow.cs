@@ -307,28 +307,15 @@ public sealed partial class PlayerWindow : IPlayerHost
         return _rootWindow;
     }
 
-    public void DelayUpdateTitleBarPadding(bool delaySec = false)
+    private void RefreshTitleBarRegions()
     {
-        if (_rootGrid?.Children.FirstOrDefault() is PlayerOverlay overlay)
+        // The caption insets follow the presenter. The title bar re-reads them whenever it is measured; this covers a
+        // presenter change that leaves its size untouched, once the change has settled.
+        DispatcherQueue.GetForCurrentThread().TryEnqueue(DispatcherQueuePriority.Low, () =>
         {
-            this.Get<DispatcherQueue>().TryEnqueue(async () =>
-            {
-                if (delaySec)
-                {
-                    overlay.HeaderBar?.HorizontalAlignment = HorizontalAlignment.Left;
-                    await Task.Delay(800);
-                    if (IsClosed || IsDisposed || _isDisposing) return;
-                    overlay.HeaderBar?.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    await Task.Delay(800);
-                    if (IsClosed || IsDisposed || _isDisposing) return;
-                }
-
-                if (overlay?.HeaderBar?.ActualWidth > 0 && _rootWindow.IsVisible && !PInvoke.IsIconic(new(Handle)))
-                {
-                    overlay.HeaderBar?.UpdatePadding();
-                }
-            });
-        }
+            if (IsClosed || IsDisposed || _isDisposing || !_isReady) return;
+            if (_rootGrid?.Children.FirstOrDefault() is PlayerOverlay overlay) overlay.HeaderBar?.RefreshRegions();
+        });
     }
 
     private async void OnInputActivationChanged(InputActivationListener sender, InputActivationListenerActivationChangedEventArgs args)
@@ -375,11 +362,15 @@ public sealed partial class PlayerWindow : IPlayerHost
             ResetFocus();
         }
 
+        if (args.DidPresenterChange)
+        {
+            RefreshTitleBarRegions();
+        }
+
         if (args.DidPresenterChange && sender.Presenter.Kind == AppWindowPresenterKind.Overlapped)
         {
             ResetWindowMinSize();
             UpdateXamlSourcePosition();
-            DelayUpdateTitleBarPadding(true);
         }
 
         if (args.DidPositionChange)

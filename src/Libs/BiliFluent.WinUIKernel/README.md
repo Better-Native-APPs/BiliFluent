@@ -2,7 +2,7 @@
 
 BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源码副本。程序集名为 `BiliFluent.WinUIKernel`，保留上游 `Richasy.WinUIKernel.Share` 命名空间与应用使用的公开成员。
 
-现有 43 个 C# 类型（包含泛型版本和辅助类型），共 39 个 C# 文件、4,487 行，以及 11 个 XAML 文件、1,618 行；不计工程、说明和编译器生成代码。最初移植时为 61 个类型、52 个 C# 文件 6,097 行、17 个 XAML 文件 2,112 行，其后已换成内置控件的部分见“与上游的差异”。
+现有 41 个 C# 类型（包含泛型版本和辅助类型），共 35 个 C# 文件、3,577 行，以及 10 个 XAML 文件、1,108 行；不计工程、说明和编译器生成代码。最初移植时为 61 个类型、52 个 C# 文件 6,097 行、17 个 XAML 文件 2,112 行，其后已换成内置控件的部分见“与上游的差异”。
 
 ## 来源与许可
 
@@ -24,8 +24,9 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
   - `AppToggleCard` → 内置 `ToggleButton` 加应用内样式。
   - `SideSplitButton` → 内置 `Button`。
   - `ColumnSplitter`、`VisibilityToggleButton` → 直接使用 CommunityToolkit 的 `PropertySizer`。
+  - `AppTitleBar`（连同 `AppTitleBarTemplateSettings`）→ 内置 `TitleBar` 和它的默认模板。内置控件按物理像素给系统按钮留位置，并且只在套用模板时写一次，所以应用里有一个很薄的子类 `PlayerTitleBar`，只负责把留白换算成界面像素并在布局时保持最新。
   - `IFontToolkit`、`SharedFontToolkit` 没有使用者，已删除；`SystemFont` 保留，移到 `Toolkits/SystemFont.cs`。
-- `Themes/Generic.xaml` 相应去掉 CardControl、AppToggleCard 的合并字典；`WinUIKernelShareExtensions` 去掉只有 `CardControl` 读取的 `IsCardShadowEnabled`、`IsCardAnimationEnabled` 两个开关。
+- `Themes/Generic.xaml` 相应去掉 CardControl、AppToggleCard、AppTitleBar 的合并字典；`WinUIKernelShareExtensions` 去掉只有 `CardControl` 读取的 `IsCardShadowEnabled`、`IsCardAnimationEnabled` 两个开关。
 
 ## 构建集成
 
@@ -50,5 +51,5 @@ BiliFluent 使用的 WinUI 共享基类、控件、转换器和工具箱的源�
 ## 控件删减后的核对
 
 - 整体 Debug 编译为 0 警告、0 错误。
-- 产物的资源索引里本库剩 11 个 XBF，与保留的 11 个 XAML 文件一一对应；已删除控件的 XBF 不再出现。
+- 产物里本库剩 10 个 XBF，与保留的 10 个 XAML 文件一一对应；已删除控件的 XBF 不再出现。
 - 全部指定仓库外自检通过，通过数与删减前一致；未启动应用，界面效果由人工在测试包上核对。

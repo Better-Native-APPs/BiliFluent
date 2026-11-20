@@ -206,7 +206,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     internal static Visibility IsTopMostButtonVisible(PlayerPresentationMode presentation, bool isEmbedded)
         => !isEmbedded && presentation == PlayerPresentationMode.Normal ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>独立播放窗口保留原 AppTitleBar；内嵌主窗口时绝不实例化（它会写入宿主窗口的原生标题栏区域）.</summary>
+    /// <summary>独立播放窗口使用内置 TitleBar；内嵌主窗口时绝不实例化（它会写入宿主窗口的原生标题栏区域）.</summary>
     internal static bool IsStandaloneHeaderLoaded(bool isEmbedded) => !isEmbedded;
 
     /// <summary>内嵌主窗口的全屏/小窗使用纯视觉标题区.</summary>
@@ -953,7 +953,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
     private void OnSubtitleSettingItemClick(object sender, RoutedEventArgs e)
     {
-        // 只读取已加载的字段（不调用 FindName）：独立窗口指向 AppTitleBar 内的设置按钮，内嵌指向纯视觉标题区的设置按钮.
+        // 只读取已加载的字段（不调用 FindName）：独立窗口指向标题栏内的设置按钮，内嵌指向纯视觉标题区的设置按钮.
         SubtitleSettingsTip.Target = ViewModel.IsEmbedded ? EmbeddedSettingButton : HeaderSettingButton;
         ViewModel.IsSubtitleSettingsVisible = false;
         ViewModel.IsSubtitleSettingsVisible = true;
@@ -978,6 +978,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
         // Coalesce: keep only the latest width; at most one Low callback is outstanding per view.
         _headerWidth = e.NewSize.Width;
+        if (_headerWidthTicket is null) QueueHeaderWidthUpdate();
+    }
+
+    private void OnHeaderFooterSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // The cache speed and the quality name resize the group while the title bar keeps its size.
         if (_headerWidthTicket is null) QueueHeaderWidthUpdate();
     }
 
@@ -1074,12 +1080,14 @@ public sealed partial class PlayerOverlay : PlayerControlBase
                 if (!_loaded || !ReferenceEquals(owner, ViewModel)) return;
 
                 // 只读取已生成的字段：未加载（x:Load=false）的标题区为 null，此处不会触发实例化.
+                // 标题在标题栏的剩余宽度列里自行截断，这里只决定窄窗口下是否收起右侧按钮组.
                 if (HeaderBar is { } headerBar && _headerWidth > 0)
                 {
-                    var width = _headerWidth;
-                    var narrow = width < 700;
-                    if (FooterContainer is { } footer) footer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-                    headerBar.TitleMaxWidth = narrow ? (width > 200 ? width - 200 : 120) : width - 520;
+                    if (FooterContainer is { } footer) footer.Visibility = _headerWidth < 700 ? Visibility.Collapsed : Visibility.Visible;
+
+                    // The right-hand group moved or changed width without resizing the title bar itself.
+                    headerBar.RefreshRegions();
+                    headerBar.LogPassthroughRegionsOnce(HeaderTitleHost);
                 }
 
                 if (EmbeddedHeader is not null && _embeddedHeaderWidth > 0)

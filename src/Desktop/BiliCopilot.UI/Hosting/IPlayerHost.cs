@@ -27,7 +27,6 @@ public interface IPlayerHost : IAsyncDisposable
     void SetActiveAction(Action<bool>? action);
     void SetTheme(ElementTheme theme);
     void SetCaptionButtonVisibility(bool visible);
-    void DelayUpdateTitleBarPadding(bool delaySec = false);
     void ResetFocus();
     void ShowCursor();
     void HideCursor();
