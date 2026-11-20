@@ -602,6 +602,16 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnSubtitleFlyoutOpened(object sender, object e)
         => OpenPopup(sender);
 
+    // A row shows whether its item is selected and never switches by itself: the click only runs the command,
+    // and the selection follows the view model. ToggleButton switches before raising Click, so switch back.
+    private void OnSelectionCardClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Microsoft.UI.Xaml.Controls.Primitives.ToggleButton card)
+        {
+            card.IsChecked = card.IsChecked != true;
+        }
+    }
+
     // The subtitle menu holds the subtitles and, when the media has dubbing languages, the audio track.
     // A media without subtitles still shows the button for its languages.
     // Each half also needs its media capability: a media that cannot use subtitles or audio tracks has no menu.
